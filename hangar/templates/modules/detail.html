@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "issues/_layouts.html" as L with context %}
+{% block title %}{{ module.name }} · {{ project.name }}{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <a href="{{ url_for('modules.index', pid=project.id) }}">{{ icon('module', 15) }} Modules</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current">{{ module.name }}</span>
+    {{ ui.status_pill(module.status_label, module.status_color) }}
+    {{ ui.fav_button('module', module.id) }}
+  </div>
+  <div class="header-actions">
+    {{ L.layout_switch(opts) }}
+    {{ L.filter_menu(filters, [project], opts, hide=('module',)) }}
+    {{ L.display_menu(opts) }}
+    {% if can_edit %}
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Actions du module">{{ icon('more', 16) }}</button>
+      <div class="menu" style="width:240px">
+        <button class="menu-item" type="button" data-open="edit-module-modal">{{ icon('edit') }} Modifier le module</button>
+        <button class="menu-item" type="button" data-open="add-issues-modal">{{ icon('plus') }} Ajouter des tickets existants</button>
+        <div class="menu-sep"></div>
+        <form method="post" action="{{ url_for('modules.action', pid=project.id, mid=module.id, action='archive') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('refresh' if module.archived_at else 'archive') }} {{ 'Restaurer' if module.archived_at else 'Archiver' }}</button></form>
+        <form method="post" action="{{ url_for('modules.action', pid=project.id, mid=module.id, action='delete') }}" data-confirm="Supprimer le module « {{ module.name }} » ? Les tickets sont conservés.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+      </div>
+    </div>
+    <button class="btn btn-sm btn-primary" type="button" data-create-issue data-project="{{ project.id }}" data-module="{{ module.id }}">{{ icon('plus', 14) }} Nouveau ticket</button>
+    {% endif %}
+  </div>
+</div>
+{{ L.chips_bar(chips) }}
+{% endblock %}
+
+{% block content %}
+<div class="split">
+  <div class="main-col">
+    {{ L.render(opts, [project], groups=groups, issues=issues, cal=cal, gantt=gantt, quick={'module': module.id}) }}
+  </div>
+  <aside class="side-col">
+    <h4>Statut</h4>
+    {% if can_edit %}
+    <form method="post" action="{{ url_for('modules.edit', pid=project.id, mid=module.id) }}">
+      {{ ui.csrf() }}
+      <input type="hidden" name="status_only" value="1">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <select class="input input-sm" name="status" data-autosubmit>
+        {% for k, lab, col in statuses %}<option value="{{ k }}" {% if module.status == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+      </select>
+    </form>
+    {% else %}{{ ui.status_pill(module.status_label, module.status_color) }}{% endif %}
+
+    <h4>Informations</h4>
+    <div class="col" style="gap:8px">
+      {{ ui.date_range(module.start_date, module.target_date) }}
+      {% if module.target_date and module.status not in ('completed', 'cancelled') %}
+        <span class="small {% if module.target_date < today %}danger-text{% else %}muted{% endif %}">{{ icon('flag', 13) }} Échéance {{ module.target_date|due }}</span>
+      {% endif %}
+      <div class="small"><span class="muted">Responsable :</span> {% if module.lead %}{{ ui.user_chip(module.lead, 18) }}{% else %}<span class="muted">aucun</span>{% endif %}</div>
+      <div class="small"><span class="muted">Membres :</span>
+        {% if module.members %}<div class="flex wrap gap-4 mt-0" style="margin-top:4px">{% for u in module.members %}{{ ui.avatar(u, 22) }}{% endfor %}</div>{% else %}<span class="muted">aucun</span>{% endif %}
+      </div>
+    </div>
+    {% if module.description %}
+    <h4>Description</h4>
+    <div class="md small">{{ module.description|md }}</div>
+    {% endif %}
+
+    <h4>Avancement</h4>
+    <div class="chart-box">
+      {{ donut }}
+      <div class="col" style="gap:4px">
+        {% for g, lab, col in M.STATE_GROUPS %}
+        <span class="small flex gap" style="gap:6px">{{ state_icon(g) }} {{ lab }} <b>{{ prog.counts[g] }}</b></span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="mt small muted">{{ prog.done }} ticket(s) terminé(s) sur {{ prog.total }}</div>
+    {{ ui.progress(prog.pct) }}
+
+    {% if by_assignee %}
+    <h4>Par assigné</h4>
+    {% for d in by_assignee %}
+    <div class="bar-row">
+      <span class="flex gap ellipsis" style="gap:6px">{{ ui.avatar(d.user, 18) }}<span class="ellipsis">{{ d.user.display_name if d.user else 'Non assigné' }}</span></span>
+      {{ ui.progress((100 * d.done / d.total)|round|int if d.total else 0) }}
+      <span class="n">{{ d.done }}/{{ d.total }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if can_edit %}
+    <div class="col mt-lg" style="gap:6px">
+      <button class="btn btn-sm" type="button" data-open="edit-module-modal">{{ icon('edit', 14) }} Modifier le module</button>
+      <button class="btn btn-sm btn-ghost" type="button" data-open="add-issues-modal">{{ icon('plus', 14) }} Ajouter des tickets existants</button>
+    </div>
+    {% endif %}
+  </aside>
+</div>
+
+{% if can_edit %}
+<dialog class="modal" id="edit-module-modal">
+  <form method="post" action="{{ url_for('modules.edit', pid=project.id, mid=module.id) }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Modifier le module</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Nom</label><input class="input" name="name" value="{{ module.name }}" required></div>
+      <div class="field"><label>Description</label><textarea class="input" name="description" rows="4">{{ module.description or '' }}</textarea></div>
+      <div class="grid-2">
+        <div class="field"><label>Statut</label><select class="input" name="status">{% for k, lab, col in statuses %}<option value="{{ k }}" {% if module.status == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Responsable</label><select class="input" name="lead_id"><option value="">Aucun</option>{% for u in project.member_users %}<option value="{{ u.id }}" {% if u.id == module.lead_id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Début</label><input class="input" type="date" name="start_date" value="{{ module.start_date.isoformat() if module.start_date else '' }}"></div>
+        <div class="field"><label>Échéance</label><input class="input" type="date" name="target_date" value="{{ module.target_date.isoformat() if module.target_date else '' }}"></div>
+      </div>
+      {% set member_ids = module.members|map(attribute='id')|list %}
+      <div class="field"><label>Membres</label>
+        <div class="flex wrap gap">
+          {% for u in project.member_users %}<label class="checkbox small"><input type="checkbox" name="member_ids" value="{{ u.id }}" {% if u.id in member_ids %}checked{% endif %}>{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>{% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Enregistrer</button></div></div>
+  </form>
+</dialog>
+
+<dialog class="modal" id="add-issues-modal">
+  <form method="post" action="{{ url_for('modules.action', pid=project.id, mid=module.id, action='add-issues') }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Ajouter des tickets au module</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b panel-menu" style="width:auto;max-height:60vh">
+      {% if candidates %}
+      <div class="pm-search"><input class="input input-sm" type="search" placeholder="Filtrer les tickets…" data-opt-filter></div>
+      <div class="pm-section">
+        {% for i in candidates %}
+        <label class="opt" data-opt-text="{{ (i.key ~ ' ' ~ i.title)|lower }}"><input type="checkbox" name="issue_ids" value="{{ i.id }}">{{ state_icon(i.state_group, i.state.color if i.state else None) }}<span class="key">{{ i.key }}</span><span class="ellipsis">{{ i.title }}</span>{% if i.modules %}<span class="muted tiny right nowrap">{{ i.modules[0].name }}</span>{% endif %}</label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">Aucun ticket ouvert à ajouter.</p>
+      {% endif %}
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary" {% if not candidates %}disabled{% endif %}>Ajouter la sélection</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Modules · {{ project.name }}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <span class="current">{{ icon('module', 15) }} Modules{% if show_archived %} archivés{% endif %}</span>
+  </div>
+  <div class="header-actions">
+    <div class="seg" title="Disposition">
+      <a href="{{ url_for('modules.index', pid=project.id, layout='grid', status=status, sort=sort, archived=1 if show_archived else None) }}" class="{% if layout != 'list' %}active{% endif %}" title="Grille">{{ icon('kanban', 15) }}</a>
+      <a href="{{ url_for('modules.index', pid=project.id, layout='list', status=status, sort=sort, archived=1 if show_archived else None) }}" class="{% if layout == 'list' %}active{% endif %}" title="Liste">{{ icon('list', 15) }}</a>
+    </div>
+    <form method="get" class="inline-form">
+      <input type="hidden" name="layout" value="{{ layout }}">
+      {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+      {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
+      <select class="input input-sm" name="sort" data-autosubmit style="width:auto">
+        {% for k, lab in [('name', 'Trier par nom'), ('progress', 'Trier par avancement'), ('target', 'Trier par échéance')] %}<option value="{{ k }}" {% if sort == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+      </select>
+    </form>
+    {% if show_archived %}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('modules.index', pid=project.id) }}">{{ icon('arrow-left', 14) }} Modules actifs</a>
+    {% else %}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('modules.index', pid=project.id, archived=1) }}">{{ icon('archive', 14) }} Archivés</a>
+    {% endif %}
+    {% if can_edit %}<button class="btn btn-sm btn-primary" type="button" data-open="new-module-modal">{{ icon('plus', 14) }} Nouveau module</button>{% endif %}
+  </div>
+</div>
+<div class="subbar">
+  <a class="chip {% if not status %}active{% endif %}" style="padding-right:8px{% if not status %};border-color:var(--accent);color:var(--accent-text){% endif %}" href="{{ url_for('modules.index', pid=project.id, layout=layout, sort=sort, archived=1 if show_archived else None) }}">Tous</a>
+  {% for k, lab, col in statuses %}
+  <a class="chip" style="padding-right:8px{% if status == k %};border-color:{{ col }};color:{{ col }}{% endif %}" href="{{ url_for('modules.index', pid=project.id, status=k, layout=layout, sort=sort, archived=1 if show_archived else None) }}"><span class="dot" style="background:{{ col }}"></span>{{ lab }}</a>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="inner">
+{% if not modules %}
+  {% if status or show_archived %}
+    {{ ui.empty('module', 'Aucun module', 'Aucun module ne correspond à ce filtre.') }}
+  {% else %}
+    {{ ui.empty('module', 'Aucun module pour le moment', 'Les modules regroupent les tickets par phase, lot ou fonctionnalité, avec un responsable et des dates.') }}
+    {% if can_edit %}<div class="center-text"><button class="btn btn-primary" type="button" data-open="new-module-modal">{{ icon('plus', 14) }} Créer un module</button></div>{% endif %}
+  {% endif %}
+{% elif layout == 'list' %}
+<div class="panel">
+  <table class="table">
+    <thead><tr><th>Module</th><th>Statut</th><th>Responsable</th><th>Membres</th><th>Dates</th><th>Avancement</th><th class="num">Tickets</th><th></th></tr></thead>
+    <tbody>
+    {% for m in modules %}{% set pr = m.progress() %}
+    <tr>
+      <td><a class="bold" href="{{ url_for('modules.detail', pid=project.id, mid=m.id) }}">{{ m.name }}</a></td>
+      <td>{{ ui.status_pill(m.status_label, m.status_color) }}</td>
+      <td>{% if m.lead %}{{ ui.user_chip(m.lead, 18) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{{ ui.avatars(m.members, 20, 4) }}</td>
+      <td>{{ ui.date_range(m.start_date, m.target_date) }}</td>
+      <td style="min-width:140px"><div class="flex gap">{{ ui.progress(pr.pct) }}<span class="small muted nowrap">{{ pr.pct }} %</span></div></td>
+      <td class="num">{{ pr.done }}/{{ pr.total }}</td>
+      <td>{{ ui.fav_button('module', m.id) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="grid-cards">
+  {% for m in modules %}{% set pr = m.progress() %}
+  <div class="pcard">
+    <div class="pcard-b" style="padding-top:16px">
+      <div class="flex gap">
+        <span style="color:{{ m.status_color }}">{{ icon('module', 18) }}</span>
+        <h3 class="grow ellipsis"><a href="{{ url_for('modules.detail', pid=project.id, mid=m.id) }}">{{ m.name }}</a></h3>
+        {{ ui.fav_button('module', m.id) }}
+      </div>
+      <div class="flex gap wrap">
+        {{ ui.status_pill(m.status_label, m.status_color) }}
+        {{ ui.date_range(m.start_date, m.target_date) }}
+        {% if m.target_date and m.target_date < today and m.status not in ('completed', 'cancelled') %}<span class="badge badge-danger">En retard</span>{% endif %}
+      </div>
+      {% if m.description %}<p class="small text-2" style="margin:0">{{ m.description|excerpt(140) }}</p>{% endif %}
+      <div class="col" style="gap:4px;margin-top:auto">
+        {{ ui.segbar(pr.counts) }}
+        <span class="tiny muted">{{ pr.done }}/{{ pr.total }} tickets terminés · {{ pr.pct }} %</span>
+      </div>
+    </div>
+    <div class="pcard-f">
+      {% if m.lead %}<span class="small flex gap" style="gap:6px" title="Responsable">{{ ui.avatar(m.lead, 20) }}<span class="ellipsis">{{ m.lead.display_name }}</span></span>{% else %}<span class="small muted">Sans responsable</span>{% endif %}
+      <span class="right">{{ ui.avatars(m.members, 20, 4) }}</span>
+      {% if can_edit %}
+      <div class="dd">
+        <button class="btn btn-ghost btn-icon btn-xs" type="button" data-menu title="Actions">{{ icon('more', 14) }}</button>
+        <div class="menu" style="width:180px">
+          <a class="menu-item" href="{{ url_for('modules.detail', pid=project.id, mid=m.id) }}">{{ icon('eye') }} Ouvrir</a>
+          <form method="post" action="{{ url_for('modules.action', pid=project.id, mid=m.id, action='archive') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('refresh' if m.archived_at else 'archive') }} {{ 'Restaurer' if m.archived_at else 'Archiver' }}</button></form>
+          <form method="post" action="{{ url_for('modules.action', pid=project.id, mid=m.id, action='delete') }}" data-confirm="Supprimer le module « {{ m.name }} » ? Les tickets sont conservés.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+</div>
+
+{% if can_edit %}
+<dialog class="modal" id="new-module-modal">
+  <form method="post" action="{{ url_for('modules.create', pid=project.id) }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Nouveau module</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Nom</label><input class="input" name="name" required placeholder="Ex. Cartographie des flux"></div>
+      <div class="field"><label>Description</label><textarea class="input" name="description" rows="3"></textarea></div>
+      <div class="grid-2">
+        <div class="field"><label>Statut</label><select class="input" name="status">{% for k, lab, col in statuses %}<option value="{{ k }}" {% if k == 'planned' %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Responsable</label><select class="input" name="lead_id"><option value="">Aucun</option>{% for u in project.member_users %}<option value="{{ u.id }}" {% if u.id == current_user.id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Début</label><input class="input" type="date" name="start_date"></div>
+        <div class="field"><label>Échéance</label><input class="input" type="date" name="target_date"></div>
+      </div>
+      <div class="field"><label>Membres</label>
+        <div class="flex wrap gap">
+          {% for u in project.member_users %}<label class="checkbox small"><input type="checkbox" name="member_ids" value="{{ u.id }}">{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>{% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Créer le module</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

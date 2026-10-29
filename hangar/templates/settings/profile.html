@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Mon profil{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('settings', 15) }} Paramètres</span></div></div>{% endblock %}
+{% block content %}
+<div class="settings">
+  {% include "settings/_nav.html" %}
+  <div class="settings-body">
+    {% if must_change or current_user.must_change_password %}
+    <div class="danger-zone" style="border-color:var(--warning);background:var(--warning-bg)"><b>{{ icon('key', 15) }} Choisis un nouveau mot de passe</b><p class="help mt-0" style="margin-top:4px">Ton compte utilise un mot de passe provisoire. Modifie-le ci-dessous pour continuer.</p></div>
+    {% endif %}
+    <h2>Profil</h2><p class="help">Ces informations sont visibles par l’équipe.</p>
+    <form method="post" class="panel panel-b mb-lg">
+      {{ ui.csrf() }}
+      <div class="flex gap-16 mb">{{ ui.avatar(current_user, 64, 'lg') }}<div><b style="font-size:16px">{{ current_user.display_name }}</b><div class="muted">@{{ current_user.username }} · {{ M.ROLES[current_user.role] }}</div></div></div>
+      <div class="grid-2">
+        <div class="field"><label>Prénom</label><input class="input" name="first_name" value="{{ current_user.first_name }}"></div>
+        <div class="field"><label>Nom</label><input class="input" name="last_name" value="{{ current_user.last_name }}"></div>
+      </div>
+      <div class="field"><label>Identifiant (connexion et @mentions)</label><input class="input" name="username" value="{{ current_user.username }}" required></div>
+      <div class="grid-2">
+        <div class="field"><label>Fonction / rôle dans l’équipe</label><input class="input" name="job_title" value="{{ current_user.job_title }}" placeholder="Ex. Responsable RGPD"></div>
+        <div class="field"><label>Capacité hebdomadaire (heures)</label><input class="input" type="number" min="1" max="80" name="capacity_hours" value="{{ current_user.capacity_hours }}"><span class="help">Utilisée pour la charge de travail.</span></div>
+      </div>
+      <div class="field"><label>Bio</label><textarea class="input" name="bio" rows="3">{{ current_user.bio }}</textarea></div>
+      <div class="field"><label>Couleur d’avatar</label><div class="color-swatches">{% for c in PALETTE %}<label><input type="radio" name="avatar_color" value="{{ c }}" {% if c == current_user.avatar_color %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
+      <div class="field"><label>{{ icon('mail', 13) }} Notifications par e-mail</label>
+        <div class="panel panel-b" style="background:var(--bg-2)">
+          <div class="field"><label>Adresse e-mail (facultative, uniquement pour recevoir des e-mails)</label><input class="input" type="email" name="contact_email" value="{{ current_user.contact_email or '' }}" placeholder="prenom.nom@exemple.fr"><span class="help">La connexion reste par identifiant et mot de passe.</span></div>
+          <div class="flex wrap gap-16 mb">
+            {% for k, lab in [('instant', 'À chaque notification'), ('digest', 'Récapitulatif hebdomadaire seulement'), ('off', 'Aucun e-mail')] %}
+            <label class="checkbox"><input type="radio" name="email_prefs" value="{{ k }}" {% if (current_user.email_prefs or 'instant') == k %}checked{% endif %}> {{ lab }}</label>
+            {% endfor %}
+          </div>
+          <label class="switch"><input type="checkbox" name="email_reminders" value="1" {% if current_user.email_reminders is not sameas false %}checked{% endif %}> Rappels quotidiens de mes échéances (en retard, aujourd’hui, demain)</label><input type="hidden" name="email_section" value="1">
+        </div>
+      </div>
+      <div class="field"><label>Thème</label>
+        <div class="seg" style="width:max-content">{% for k, lab in [('system', 'Système'), ('light', 'Clair'), ('dark', 'Sombre')] %}<label style="padding:0 10px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="theme" value="{{ k }}" {% if current_user.theme == k %}checked{% endif %}> {{ lab }}</label>{% endfor %}</div>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>
+    </form>
+
+    <h2 id="password">Mot de passe</h2><p class="help">6 caractères minimum.</p>
+    <form method="post" action="{{ url_for('settings.password') }}" class="panel panel-b">
+      {{ ui.csrf() }}
+      <div class="field"><label>Mot de passe actuel</label><input class="input" type="password" name="current" required autocomplete="current-password"></div>
+      <div class="grid-2">
+        <div class="field"><label>Nouveau mot de passe</label><input class="input" type="password" name="new" required minlength="6" autocomplete="new-password"></div>
+        <div class="field"><label>Confirmation</label><input class="input" type="password" name="confirm" required minlength="6" autocomplete="new-password"></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-primary">Changer le mot de passe</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

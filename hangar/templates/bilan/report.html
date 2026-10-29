@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "bilan/_sections.html" as B with context %}
+{% block title %}{{ r.title }}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {% if project %}{{ ui.project_crumb(project) }}<a href="{{ url_for('bilan.project', pid=project.id) }}">{{ icon('flag', 15) }} Bilan</a>
+    {% else %}<a href="{{ url_for('bilan.index') }}">{{ icon('flag', 15) }} Bilan</a>{% endif %}
+    <span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current ellipsis" style="max-width:420px">{{ r.title }}</span>
+  </div>
+  <div class="header-actions">
+    <div class="dd">
+      <button class="btn btn-sm" type="button" data-menu>{{ icon('download', 14) }} Exporter</button>
+      <div class="menu" style="width:220px">
+        <a class="menu-item" href="{{ url_for('bilan.export_report', rid=r.id, fmt='docx') }}">{{ icon('page') }} Word (.docx)</a>
+        <a class="menu-item" href="{{ url_for('bilan.export_report', rid=r.id, fmt='md') }}">{{ icon('hash') }} Markdown</a>
+        <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer / PDF</a>
+      </div>
+    </div>
+    {% if not current_user.is_guest %}<button class="btn btn-sm" type="button" data-open="send-bilan">{{ icon('mail', 14) }} Envoyer</button>{% endif %}
+    {% if can_edit %}
+    <button class="btn btn-sm" type="button" data-open="edit-bilan">{{ icon('edit', 14) }} Modifier</button>
+    <form method="post" class="inline-form" data-confirm="Recalculer les indicateurs avec les données actuelles (même période) ? Les textes rédigés sont conservés.">{{ ui.csrf() }}<input type="hidden" name="refresh" value="1"><button class="btn btn-sm btn-ghost" title="Recalculer les chiffres">{{ icon('refresh', 14) }}</button></form>
+    <form method="post" class="inline-form" data-confirm="Supprimer ce bilan ?">{{ ui.csrf() }}<input type="hidden" name="delete" value="1"><button class="btn btn-sm btn-danger-ghost btn-icon" title="Supprimer">{{ icon('trash', 14) }}</button></form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:1280px;margin:0 auto">
+  <div class="home-hero" style="margin-bottom:14px">
+    <div>
+      <h1>{{ r.title }}</h1>
+      <div class="muted" style="margin-top:4px">{{ data.period.label }} · enregistré par {{ r.created_by.display_name if r.created_by else '—' }} le {{ r.created_at|datetime }}{% if r.updated_at and r.updated_at != r.created_at %} · modifié {{ r.updated_at|ago }}{% endif %} · chiffres du {{ fmtiso(data.generated_at) }}</div>
+    </div>
+  </div>
+  {{ B.health(data) }}
+  {{ B.manual_block(r, sections, ['highlights']) }}
+  {{ B.kpis(data) }}
+  {{ B.manual_block(r, sections, ['difficulties', 'decisions', 'next_steps']) }}
+  {% if not (r.highlights or r.difficulties or r.decisions or r.next_steps) and can_edit %}
+  <div class="panel panel-b mb muted small flex gap">{{ icon('edit', 15) }} Ajoute les faits marquants, difficultés, décisions et prochaines étapes avec le bouton « Modifier ».</div>
+  {% endif %}
+  {{ B.body(data) }}
+</div>
+{% if not current_user.is_guest %}
+<dialog class="modal" id="send-bilan">
+  <form method="post" action="{{ url_for('bilan.send_report', rid=r.id) }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Envoyer le bilan par e-mail</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      {% set members = (project.member_users if project else M.User.query.filter_by(active=True).all()) %}
+      <div class="field"><label>Membres</label>
+        <div class="flex wrap gap-4">
+        {% for u in members %}
+          {% if u.contact_email %}<label class="checkbox tag" style="height:28px"><input type="checkbox" name="user_ids" value="{{ u.id }}" checked>{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>
+          {% else %}<span class="tag muted" title="Pas d’adresse e-mail renseignée (profil ou Paramètres › E-mails)">{{ ui.avatar(u, 18) }} {{ u.display_name }} — sans adresse</span>{% endif %}
+        {% endfor %}
+        </div>
+      </div>
+      <div class="field"><label>Autres destinataires</label><input class="input" name="others" placeholder="encadrant@exemple.fr, dpo@exemple.fr"><span class="help">Séparés par des virgules.</span></div>
+      <div class="field"><label>Message d’accompagnement</label><textarea class="input" name="message" rows="3" placeholder="Bonjour, voici le bilan de la période…"></textarea></div>
+      <p class="help">Le bilan complet (indicateurs, réalisations, retards, jalons, sections rédigées) est inclus dans le corps du message. Configuration de l’envoi : menu de l’espace › E-mails automatiques.</p>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">{{ icon('send', 14) }} Envoyer</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% if can_edit %}
+<dialog class="modal lg" id="edit-bilan">
+  <form method="post">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Modifier le bilan</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Titre</label><input class="input" name="title" value="{{ r.title }}"></div>
+      {% for key, lab in sections %}
+      <div class="field"><label>{{ lab }}</label>{{ ui.md_editor(key, r[key] or '', '', 4) }}</div>
+      {% endfor %}
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Enregistrer</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

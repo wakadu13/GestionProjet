@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Nouveau projet{% endblock %}
+{% block header %}
+<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('projects.index') }}">{{ icon('briefcase', 15) }} Projets</a><span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">Nouveau projet</span></div></div>
+{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:760px;margin:0 auto">
+  <form method="post" class="panel panel-b">
+    {{ ui.csrf() }}
+    <h2 class="mb">Créer un projet</h2>
+    <div class="grid-2" style="grid-template-columns: 80px 1fr">
+      <div class="field"><label>Icône</label><input class="input" name="emoji" value="{{ form.get('emoji', '🚀') }}" maxlength="4" style="text-align:center;font-size:18px"></div>
+      <div class="field"><label>Nom du projet</label><input class="input" name="name" value="{{ form.get('name', '') }}" required autofocus data-project-name></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label>Identifiant</label><input class="input mono" name="identifier" value="{{ form.get('identifier', '') }}" required maxlength="10" pattern="[A-Za-z][A-Za-z0-9]{1,9}" style="text-transform:uppercase" data-project-ident><span class="help">Préfixe des tickets (ex. EAE → EAE-12).</span></div>
+      <div class="field"><label>Couleur</label>
+        <div class="color-swatches">{% for c in M.PALETTE[:10] %}<label><input type="radio" name="color" value="{{ c }}" {% if loop.first %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div>
+      </div>
+    </div>
+    <div class="field"><label>Description</label><textarea class="input" name="description" rows="3" placeholder="Objectif, périmètre, livrables…">{{ form.get('description', '') }}</textarea></div>
+    <div class="grid-3">
+      <div class="field"><label>Responsable</label><select class="input" name="lead_id">{% for u in users %}<option value="{{ u.id }}" {% if u.id == current_user.id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Début</label><input class="input" type="date" name="start_date" value="{{ form.get('start_date', '') }}"></div>
+      <div class="field"><label>Fin prévue</label><input class="input" type="date" name="target_date" value="{{ form.get('target_date', '') }}"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label>Visibilité</label><select class="input" name="network"><option value="public">Public — visible par tout l’espace</option><option value="private">Privé — membres uniquement</option></select></div>
+      <div class="field"><label>Estimations</label><select class="input" name="estimate_type">{% for k, (lab, vals) in M.ESTIMATE_TYPES.items() %}<option value="{{ k }}" {% if k == 'points' %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field"><label>Membres</label>
+      <div class="flex wrap gap">{% for u in users if u.id != current_user.id %}<label class="checkbox tag" style="height:28px"><input type="checkbox" name="member_ids" value="{{ u.id }}">{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>{% else %}<span class="muted small">Aucun autre membre pour l’instant — invite-les depuis la page Équipe.</span>{% endfor %}</div>
+    </div>
+    <div class="form-actions"><a class="btn" href="{{ url_for('projects.index') }}">Annuler</a><button class="btn btn-primary">Créer le projet</button></div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const name = document.querySelector('[data-project-name]'), ident = document.querySelector('[data-project-ident]');
+  let touched = !!ident.value;
+  ident.addEventListener('input', () => { touched = true; ident.value = ident.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+  name.addEventListener('input', () => {
+    if (touched) return;
+    const words = name.value.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 2);
+    let v = words.length > 1 ? words.map(w => w[0]).join('') : (words[0] || '').slice(0, 4);
+    ident.value = v.slice(0, 6);
+  });
+})();
+</script>
+{% endblock %}

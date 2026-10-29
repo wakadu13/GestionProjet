@@ -1,0 +1,98 @@
+{# Composants d'interface réutilisables #}
+
+{% macro csrf() %}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro avatar(u, size=22, cls='') %}
+{%- if u -%}
+<span class="avatar {{ cls }}" style="--av:{{ u.avatar_color }};width:{{ size }}px;height:{{ size }}px;font-size:{{ (size * 0.42)|round|int }}px" title="{{ u.display_name }}">{{ u.initials }}</span>
+{%- else -%}
+<span class="avatar none {{ cls }}" style="width:{{ size }}px;height:{{ size }}px">{{ icon('user', (size * 0.62)|int) }}</span>
+{%- endif -%}
+{% endmacro %}
+
+{% macro avatars(users, size=22, max=3) -%}
+<span class="avatars">{% for u in users[:max] %}{{ avatar(u, size) }}{% endfor %}{% if users|length > max %}<span class="avatar more" style="width:{{ size }}px;height:{{ size }}px;font-size:{{ (size*0.4)|round|int }}px">+{{ users|length - max }}</span>{% endif %}</span>
+{%- endmacro %}
+
+{% macro user_chip(u, size=20) -%}
+<span class="flex gap" style="gap:6px">{{ avatar(u, size) }}<span class="ellipsis">{{ u.display_name if u else 'Personne' }}</span></span>
+{%- endmacro %}
+
+{% macro progress(pct, cls='') %}<div class="progress {{ cls }}"><span style="width: {{ pct }}%"></span></div>{% endmacro %}
+
+{% macro segbar(counts) %}
+{% set total = counts.values()|sum %}
+<div class="segbar" title="{% for g, lab, col in M.STATE_GROUPS %}{{ lab }} : {{ counts[g] }}{% if not loop.last %} · {% endif %}{% endfor %}">
+  {% if total %}{% for g, lab, col in M.STATE_GROUPS %}{% if counts[g] %}<span style="width: {{ 100 * counts[g] / total }}%; background: {{ col }}"></span>{% endif %}{% endfor %}{% endif %}
+</div>
+{% endmacro %}
+
+{% macro ring(pct, color=None) %}<span class="ring" style="--p: {{ pct }};{% if color %}--c: {{ color }}{% endif %}" title="{{ pct }} %"></span>{% endmacro %}
+
+{% macro empty(icon_name, title, text='', action=None) %}
+<div class="empty">
+  {{ icon(icon_name, 40) }}
+  <h3>{{ title }}</h3>
+  {% if text %}<p>{{ text }}</p>{% endif %}
+  {% if action %}<div class="mt">{{ action|safe }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro fav_button(etype, eid) %}
+{% set on = is_favorite(etype, eid) %}
+<button type="button" class="fav-btn {% if on %}on{% endif %}" data-fav="{{ url_for('home.toggle_favorite', etype=etype, eid=eid) }}" title="{{ 'Retirer des favoris' if on else 'Ajouter aux favoris' }}">{{ icon('star', 16) }}</button>
+{% endmacro %}
+
+{% macro group_icon(g) -%}
+{%- if g.kind == 'state' -%}{{ state_icon(g.obj.group, g.color) }}
+{%- elif g.kind == 'state_group' -%}{{ state_icon(g.obj) }}
+{%- elif g.kind == 'priority' -%}{{ priority_icon(g.obj) }}
+{%- elif g.kind == 'user' -%}{{ avatar(g.obj, 18) }}
+{%- elif g.kind == 'label' -%}<span class="dot" style="background:{{ g.color or '#a3a3a3' }}"></span>
+{%- elif g.kind == 'cycle' -%}{{ icon('cycle', 15) }}
+{%- elif g.kind == 'module' -%}<span style="color:{{ g.color or 'inherit' }}">{{ icon('module', 15) }}</span>
+{%- elif g.kind == 'project' -%}<span>{{ g.obj.emoji }}</span>
+{%- else -%}{{ icon('layers', 15) }}{%- endif -%}
+{%- endmacro %}
+
+{% macro md_editor(name, value='', placeholder='Écris en markdown…', rows=6, autofocus=False, submit_label=None, id=None) %}
+<div class="md-editor" data-md-editor {% if id %}id="{{ id }}"{% endif %}>
+  <div class="md-toolbar">
+    <button type="button" data-md="bold" title="Gras">{{ icon('bold', 15) }}</button>
+    <button type="button" data-md="italic" title="Italique">{{ icon('italic', 15) }}</button>
+    <button type="button" data-md="heading" title="Titre">{{ icon('heading', 15) }}</button>
+    <button type="button" data-md="ul" title="Liste">{{ icon('list-ul', 15) }}</button>
+    <button type="button" data-md="task" title="Liste de tâches">{{ icon('list-check', 15) }}</button>
+    <button type="button" data-md="quote" title="Citation">{{ icon('quote', 15) }}</button>
+    <button type="button" data-md="code" title="Code">{{ icon('code', 15) }}</button>
+    <button type="button" data-md="link" title="Lien">{{ icon('link', 15) }}</button>
+    <button type="button" data-md="table" title="Tableau">{{ icon('table', 15) }}</button>
+    <div class="tabsw"><button type="button" class="active" data-md-tab="write">Écrire</button><button type="button" data-md-tab="preview">Aperçu</button></div>
+  </div>
+  <textarea name="{{ name }}" rows="{{ rows }}" placeholder="{{ placeholder }}" data-mention {% if autofocus %}autofocus{% endif %}>{{ value }}</textarea>
+  <div class="md-preview md"></div>
+  {% if submit_label %}
+  <div class="md-foot"><span class="muted tiny">Markdown · @mention · CLE-12 · Ctrl+Entrée pour envoyer</span><button class="btn btn-primary btn-sm right">{{ submit_label }}</button></div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro confirm_button(action, label, message, cls='btn btn-danger-ghost btn-sm', icon_name=None, fields=None) %}
+<form method="post" action="{{ action }}" class="inline-form" data-confirm="{{ message }}">
+  {{ csrf() }}
+  {% if fields %}{% for k, v in fields.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endif %}
+  <button class="{{ cls }}">{% if icon_name %}{{ icon(icon_name, 14) }}{% endif %}{{ label }}</button>
+</form>
+{% endmacro %}
+
+{% macro status_pill(label, color) %}<span class="status-pill" style="color: {{ color }}; border-color: color-mix(in srgb, {{ color }} 35%, transparent); background: color-mix(in srgb, {{ color }} 9%, transparent)"><span class="dot" style="background: {{ color }}"></span>{{ label }}</span>{% endmacro %}
+
+{% macro date_range(start, end) -%}
+{%- if start or end -%}<span class="flex gap-4 muted small nowrap">{{ icon('calendar', 13) }}{{ start|date if start else '…' }} → {{ end|date if end else '…' }}</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro project_crumb(project) %}
+<a href="{{ url_for('issues.index', pid=project.id) }}"><span>{{ project.emoji }}</span>{{ project.name }}</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+{% endmacro %}
+
+{% macro mobile_toggle() %}<button class="btn btn-ghost btn-icon mobile-toggle" type="button" data-sidebar-toggle>{{ icon('menu') }}</button>{% endmacro %}

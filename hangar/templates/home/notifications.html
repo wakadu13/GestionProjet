@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Notifications{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('bell', 15) }} Notifications</span></div>
+  <div class="tabs in-header" style="margin-left:12px">
+    {% for k, lab in [('all', 'Toutes'), ('unread', 'Non lues'), ('mentions', 'Mentions'), ('assigned', 'Assignations'), ('archived', 'Archivées')] %}
+    <a class="{% if tab == k %}active{% endif %}" href="?tab={{ k }}">{{ lab }}</a>
+    {% endfor %}
+  </div>
+  <div class="header-actions">
+    {% if snoozed %}<span class="muted small">{{ snoozed }} en sommeil</span>{% endif %}
+    <form method="post" action="{{ url_for('home.notifications_read_all') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-sm">{{ icon('check', 14) }} Tout marquer comme lu</button></form>
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div style="max-width:980px;width:100%;margin:0 auto">
+  {% for n in notes %}
+  <div class="notif {% if not n.read_at %}unread{% endif %}">
+    <span class="n-dot"></span>
+    {{ ui.avatar(n.actor, 30) }}
+    <div class="n-body">
+      <a href="{{ url_for('home.notification_open', nid=n.id) }}" style="display:block">{{ n.message }}</a>
+      <div class="muted small mt-0 flex gap" style="margin-top:3px">
+        <span>{{ n.created_at|ago }}</span>
+        {% if n.project %}<span>· {{ n.project.emoji }} {{ n.project.name }}</span>{% endif %}
+        <span class="badge {% if n.kind == 'mention' %}badge-accent{% elif n.kind == 'assigned' %}badge-success{% endif %}">{{ {'assigned': 'Assignation', 'mention': 'Mention', 'comment': 'Commentaire', 'intake': 'Intake', 'update': 'Mise à jour'}.get(n.kind, n.kind) }}</span>
+      </div>
+    </div>
+    <div class="n-actions">
+      <button class="btn btn-ghost btn-icon btn-sm" data-notif-action="{{ url_for('home.notification_action', nid=n.id, action='read') }}" title="{{ 'Marquer comme non lu' if n.read_at else 'Marquer comme lu' }}">{{ icon('check' if not n.read_at else 'mail', 15) }}</button>
+      <button class="btn btn-ghost btn-icon btn-sm" data-notif-action="{{ url_for('home.notification_action', nid=n.id, action='archive') }}" title="{{ 'Désarchiver' if n.archived_at else 'Archiver' }}">{{ icon('archive', 15) }}</button>
+      {% if not n.archived_at %}
+      <div class="dd"><button class="btn btn-ghost btn-icon btn-sm" data-menu title="Mettre en sommeil">{{ icon('clock', 15) }}</button>
+        <div class="menu" style="min-width:170px">
+          <div class="menu-h">Me rappeler dans</div>
+          {% for d, lab in [(1, '1 jour'), (3, '3 jours'), (7, '1 semaine')] %}
+          <form method="post" action="{{ url_for('home.notification_action', nid=n.id, action='snooze') }}">{{ ui.csrf() }}<input type="hidden" name="days" value="{{ d }}"><button class="menu-item">{{ lab }}</button></form>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      <button class="btn btn-ghost btn-icon btn-sm" data-notif-action="{{ url_for('home.notification_action', nid=n.id, action='delete') }}" title="Supprimer">{{ icon('trash', 15) }}</button>
+    </div>
+  </div>
+  {% else %}
+  {{ ui.empty('bell', 'Aucune notification', 'Tu es notifié quand on t’assigne un ticket, te mentionne ou modifie un ticket que tu suis.') }}
+  {% endfor %}
+</div>
+{% endblock %}

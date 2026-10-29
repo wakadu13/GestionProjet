@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Cycles · {{ project.name }}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <span class="current">{{ icon('cycle', 15) }} Cycles{% if show_archived %} archivés{% endif %}</span>
+  </div>
+  <div class="header-actions">
+    {% if show_archived %}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('cycles.index', pid=project.id) }}">{{ icon('arrow-left', 14) }} Cycles actifs</a>
+    {% else %}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('cycles.index', pid=project.id, archived=1) }}">{{ icon('archive', 14) }} Archivés</a>
+    {% endif %}
+    {% if can_edit %}<button class="btn btn-sm btn-primary" type="button" data-open="new-cycle-modal">{{ icon('plus', 14) }} Nouveau cycle</button>{% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% macro cycle_row(c) %}
+{% set pr = c.progress() %}
+<div class="cycle-row">
+  {{ ui.ring(pr.pct, 'var(--accent)' if c.status == 'current' else None) }}
+  <div class="grow" style="min-width:0">
+    <div class="flex gap">
+      <a class="name ellipsis" href="{{ url_for('cycles.detail', pid=project.id, cid=c.id) }}">{{ c.name }}</a>
+      {% set colors = {'current': '#f59e0b', 'upcoming': '#3f76ff', 'completed': '#16a34a', 'draft': '#a3a3a3'} %}
+      {{ ui.status_pill(c.status_label, colors[c.status]) }}
+      {% if c.status == 'current' and c.days_left is not none %}
+        <span class="badge {% if c.days_left <= 2 %}badge-warning{% endif %}">{{ icon('clock', 12) }} {% if c.days_left == 0 %}dernier jour{% else %}{{ c.days_left }} j restant{{ 's' if c.days_left > 1 }}{% endif %}</span>
+      {% endif %}
+    </div>
+    <div class="flex gap mt-0 small muted" style="margin-top:4px">
+      {{ ui.date_range(c.start_date, c.end_date) }}
+      {% if c.description %}<span class="ellipsis" style="max-width:360px">{{ c.description|excerpt(90) }}</span>{% endif %}
+    </div>
+  </div>
+  <div style="width:180px" class="col gap-4" title="{{ pr.done }} terminé(s) sur {{ pr.total }}">
+    {{ ui.segbar(pr.counts) }}
+    <span class="tiny muted">{{ pr.done }}/{{ pr.total }} tickets · {{ pr.pct }} %</span>
+  </div>
+  {{ ui.avatar(c.owner, 22) }}
+  {{ ui.fav_button('cycle', c.id) }}
+  {% if can_edit %}
+  <div class="dd">
+    <button class="btn btn-ghost btn-icon btn-sm" type="button" data-menu title="Actions">{{ icon('more', 16) }}</button>
+    <div class="menu" style="width:190px">
+      <a class="menu-item" href="{{ url_for('cycles.detail', pid=project.id, cid=c.id) }}">{{ icon('eye') }} Ouvrir</a>
+      <form method="post" action="{{ url_for('cycles.action', pid=project.id, cid=c.id, action='archive') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('refresh' if c.archived_at else 'archive') }} {{ 'Restaurer' if c.archived_at else 'Archiver' }}</button></form>
+      <form method="post" action="{{ url_for('cycles.action', pid=project.id, cid=c.id, action='delete') }}" data-confirm="Supprimer le cycle « {{ c.name }} » ? Les tickets sont conservés.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="inner">
+  {% set total = buckets.current|length + buckets.upcoming|length + buckets.draft|length + buckets.completed|length %}
+  {% if total == 0 %}
+    {% if show_archived %}
+      {{ ui.empty('archive', 'Aucun cycle archivé', 'Les cycles archivés apparaissent ici et peuvent être restaurés.') }}
+    {% else %}
+      {{ ui.empty('cycle', 'Aucun cycle pour le moment', 'Les cycles (sprints) découpent le projet en itérations courtes, avec un suivi de l’avancement et un burndown.') }}
+      {% if can_edit %}<div class="center-text"><button class="btn btn-primary" type="button" data-open="new-cycle-modal">{{ icon('plus', 14) }} Créer le premier cycle</button></div>{% endif %}
+    {% endif %}
+  {% else %}
+    {% for key, title, ic in [('current', 'En cours', 'play'), ('upcoming', 'À venir', 'calendar'), ('draft', 'Brouillons', 'edit'), ('completed', 'Terminés', 'check-circle')] %}
+      {% if buckets[key] %}
+      <div class="section-title">{{ icon(ic, 16) }}<h2>{{ title }}</h2><span class="count">{{ buckets[key]|length }}</span></div>
+      <div class="panel">
+        {% for c in buckets[key] %}{{ cycle_row(c) }}{% endfor %}
+      </div>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+</div>
+
+{% if can_edit %}
+<dialog class="modal sm" id="new-cycle-modal">
+  <form method="post" action="{{ url_for('cycles.create', pid=project.id) }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Nouveau cycle</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Nom</label><input class="input" name="name" required placeholder="Ex. Sprint 8"></div>
+      <div class="field"><label>Description</label><textarea class="input" name="description" rows="3" placeholder="Objectif du cycle"></textarea></div>
+      <div class="grid-2">
+        <div class="field"><label>Début</label><input class="input" type="date" name="start_date"></div>
+        <div class="field"><label>Fin</label><input class="input" type="date" name="end_date"></div>
+      </div>
+      <p class="help">Sans dates, le cycle reste un brouillon. Les cycles d’un même projet ne peuvent pas se chevaucher.</p>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Créer le cycle</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

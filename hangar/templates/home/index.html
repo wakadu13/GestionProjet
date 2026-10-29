@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Accueil{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('home', 15) }} Accueil</span></div>
+  <div class="header-actions">
+    <button class="btn btn-sm" type="button" data-palette>{{ icon('search', 14) }} Rechercher <kbd>Ctrl K</kbd></button>
+    <button class="btn btn-sm btn-primary" type="button" data-create-issue>{{ icon('plus', 14) }} Nouveau ticket</button>
+  </div>
+</div>
+{% endblock %}
+{% macro mini(i, show_due=True) %}
+<a class="mini-issue" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">
+  {{ state_icon(i.state_group, i.state.color if i.state else None) }}
+  <span class="key">{{ i.key }}</span>
+  <span class="t">{{ i.title }}</span>
+  {{ priority_icon(i.priority) }}
+  {% if show_due and i.target_date %}<span class="small nowrap {% if i.is_overdue %}danger-text{% elif i.due_soon %}warning-text{% else %}muted{% endif %}">{{ i.target_date|due }}</span>{% endif %}
+</a>
+{% endmacro %}
+{% block content %}
+<div class="inner" style="max-width:1280px;margin:0 auto">
+  <div class="home-hero">
+    <div>
+      <h1>{{ greeting() }}, {{ current_user.short_name }} 👋</h1>
+      <div class="muted mt-0" style="margin-top:4px">{{ today|date_long|capitalize }} · {{ ws.emoji }} {{ ws.name }}</div>
+    </div>
+    <div class="flex gap">
+      <a class="btn btn-sm" href="{{ url_for('team.workload') }}">{{ icon('users', 14) }} Charge de l’équipe</a>
+      <a class="btn btn-sm" href="{{ url_for('home.workspace_issues', scope='assigned', layout='board', group_by='state_group') }}">{{ icon('kanban', 14) }} Mon tableau</a>
+    </div>
+  </div>
+
+  <div class="stats mb-lg">
+    <a class="stat accent" href="{{ url_for('home.workspace_issues', scope='assigned', state_group=['backlog', 'unstarted', 'started']) }}"><div class="v">{{ open_mine|length }}</div><div class="l">{{ icon('layers', 13) }} Tickets ouverts assignés</div></a>
+    <a class="stat" href="{{ url_for('home.workspace_issues', scope='assigned', state_group='started') }}"><div class="v">{{ in_progress|length }}</div><div class="l">{{ state_icon('started', None, 13) }} En cours</div></a>
+    <a class="stat {% if overdue %}danger{% endif %}" href="{{ url_for('home.workspace_issues', scope='assigned', target='overdue') }}"><div class="v">{{ overdue|length }}</div><div class="l">{{ icon('alert', 13) }} En retard</div></a>
+    <a class="stat" href="{{ url_for('home.workspace_issues', scope='assigned', target='this_week') }}"><div class="v">{{ due_week|length }}</div><div class="l">{{ icon('calendar', 13) }} À rendre cette semaine</div></a>
+    <div class="stat success"><div class="v">{{ done_week|length }}</div><div class="l">{{ icon('check-circle', 13) }} Terminés cette semaine</div></div>
+  </div>
+
+  <div class="home-grid">
+    <div class="col gap-16" style="gap:20px">
+      {% if overdue %}
+      <div class="panel">
+        <div class="panel-h"><span class="danger-text">{{ icon('alert', 16) }}</span><h3>En retard</h3><span class="count-pill">{{ overdue|length }}</span><a class="btn btn-xs btn-ghost right" href="{{ url_for('home.workspace_issues', scope='assigned', target='overdue') }}">Tout voir</a></div>
+        <div>{% for i in overdue[:8] %}{{ mini(i) }}{% endfor %}</div>
+      </div>
+      {% endif %}
+
+      <div class="panel">
+        <div class="panel-h">{{ icon('flag', 16) }}<h3>Mes prochaines échéances</h3><a class="btn btn-xs btn-ghost right" href="{{ url_for('home.workspace_issues', scope='assigned', order_by='target') }}">Tout voir</a></div>
+        <div>
+          {% for i in upcoming %}{{ mini(i) }}{% else %}<div class="empty sm">Aucune échéance à venir. 🎉</div>{% endfor %}
+        </div>
+      </div>
+
+      {% if in_progress %}
+      <div class="panel">
+        <div class="panel-h">{{ state_icon('started', None, 16) }}<h3>En cours</h3><span class="count-pill">{{ in_progress|length }}</span></div>
+        <div>{% for i in in_progress[:10] %}{{ mini(i) }}{% endfor %}</div>
+      </div>
+      {% endif %}
+
+      {% if current_cycles %}
+      <div class="panel">
+        <div class="panel-h">{{ icon('cycle', 16) }}<h3>Cycles en cours</h3></div>
+        <div>
+          {% for c in current_cycles %}{% set pr = c.progress() %}
+          <a class="cycle-row" href="{{ url_for('cycles.detail', pid=c.project_id, cid=c.id) }}">
+            <span>{{ c.project.emoji }}</span>
+            <div class="grow"><div class="name">{{ c.name }} <span class="muted small" style="font-weight:400">· {{ c.project.name }}</span></div>{{ ui.date_range(c.start_date, c.end_date) }}</div>
+            <div style="width:160px">{{ ui.segbar(pr.counts) }}<div class="muted tiny mt-0" style="margin-top:4px">{{ pr.done }}/{{ pr.total }} terminés · {{ c.days_left }} j restants</div></div>
+            <b>{{ pr.pct }} %</b>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="panel" id="stickies">
+        <div class="panel-h">{{ icon('sticky', 16) }}<h3>Pense-bêtes</h3>
+          <form method="post" action="{{ url_for('home.sticky_create') }}" class="right">{{ ui.csrf() }}<button class="btn btn-xs">{{ icon('plus', 13) }} Ajouter</button></form>
+        </div>
+        <div class="panel-b">
+          <div class="stickies">
+            {% for s in stickies %}
+            <div class="sticky" style="background: {{ s.color }}" data-sticky="{{ url_for('home.sticky_update', sid=s.id) }}">
+              <textarea placeholder="Écris une note…">{{ s.content }}</textarea>
+              <div class="st-actions">
+                {% for c in ['#fef3c7', '#dbeafe', '#dcfce7', '#fce7f3', '#ede9fe', '#f3f4f6'] %}<button type="button" class="sw" style="background:{{ c }}" data-sticky-color="{{ c }}" title="Couleur"></button>{% endfor %}
+                <button type="button" data-sticky-delete title="Supprimer">{{ icon('trash', 12) }}</button>
+              </div>
+            </div>
+            {% else %}
+            <p class="muted small">Notes personnelles, visibles par toi seul.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col" style="gap:20px">
+      <div class="panel">
+        <div class="panel-h">{{ icon('briefcase', 16) }}<h3>Mes projets</h3><a class="btn btn-xs btn-ghost right" href="{{ url_for('projects.index') }}">Tous</a></div>
+        <div>
+          {% for p in my_projects %}{% set st = p.stats() %}
+          <a class="mini-issue" href="{{ url_for('issues.index', pid=p.id) }}">
+            <span class="p-emoji" style="font-size:16px">{{ p.emoji }}</span>
+            <span class="t">{{ p.name }}<span class="muted tiny" style="display:block;font-weight:400">{{ st.open }} ouverts · {{ st.done }} terminés</span></span>
+            {{ ui.ring(st.progress) }}<span class="small muted">{{ st.progress }} %</span>
+          </a>
+          {% else %}
+          <div class="empty sm">Tu ne fais partie d’aucun projet. <a href="{{ url_for('projects.index') }}" style="color:var(--accent-text)">Parcourir</a></div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if recent_pages %}
+      <div class="panel">
+        <div class="panel-h">{{ icon('page', 16) }}<h3>Pages récentes</h3></div>
+        <div>
+          {% for pg in recent_pages %}
+          <a class="mini-issue" href="{{ url_for('pages.view', pid=pg.project_id, page_id=pg.id) }}"><span>{{ pg.emoji }}</span><span class="t">{{ pg.title }}</span><span class="muted tiny">{{ pg.updated_at|ago }}</span></a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="panel">
+        <div class="panel-h">{{ icon('activity', 16) }}<h3>Activité récente</h3></div>
+        <div style="max-height:520px;overflow:auto">
+          {% for a in activity %}
+          <div class="act-item">
+            {{ ui.avatar(a.actor, 22) }}
+            <div class="grow" style="min-width:0">
+              <b>{{ a.actor.display_name if a.actor else 'Hangar' }}</b> {{ activity_text(a) }}
+              {% if a.issue %}<a href="{{ url_for('issues.detail', pid=a.issue.project_id, seq=a.issue.sequence_id) }}" style="display:block" class="ellipsis"><span class="key">{{ a.issue.key }}</span> {{ a.issue.title }}</a>{% endif %}
+              <span class="muted tiny">{{ a.created_at|ago }}</span>
+            </div>
+          </div>
+          {% else %}
+          <div class="empty sm">Pas encore d’activité.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

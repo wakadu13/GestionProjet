@@ -1,0 +1,36 @@
+{% import "macros.html" as ui with context %}
+<dialog class="modal" id="create-issue-modal">
+  <form method="post" action="{{ url_for('issues.create') }}" data-create-form>
+    {{ ui.csrf() }}
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <input type="hidden" name="parent_id" value="">
+    <input type="hidden" name="intake" value="">
+    <div class="modal-h">
+      <select class="input input-sm" name="project_id" data-ci-project style="width:auto;max-width:260px" required>
+        {% for pid, p in picker_data().items() if p.editable or p.intake %}<option value="{{ pid }}" data-editable="{{ 1 if p.editable else 0 }}">{{ p.emoji }} {{ p.name }}</option>{% endfor %}
+      </select>
+      <h2 data-ci-heading>Nouveau ticket</h2>
+      <span class="badge hide" data-ci-parent-badge>{{ icon('subissue', 12) }} sous-ticket</span>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button>
+    </div>
+    <div class="modal-b">
+      <input class="input input-lg input-bare" name="title" placeholder="Titre du ticket" required autocomplete="off" style="font-weight:600;margin-bottom:10px">
+      {{ ui.md_editor('description', '', 'Description (markdown, @mention, listes de tâches - [ ] …)', 5) }}
+      <div class="flex wrap gap-4 mt" data-ci-pickers>
+        <div data-form-pick="state" data-name="state_id"></div>
+        <div data-form-pick="priority" data-name="priority"></div>
+        <div data-form-pick="assignees" data-name="assignee_ids" data-multi="1"></div>
+        <div data-form-pick="labels" data-name="label_ids" data-multi="1"></div>
+        <label class="prop prop-date is-empty" title="Date de début">{{ icon('calendar', 13) }}<span class="pl" data-date-label>Début</span><input type="date" name="start_date" data-form-date></label>
+        <label class="prop prop-date is-empty" title="Échéance">{{ icon('flag', 13) }}<span class="pl" data-date-label>Échéance</span><input type="date" name="target_date" data-form-date></label>
+        <div data-form-pick="estimate" data-name="estimate"></div>
+        <div data-form-pick="cycle" data-name="cycle_id"></div>
+        <div data-form-pick="modules" data-name="module_ids" data-multi="1"></div>
+      </div>
+    </div>
+    <div class="modal-f">
+      <label class="switch small"><input type="checkbox" name="create_more" value="1" data-create-more> Créer d’autres tickets</label>
+      <div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary" data-ci-submit>Créer le ticket</button></div>
+    </div>
+  </form>
+</dialog>

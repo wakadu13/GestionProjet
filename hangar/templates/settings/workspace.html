@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Espace de travail{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('settings', 15) }} Paramètres de l’espace</span></div></div>{% endblock %}
+{% block content %}
+<div class="settings">
+  {% include "settings/_nav.html" %}
+  <div class="settings-body">
+    <h2>Espace de travail</h2><p class="help">Nom, accès et informations de stockage.</p>
+    <form method="post" class="panel panel-b mb-lg">
+      {{ ui.csrf() }}
+      <div class="grid-2" style="grid-template-columns: 80px 1fr">
+        <div class="field"><label>Icône</label><input class="input" name="emoji" value="{{ ws.emoji }}" maxlength="4" style="text-align:center;font-size:18px"></div>
+        <div class="field"><label>Nom</label><input class="input" name="name" value="{{ ws.name }}" required></div>
+      </div>
+      <div class="field"><label>Description</label><textarea class="input" name="description" rows="3">{{ ws.description }}</textarea></div>
+      <label class="switch"><input type="checkbox" name="allow_signup" value="1" {% if ws.allow_signup %}checked{% endif %}> Autoriser l’inscription libre (sinon seuls les administrateurs créent les comptes)</label>
+      <div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>
+    </form>
+    <h2>Stockage local</h2><p class="help">Toutes les données restent sur cette machine.</p>
+    <div class="stats mb">
+      <div class="stat"><div class="v">{{ stats.users }}</div><div class="l">Comptes</div></div>
+      <div class="stat"><div class="v">{{ stats.db_size }}</div><div class="l">Base SQLite</div></div>
+      <div class="stat"><div class="v">{{ stats.uploads }}</div><div class="l">Pièces jointes</div></div>
+    </div>
+    <div class="panel panel-b small"><span class="muted">Dossier des données :</span> <code>{{ stats.data_dir }}</code></div>
+    <h2 class="mt-lg">Partager sur le réseau local</h2>
+    <div class="panel panel-b md">
+      <p>Pour que les autres membres de l’équipe se connectent depuis leur ordinateur sur le même réseau (Wi-Fi, réseau de l’école), lance Hangar avec :</p>
+      <pre><code>uv run hangar run --host 0.0.0.0</code></pre>
+      <p>L’adresse à leur communiquer s’affiche dans le terminal (ex. <code>http://192.168.1.20:5000</code>). Le pare-feu doit autoriser le port 5000.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

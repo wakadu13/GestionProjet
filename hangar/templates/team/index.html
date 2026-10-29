@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Équipe{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('users', 15) }} Équipe</span><span class="count-pill">{{ users|length }}</span></div>
+  <div class="seg" style="margin-left:12px">
+    <a href="{{ url_for('team.index', inactive=1 if show_inactive else None) }}" class="{% if not role %}active{% endif %}">Tous</a>
+    {% for k, lab in ROLES.items() %}<a href="{{ url_for('team.index', role=k, inactive=1 if show_inactive else None) }}" class="{% if role == k %}active{% endif %}">{{ lab }}s</a>{% endfor %}
+  </div>
+  <div class="header-actions">
+    {% if current_user.is_admin %}
+    <a class="btn btn-sm btn-ghost {% if show_inactive %}active{% endif %}" href="{{ url_for('team.index', role=role, inactive=None if show_inactive else 1) }}">{{ icon('eye', 14) }} {{ 'Masquer' if show_inactive else 'Afficher' }} les comptes désactivés</a>
+    {% endif %}
+    <a class="btn btn-sm" href="{{ url_for('team.workload') }}">{{ icon('calendar', 14) }} Charge de travail</a>
+    <button class="btn btn-sm" type="button" data-open="absence-modal">{{ icon('palm', 14) }} Ajouter une absence</button>
+    {% if current_user.is_admin %}
+    <button class="btn btn-sm btn-primary" type="button" data-open="invite-modal">{{ icon('user-plus', 14) }} Ajouter un membre</button>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+{% set totals = namespace(open=0, overdue=0, away=0, week=0) %}
+{% for u in users %}{% set s = stats[u.id] %}{% set totals.open = totals.open + s.open %}{% set totals.overdue = totals.overdue + s.overdue %}{% set totals.week = totals.week + s.week_minutes %}{% if s.away %}{% set totals.away = totals.away + 1 %}{% endif %}{% endfor %}
+<div class="stats mb-lg">
+  <div class="stat"><div class="v">{{ users|length }}</div><div class="l">{{ icon('users', 13) }} Membres</div></div>
+  <div class="stat accent"><div class="v">{{ totals.open }}</div><div class="l">{{ icon('layers', 13) }} Tickets ouverts assignés</div></div>
+  <div class="stat {% if totals.overdue %}danger{% endif %}"><div class="v">{{ totals.overdue }}</div><div class="l">{{ icon('alert', 13) }} En retard</div></div>
+  <div class="stat"><div class="v">{{ totals.week|minutes }}</div><div class="l">{{ icon('timer', 13) }} Temps saisi cette semaine</div></div>
+  <div class="stat"><div class="v">{{ totals.away }}</div><div class="l">{{ icon('palm', 13) }} Absent(s) aujourd’hui</div></div>
+</div>
+
+<div class="panel" style="overflow-x:auto">
+  <table class="table">
+    <thead><tr>
+      <th>Membre</th><th>Fonction</th><th>Rôle</th><th class="num">Projets</th><th class="num">Ouverts</th>
+      <th class="num">En retard</th><th class="num">Échéance cette semaine</th><th>Temps / capacité (semaine)</th>
+      <th>Disponibilité</th><th>Dernière connexion</th>{% if current_user.is_admin %}<th></th>{% endif %}
+    </tr></thead>
+    <tbody>
+    {% for u in users %}
+    {% set s = stats[u.id] %}
+    <tr {% if not u.active %}style="opacity:.55"{% endif %}>
+      <td>
+        <a class="flex gap" href="{{ url_for('team.profile', username=u.username) }}">
+          {{ ui.avatar(u, 28) }}
+          <span class="col" style="gap:0"><b>{{ u.display_name }}</b><span class="muted small">@{{ u.username }}</span></span>
+        </a>
+      </td>
+      <td class="text-2">{{ u.job_title or '—' }}</td>
+      <td><span class="badge {% if u.role == 'admin' %}badge-accent{% endif %}">{{ ROLES.get(u.role, u.role) }}</span>{% if not u.active %} <span class="badge badge-danger">Désactivé</span>{% endif %}</td>
+      <td class="num">{{ s.projects }}</td>
+      <td class="num"><a href="{{ url_for('team.profile', username=u.username, tab='assigned') }}">{{ s.open }}</a>{% if s.started %} <span class="muted small">({{ s.started }} en cours)</span>{% endif %}</td>
+      <td class="num {% if s.overdue %}danger-text bold{% else %}muted{% endif %}">{{ s.overdue }}</td>
+      <td class="num {% if not s.due_week %}muted{% endif %}">{{ s.due_week }}</td>
+      <td>
+        <div class="flex gap">
+          <div class="cap-bar" title="{{ s.capacity_pct }} % de {{ u.capacity_hours }} h"><span class="{% if s.capacity_pct > 100 %}over{% endif %}" style="width: {{ [s.capacity_pct, 100]|min }}%"></span></div>
+          <span class="small nowrap">{{ s.week_minutes|minutes }} <span class="muted">/ {{ u.capacity_hours }} h</span></span>
+        </div>
+      </td>
+      <td>
+        {% if s.away %}<span class="badge badge-warning" title="{{ s.away.note }}">{{ icon('palm', 12) }} {{ s.away.kind }} jusqu’au {{ s.away.end_date|date }}</span>
+        {% elif s.next_absence %}<span class="badge" title="{{ s.next_absence.note }}">{{ s.next_absence.kind }} dès le {{ s.next_absence.start_date|date }}</span>
+        {% else %}<span class="badge badge-success">Disponible</span>{% endif %}
+      </td>
+      <td class="muted small nowrap">{{ u.last_login_at|ago if u.last_login_at else 'Jamais' }}</td>
+      {% if current_user.is_admin %}
+      <td class="right">
+        <div class="dd">
+          <button class="btn btn-ghost btn-icon btn-xs" type="button" data-menu title="Actions">{{ icon('more', 15) }}</button>
+          <div class="menu" style="width:230px">
+            <button class="menu-item" type="button" data-open="edit-user-{{ u.id }}">{{ icon('edit') }} Modifier le rôle et la capacité</button>
+            <form method="post" action="{{ url_for('team.admin_action', uid=u.id) }}" data-confirm="Générer un nouveau mot de passe provisoire pour {{ u.display_name }} ?">{{ ui.csrf() }}<input type="hidden" name="action" value="reset"><button class="menu-item">{{ icon('key') }} Réinitialiser le mot de passe</button></form>
+            {% if u.id != current_user.id %}
+            <form method="post" action="{{ url_for('team.admin_action', uid=u.id) }}">{{ ui.csrf() }}<input type="hidden" name="action" value="toggle"><button class="menu-item">{{ icon('refresh' if not u.active else 'lock') }} {{ 'Réactiver le compte' if not u.active else 'Désactiver le compte' }}</button></form>
+            <div class="menu-sep"></div>
+            <form method="post" action="{{ url_for('team.admin_action', uid=u.id) }}" data-confirm="Supprimer définitivement le compte de {{ u.display_name }} ? Ses tickets sont conservés mais ne lui seront plus assignés.">{{ ui.csrf() }}<input type="hidden" name="action" value="delete"><button class="menu-item danger">{{ icon('trash') }} Supprimer le compte</button></form>
+            {% endif %}
+          </div>
+        </div>
+        <dialog class="modal sm" id="edit-user-{{ u.id }}" style="text-align:left">
+          <form method="post" action="{{ url_for('team.admin_action', uid=u.id) }}">
+            {{ ui.csrf() }}<input type="hidden" name="action" value="update">
+            <div class="modal-h"><h2>{{ u.display_name }}</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+            <div class="modal-b">
+              <div class="field"><label>Rôle dans l’espace</label>
+                <select class="input" name="role">{% for k, lab in ROLES.items() %}<option value="{{ k }}" {% if u.role == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select>
+                <span class="help">Administrateur : tous les droits · Membre : crée et modifie les tickets · Invité : lecture, commentaires et demandes (intake).</span>
+              </div>
+              <div class="field"><label>Fonction</label><input class="input" name="job_title" value="{{ u.job_title or '' }}" placeholder="Ex. Responsable RGPD"></div>
+              <div class="field"><label>Capacité hebdomadaire (heures)</label><input class="input" type="number" min="1" max="80" name="capacity_hours" value="{{ u.capacity_hours }}"></div>
+            </div>
+            <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Enregistrer</button></div></div>
+          </form>
+        </dialog>
+      </td>
+      {% endif %}
+    </tr>
+    {% else %}
+    <tr><td colspan="11">{{ ui.empty('users', 'Aucun membre', 'Aucun membre ne correspond à ce filtre.') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ---------------------------------------------------------------- Ajouter une absence #}
+<dialog class="modal sm" id="absence-modal">
+  <form method="post" action="{{ url_for('team.absence_add') }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Ajouter une absence</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      {% if current_user.is_admin %}
+      <div class="field"><label>Membre</label>
+        <select class="input" name="user_id">{% for u in users if u.active %}<option value="{{ u.id }}" {% if u.id == current_user.id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select>
+      </div>
+      {% else %}<input type="hidden" name="user_id" value="{{ current_user.id }}">{% endif %}
+      <div class="grid-2">
+        <div class="field"><label>Du</label><input class="input" type="date" name="start_date" required value="{{ today.isoformat() }}"></div>
+        <div class="field"><label>Au</label><input class="input" type="date" name="end_date" required value="{{ today.isoformat() }}"></div>
+      </div>
+      <div class="field"><label>Motif</label>
+        <select class="input" name="kind">{% for k in ['Congés', 'Formation', 'Maladie', 'Mission', 'Autre'] %}<option>{{ k }}</option>{% endfor %}</select>
+      </div>
+      <div class="field"><label>Note</label><input class="input" name="note" placeholder="Facultatif"></div>
+      <p class="help">Les absences sont prises en compte dans le planning de charge de l’équipe.</p>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Enregistrer</button></div></div>
+  </form>
+</dialog>
+
+{# ---------------------------------------------------------------- Ajouter un membre #}
+{% if current_user.is_admin %}
+<dialog class="modal" id="invite-modal">
+  <form method="post" action="{{ url_for('team.invite') }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Ajouter un membre</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="grid-2">
+        <div class="field"><label>Prénom</label><input class="input" name="first_name" autocomplete="off"></div>
+        <div class="field"><label>Nom</label><input class="input" name="last_name" autocomplete="off"></div>
+        <div class="field"><label>Identifiant de connexion</label><input class="input" name="username" required pattern="[a-z0-9_.\-]{2,60}" placeholder="ex. jdupont" autocomplete="off"></div>
+        <div class="field"><label>Rôle</label>
+          <select class="input" name="role">{% for k, lab in ROLES.items() %}<option value="{{ k }}" {% if k == 'member' %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select>
+        </div>
+        <div class="field"><label>Fonction</label><input class="input" name="job_title" placeholder="Facultatif"></div>
+      </div>
+      <div class="field"><label>Mot de passe provisoire</label><input class="input" name="password" placeholder="Laisser vide pour en générer un" autocomplete="new-password">
+        <span class="help">Le membre devra le changer à sa première connexion. Il sera affiché une seule fois après la création.</span>
+      </div>
+      {% set pdata = picker_data() %}
+      {% if pdata %}
+      <div class="field"><label>Ajouter aux projets</label>
+        <div class="col" style="gap:6px">
+          {% for pid, p in pdata.items() %}<label class="checkbox"><input type="checkbox" name="project_ids" value="{{ pid }}"> {{ p.emoji }} {{ p.name }}</label>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Créer le compte</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

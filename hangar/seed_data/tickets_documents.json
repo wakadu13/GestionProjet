@@ -1,0 +1,3361 @@
+{
+ "meta": {
+  "description": "Tickets rédigés d’après les documents du dossier Projet Pluri (hors planning prévisionnel Excel).",
+  "generated": "2026-10-29",
+  "sources": [
+   "lot A : racine, Avancement projet, Documentation et archives, Informations et retex",
+   "lot B : Droits - RGPD, fichier généré"
+  ],
+  "merged": {
+   "A-02": "B-04",
+   "A-14": "B-45",
+   "A-15": "B-47",
+   "A-41": "B-21",
+   "A-44": "B-41",
+   "A-47": "B-27",
+   "A-50": "B-49",
+   "A-59": "B-58",
+   "A-40": "B-24"
+  }
+ },
+ "tickets": [
+  {
+   "ref": "A-01",
+   "title": "Tenir la réunion de lancement et répartir les rôles (22/09)",
+   "description": "**Contexte :** premier point d’avancement du projet, le jour de remise du guide méthodologique v1.0 de l’encadrant (M. Camachon).\n\n**Contenu / résultat :** répartition des rôles — Lazaro : état de l’art ; Loubatier : communication (questionnaire, RDV avec l’ADC Buzet du CMA) ; Flohic : équipe technique/test (liste SSI, matrice des droits) ; Wacogne : planification (maquette d’interface du futur site) ; Gali : technique (début du codage de l’interface) ; Alquarni et Niord : testeurs (RDV avec la SIM) ; Claeys : planification / chef de projet ; Brancourt : responsable rédaction (RDV bureau BDE).\nInformations clés : prendre contact avec Pierre Agostini (vigilance processus), identifier et consulter le DPO, entretiens directifs et semi-directifs.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx` ; `Informations et retex différents services/Méthodologie_Collecte_données.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "brancourt"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Réunion"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-22",
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+    "Informations et retex différents services/Méthodologie_Collecte_données.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-09",
+   "title": "Planifier les phases du projet et les prochaines échéances",
+   "description": "**Contexte :** rôle de chef de projet / planification attribué à Claeys le 22/09.\n\n**Contenu / résultat :** la fiche de cadrage propose un calendrier indicatif par mois (cadrage, exploration des pistes, conception/prototype avec les demandes du C2, mise en place, tests, finalisation) mais sans jalons datés.\n\n**Reste à faire :** fixer les jalons (dépendances critiques, marges) et tenir le planning à jour.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx` ; `Fiche de cadrage.docx`",
+   "state": "in_progress",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Action"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-12",
+   "title": "Rédiger l’état de l’art du processus d’intégration (RETEX de la PIM)",
+   "description": "**Contexte :** consultation des précédents responsables admin PIEAE.\n\n**Contenu / résultat :** les élèves suivent la note d’intégration et envoient leurs pièces par mail, pochette et clé USB ; pochettes triées entre médical (au service médical) et administratif (salle au Testart). RETEX : note rédigée sans consulter les services (pièces incohérentes ou oubliées), relances par mail pour la solde, consignes « quoi à qui » floues entraînant des doublons, pas de tri interne/externe, envois à incorpo sans copie au BRH à retransmettre pour les 165 élèves, flou sur la pochette mutuelle.\n\n**Source :** `Avancement projet/22092026/Etat de l'art.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "lazaro"
+   ],
+   "module": "État de l’art & benchmark",
+   "labels": [
+    "Livrable",
+    "Documentation"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-22",
+   "documents": [
+    "Avancement projet/22092026/Etat de l'art.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-16",
+   "title": "Rédiger le questionnaire « besoins des services » (brouillon)",
+   "description": "**Contenu / résultat :** brouillon d’enquête en 18 questions sur les besoins des services pour les nouveaux arrivants (difficultés, documents nécessaires, fréquence, format, délais, priorités, mode de transmission, notifications…). Annotations de relecture : utiliser les vrais noms des bureaux, lister les documents demandés plutôt que des types.\nRemplacé ensuite par le support d’entretien fondé sur le guide méthodologique.\n\n**Source :** `Informations et retex différents services/Brouillon besoin client.docx` ; `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx`",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Sondage"
+   ],
+   "start_date": "2026-09-17",
+   "target_date": null,
+   "completed_date": "2026-09-22",
+   "documents": [
+    "Informations et retex différents services/Brouillon besoin client.docx",
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-27",
+   "title": "Relancer le CMA pour obtenir le RETEX de l’incorporation",
+   "description": "**Contexte :** RDV pris avec l’ADC Buzet du CMA le 22/09 ; le RETEX de l’incorporation doit être envoyé par le CMA (29/09).\n\n**Reste à faire :** relancer — « ne pas les lâcher », le CMA peut avoir du poids dans la décision.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx` ; `Avancement projet/29092026/29092026.docx` ; `NoteRéunion.docx`",
+   "state": "in_progress",
+   "priority": "high",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Action"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+    "Avancement projet/29092026/29092026.docx",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-28",
+   "title": "Rencontrer la SIM",
+   "description": "**Contexte :** prise de RDV avec la SIM par l’équipe de test (22/09).\n\n**Reste à faire :** tenir le rendez-vous et en rédiger le compte rendu (aucun compte rendu trouvé dans le dossier).\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx`",
+   "state": "in_progress",
+   "priority": "medium",
+   "assignees": [
+    "alquarni",
+    "niord"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-29",
+   "title": "Rencontrer le bureau BDE",
+   "description": "**Contexte :** prise de RDV avec le bureau BDE (22/09).\n\n**Reste à faire :** tenir le rendez-vous et en rédiger le compte rendu (aucun compte rendu trouvé dans le dossier).\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx`",
+   "state": "in_progress",
+   "priority": "medium",
+   "assignees": [
+    "brancourt"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-51",
+   "title": "Proposer une maquette d’interface du futur site",
+   "description": "**Contexte :** travail de Wacogne (équipe planification) au 22/09 : modèle d’exposition / proposition d’interface.\n\n**Statut à confirmer :** l’orientation « logiciel étagère » de la fiche de cadrage peut rendre cette maquette caduque.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx` ; `Fiche de cadrage.docx`",
+   "state": "in_progress",
+   "priority": "low",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-52",
+   "title": "Coder un premier prototype d’interface",
+   "description": "**Contexte :** Gali (équipe technique) a commencé le codage de l’interface le 22/09.\n\n**Statut à confirmer :** à réorienter selon le choix étagère / développement interne.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx`",
+   "state": "in_progress",
+   "priority": "low",
+   "assignees": [
+    "gali"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-51"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-26",
+   "title": "Rédiger la matrice des droits d’accès V1",
+   "description": "**Contexte** : matrice des droits du SI de centralisation des documents administratifs des élèves (document daté du 22/09/2026 dans ses métadonnées).\n\n**Contenu / résultat** : 3 profils (élève, opérateur, administrateur) × 10 actions (créer un compte, déposer, consulter ses documents, consulter son périmètre, tout consulter, modifier, supprimer, gérer les comptes, attribuer les droits, consulter les journaux). Personne ne consulte l’ensemble des documents ; aucun document modifiable après dépôt.\n\n**Suite** : remplacée par la matrice V2 (classes d’information).\n\n**Source :** Droits - RGPD/Matrice_droits_acces V1.docx",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "Livrable",
+    "RGPD"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": "2026-09-22",
+   "documents": [
+    "Droits - RGPD/Matrice_droits_acces V1.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": [
+    "Attribution d’après le rôle « RGPD et sécurité — matrice des droits » noté dans la fiche de cadrage V2 ; auteur non renseigné dans le fichier."
+   ]
+  },
+  {
+   "ref": "A-03",
+   "title": "Formuler la finalité du projet (v0.1)",
+   "description": "**Contexte :** §2 du guide méthodologique (« Pourquoi collecter ? »).\n\n**Contenu / résultat :** finalité globale — centraliser les pièces demandées à l’arrivée pour qu’elles ne soient fournies qu’une fois, par un canal sécurisé, chaque service n’accédant qu’à ce dont il a besoin. Constat chiffré d’après la notice 2025 : 7 supports de transmission, CNI demandée 6 fois, carte vitale 5 fois, RIB 4 fois. Découpage en **Partie 1** (intégration des élèves EAE + un processus test au niveau de la BA 701) et **Partie 2** (extension aux autres populations, obsolescence, tableau de bord). Tableau comparé population / processus / données / livrables / conditions de démarrage.\n\n**Source :** `Informations et retex différents services/Finalite_projet_v0.1.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Livrable"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Informations et retex différents services/Finalite_projet_v0.1.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-04",
+   "title": "Définir la problématique et les 4 indicateurs de charge administrative",
+   "description": "**Contenu / résultat :** problématique retenue : « Dans quelle mesure la création d’une plateforme numérique centralisée de dépôt et d’extraction de documents peut-elle réduire la charge administrative liée à l’intégration et au suivi des élèves à l’École de l’Air ? »\nIndicateurs de référence (baseline avant/après) : nombre de redemandes d’un même document par an, temps passé par un service à collecter/traiter, nombre de canaux utilisés pour un même document, délai moyen entre demande et réception.\n\n**Source :** `Avancement projet/29092026/29092026.docx` ; `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Livrable"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Avancement projet/29092026/29092026.docx",
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-05",
+   "title": "Tenir le point d’avancement du 29/09",
+   "description": "**Contenu / résultat :** mind map de l’état de l’art réalisée ; entretien de Loubatier avec le service médical (compte rendu fait, RETEX de l’incorporation attendu du CMA) ; Wacogne : définition de la problématique ; Flohic : référentiel gestion des données / RGPD, questionnaire RGPD, mise à jour de la matrice des droits Excel.\nPremières incohérences relevées dans la notice : « 3 doses » de vaccin COVID exigées en annexe I mais vaccination prévue à l’intégration en partie II ; dossier CEMPN à remettre en papier mais nommé pour la clé USB ; 1 adresse d’envoi en partie I contre 5 en partie II (6 PJ max) ; fiche de renseignements scellée « Confidentiel personnel » mais envoyée par mail à 5 destinataires.\n\n**Source :** `Avancement projet/29092026/29092026.docx`",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [
+    "brancourt"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Réunion"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Avancement projet/29092026/29092026.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-13",
+   "title": "Réaliser la mind map de l’état de l’art",
+   "description": "**Contenu / résultat :** carte mentale de l’état de l’art (PDF du 29/09, réalisée sous Obsidian) ; elle sert de référence « terrain » à la cartographie des flux V2.\n\n**Source :** `Avancement projet/22092026/mind map ETAT DE L'ART.pdf` ; `Avancement projet/29092026/29092026.docx` ; `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx`",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [
+    "lazaro"
+   ],
+   "module": "État de l’art & benchmark",
+   "labels": [
+    "Livrable"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Avancement projet/22092026/mind map ETAT DE L'ART.pdf",
+    "Avancement projet/29092026/29092026.docx",
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-12"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-18",
+   "title": "Mener les entretiens avec les 8 services identifiés",
+   "description": "**Contexte :** 8 services identifiés dans le livrable 1 : brigadiers, secrétariat élèves, administration, enseignants, cadets étrangers, formation militaire, section solde, service médical. Les plus concernés par les redemandes (brigadiers, secrétariat, solde, médical) sont prioritaires. Deadline fixée au 26/10 pour finir le recueil d’informations.\n\n**Consignes :** être à plusieurs, montrer qu’on a des arguments, utiliser la grille d’entretien.\n**Avancement :** service médical et brigadier faits (sous-tickets).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx` ; `Avancement projet/09102026/09102026.docx` ; `NoteRéunion.docx`",
+   "state": "in_progress",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Jalon"
+   ],
+   "start_date": "2026-09-29",
+   "target_date": "2026-10-26",
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx",
+    "Avancement projet/09102026/09102026.docx",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-17"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-19",
+   "title": "Entretien avec le service médical",
+   "description": "**Contenu / résultat :** le SM reçoit nom, prénom, date/ville de naissance et NID par mail pour créer le dossier Axome (liste trop tardive avant l’incorporation) puis tous les documents médicaux par mail. Pour les internes, les dossiers viennent des CMA ; seul le CEMPN est important. Usage : suivi médical et aptitudes. Contrainte majeure : **secret médical**. Référente : ADC Bouzet. Besoin : préparation en amont et suivi des examens médicaux obligatoires. Projet jugé utile « mais secret médical » ; accès internet acceptable.\n\n**Source :** `Informations et retex différents services/Presentation et sondage SM .docx` ; `Avancement projet/29092026/29092026.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Santé"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Informations et retex différents services/Presentation et sondage SM .docx",
+    "Avancement projet/29092026/29092026.docx"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-42",
+   "title": "Vérifier le cadre réglementaire des données médicales",
+   "description": "**Contexte :** action confiée à Loubatier en réunion de cadrage, à faire avant tout sondage.\n\n**Contenu / résultat :** aucune donnée médicale individuelle ne doit entrer dans le sondage ni dans la plateforme : les pièces restent dans le circuit du SSA (RGPD art. 9, secret médical L1110-4 CSP, l’aptitude seule est transmise au commandement, dossier CEMPN confidentiel, hébergement HDS obligatoire en externe, AIPD très probable). Architecture recommandée en **deux zones étanches** (administrative / médicale) avec au plus un statut « reçu / non reçu ». 8 constats sur la notice (CEMPN vers les boîtes admin, allergies vers incorporation@, clé USB non chiffrée…).\n\n**Source :** `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx` ; `Fiche de cadrage.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Santé",
+    "Livrable"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx",
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-46",
+   "title": "Classer les pièces d’intégration par niveau de sensibilité",
+   "description": "**Contenu / résultat :** classeur recensant **42 pièces** de la notice avec une échelle à 4 niveaux (standard, personnel, élevé, critique) et 6 catégories (santé, NIR, RIB, double nationalité, situation familiale, mise en garde stupéfiants) : 14 pièces critiques (santé), 11 élevées, 11 personnelles, 6 standard ; accès recommandé et mesures minimales par niveau ; 6 points de vigilance (mails à 5 destinataires, CEMPN en boîte admin, allergies vers incorporation@, clé USB non chiffrée, redondances, fiche de renseignements protégée de façon incohérente).\nProposition à faire valider par le DPD (voir ticket DPO).\n\n**Source :** `Informations et retex différents services/Classement_sensibilite_pieces_integration.xlsx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Livrable"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Informations et retex différents services/Classement_sensibilite_pieces_integration.xlsx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-27",
+   "title": "Rédiger le guide de collecte RGPD pour les entretiens services",
+   "description": "**Contexte** : guide de collecte du référentiel élèves (volet cycle de vie, droits, RGPD), créé le 29/09/2026.\n\n**Contenu / résultat** : une fiche par service rencontré ; 12 questions : documents et origine, finalité (minimisation), base légale, accès (moindre privilège), destinataires, durées en base active / archivage intermédiaire, données sensibles (AIPD), fin de vie, tableau de gestion des archives. Chaque réponse renvoie à une colonne du tableur « Référentiel élèves ».\n\n**Source :** Droits - RGPD/Questions_RGPD.docx\n\n---\n**Également évoqué dans les notes de l’équipe** (« Définir le référentiel de gestion des données et le questionnaire RGPD ») :\n\n**Contenu / résultat (point du 29/09) :** référentiel sur la gestion des données et le RGPD, questionnaire RGPD et mise à jour de la matrice des droits Excel (liste SSI : qui a le droit de faire quoi), commencée le 22/09.\nLes fichiers correspondants sont probablement dans « Droits - RGPD » (lot B) : à rapprocher.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx` ; `Avancement projet/29092026/29092026.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "Livrable",
+    "RGPD",
+    "Entretien"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": "2026-09-29",
+   "documents": [
+    "Droits - RGPD/Questions_RGPD.docx",
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+    "Avancement projet/29092026/29092026.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-28",
+   "title": "Construire le référentiel élèves : cycle de vie, droits et purge",
+   "description": "**Contexte** : classeur de travail créé le 29/09, dernière modification le 06/10/2026. Toutes les durées et tous les droits sont à valider par le DPO et le correspondant archives.\n\n**Contenu / résultat** : onglets Mode d’emploi, Inventaire (finalité, base légale, sensibilité, durées base active / archivage intermédiaire / sort final), Matrice accès, Questions collecte, Listes. Rappel des 3 phases CNIL et du circuit des archives publiques (SHD, visa d’élimination). Suivi : 9 catégories inventoriées, toutes encore des lignes d’exemple, 0 validée. Sources : guides CNIL (durées de conservation, référentiel RH 2026, journalisation), BO Éducation nationale n°24 (2005), rapport du Sénat 2014 sur le SHD (dossier « Sources référentiel élèves »).\n\n**Reste à faire** : voir sous-tickets.\n\n**Source :** Droits - RGPD/Referentiel_eleves_cycle_de_vie.xlsx",
+   "state": "in_progress",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "Livrable",
+    "RGPD"
+   ],
+   "start_date": "2026-09-29",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Droits - RGPD/Referentiel_eleves_cycle_de_vie.xlsx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-27"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "A-17",
+   "title": "Construire le support d’entretien avec les services",
+   "description": "**Contenu / résultat :** support suivant les étapes du guide (cadrer, concevoir, sécuriser, stocker, exploiter, piloter) : présentation du projet et de la problématique, périmètre (internet uniquement, extension POEIC à l’étude), fonctionnalités envisagées, tableau de cartographie du parcours (étape, service, donnée, canal, stockage, difficulté) et questions ciblées. Une version enrichie de questions RGPD / cycle de vie (apport de Vincent) a été utilisée avec le brigadier.\n\n**Source :** `Informations et retex différents services/Presentation et sondage services.docx` ; `Informations et retex différents services/Questions brigadier/ProjetPluriQuestionBrigadierCapitaineDerradji.docx` ; `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Livrable"
+   ],
+   "start_date": "2026-09-29",
+   "target_date": null,
+   "completed_date": "2026-10-01",
+   "documents": [
+    "Informations et retex différents services/Presentation et sondage services.docx",
+    "Informations et retex différents services/Questions brigadier/ProjetPluriQuestionBrigadierCapitaineDerradji.docx",
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-16"
+   ],
+   "estimate_days": null,
+   "comments": [
+    "« Benoît : fiche type d’entretien » dans la liste d’actions ; Benoît Loubatier est l’auteur du brouillon de questionnaire."
+   ]
+  },
+  {
+   "ref": "A-06",
+   "title": "Tenir la réunion de suivi avec l’encadrant (début octobre)",
+   "description": "**Contexte :** présentation des tâches réalisées et recadrage (date estimée d’après le document : 06/10).\n\n**Contenu / résultat :** irritant principal = redondance et classification inadaptée (données stockées sur le PC admin) ; refaire la matrice des flux réels en y plaçant les irritants ; décortiquer toute la chaîne des procédures ; l’état de l’art doit être exhaustif et couvrir d’autres organismes ; DPO à voir au moment des propositions ; interlocuteurs à contacter (DGFM, PEP intégration + brigadier référent, CDT EFC1, secrétariat EFC, OTC) ; regarder les solutions clés en main ; préparer une mini restitution ; proposer une batterie de questions pour le C2 ; CMA à relancer pour le RETEX ; être à plusieurs pendant les entretiens ; tenir M. Camachon informé par mail.\n\n**Source :** `NoteRéunion.docx`",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Réunion"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-10-06",
+   "documents": [
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": [
+    "Date de réunion estimée d’après la date de création de la note (06/10/2026)."
+   ]
+  },
+  {
+   "ref": "A-20",
+   "title": "Entretien avec le brigadier (capitaine Derradji)",
+   "description": "**Contenu / résultat :** données utilisées : biodata, état civil, heures de vol, note d’anglais (LV2, groupes), latéralité, CATI, intolérances alimentaires, personne à prévenir. Mise à jour tous les 2 mois environ (longue faute de postes Intradef). Données sensibles : habilitations, rapports circonstanciés, PACS, décès, confidentiel médical. Source de vérité sur le réseau EFC, corrigée par les élèves sous l’autorité du brigadier. Souhaits : agent IA pour extraire des classements, format de cellules unifié. Points noirs : habillement, habilitations (SOFIA).\n⚠️ Accès depuis internet jugé **non acceptable** (données trop sensibles).\n\n**Source :** `Informations et retex différents services/Questions brigadier/ProjetPluriQuestionBrigadierCapitaineDerradji.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-10-06",
+   "documents": [
+    "Informations et retex différents services/Questions brigadier/ProjetPluriQuestionBrigadierCapitaineDerradji.docx"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": [
+    "Date estimée d’après la dernière modification du compte rendu (06/10/2026)."
+   ]
+  },
+  {
+   "ref": "A-31",
+   "title": "Élaborer la feuille de route du sondage à grande échelle",
+   "description": "**Contenu / résultat :** démarche en 6 phases (0 cadrage avec le directeur, 1 gouvernance & conformité avec le DPO, 2 décisions structurantes anonyme/nominatif et données nécessaires, 3 architecture technique — hébergement UE/SecNumCloud, purge —, 4 préparation & pilote, 5 collecte, 6 exploitation avec seuil d’anonymat de 5 à 10 personnes). Durée 2 à 3 mois, dont la moitié avant collecte. Risques : trop de données, DPO/CSE oubliés, anonymat mal tenu. Note de présentation à la direction en 6 diapositives.\n\n**Source :** `Documentation et archives/EtapesProjetBase.docx` ; `Documentation et archives/feuille_de_route_sondage.pptx`",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [
+    "brancourt"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Sondage",
+    "Livrable"
+   ],
+   "start_date": "2026-10-05",
+   "target_date": null,
+   "completed_date": "2026-10-06",
+   "documents": [
+    "Documentation et archives/EtapesProjetBase.docx",
+    "Documentation et archives/feuille_de_route_sondage.pptx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-07",
+   "title": "Tenir le point d’avancement du 09/10",
+   "description": "**Contenu / résultat :** nouvelle demande de sondage « cartographie socio-démographique » du personnel (lieu de vie, mobilité, temps de trajet, taux de rotation) ; voir l’OMSO / DRHAAE pour les mutations ; solliciter la cellule qualité (liste des processus métier, audit) ; préparer un pitch pour Pierre Agostini (venue probable le 13/10 à 16 h) ; **deadline du 26/10** : finir le recueil d’informations et produire le livrable de définition du problème (irritant + audit) ; Lazaro : structurer et rendre intelligible la méthode.\n\n**Source :** `Avancement projet/09102026/09102026.docx`",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [
+    "brancourt"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Réunion"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-10-09",
+   "documents": [
+    "Avancement projet/09102026/09102026.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-08",
+   "title": "Structurer la méthode du projet et la rendre intelligible",
+   "description": "**Contexte :** demandé lors du point du 09/10 ; la méthode s’appuie sur le guide méthodologique de l’encadrant (8 étapes : cadrer, cartographier, concevoir, sécuriser, stocker, maintenir, exploiter, piloter) et sa checklist avant lancement.\n\n**Contenu / résultat :** une première présentation des méthodes (état de l’art, entretiens structurés, cartographie terrain, grille RGPD) figure dans le livrable 1.\n\n**Reste à faire :** formaliser la méthode complète (rôles par axe : processus & besoins, questionnaire & données, conformité & sécurité, data & visualisation) et la checklist du §10.\n\n**Source :** `Avancement projet/09102026/09102026.docx` ; `Informations et retex différents services/Méthodologie_Collecte_données.docx` ; `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "in_progress",
+   "priority": "medium",
+   "assignees": [
+    "lazaro"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Documentation"
+   ],
+   "start_date": "2026-10-09",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/09102026/09102026.docx",
+    "Informations et retex différents services/Méthodologie_Collecte_données.docx",
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-33",
+   "title": "Relever les incohérences de la notice d’intégration 2025",
+   "description": "**Contexte :** analyse de la note n°46/EAE/DGFM/CMDT du 16 juin 2025 (23 pages), qui ne peut servir telle quelle de référentiel.\n\n**Contenu / résultat :** 3 renvois d’annexes faux, nombre d’annexes variable (4 ou 5), **13 pièces portant deux noms de fichier**, une adresse erronée (ecoleair.fr), 3 listes de destinataires contradictoires, adresses nominatives, dates 2025 écrites en dur, CR d’expertise CEMPN envoyé aux boîtes administratives, CNI demandée par 6 canaux, carte vitale par 5, JDC par 3. Gravité classée bloquant / majeur / mineur ; 7 actions proposées.\n\n**Source :** `Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx` ; `Documentation et archives/NOTICE_INTEGRATION_EXTERNE.pdf` ; `Avancement projet/29092026/29092026.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Livrable",
+    "Documentation"
+   ],
+   "start_date": "2026-09-29",
+   "target_date": null,
+   "completed_date": "2026-10-12",
+   "documents": [
+    "Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx",
+    "Documentation et archives/NOTICE_INTEGRATION_EXTERNE.pdf",
+    "Avancement projet/29092026/29092026.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-30",
+   "title": "S’appuyer sur la cellule qualité (Pierre Agostini)",
+   "description": "**Contexte :** P. Agostini (cellule qualité de la DGEA) veille aux processus, aux données et à l’IA ; la cellule possède la liste des processus métier et sait mener un audit. Venue probable le 13/10 à 16 h pour voir le rendu de l’équipe.\n\n**Reste à faire :** recueillir ses retours sur le livrable 1, lui demander des méthodes de cartographie de l’information et d’audit, lui faire relire la note sur les données médicales.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx` ; `Avancement projet/09102026/09102026.docx` ; `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "lazaro",
+    "gali"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Action"
+   ],
+   "start_date": "2026-10-13",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+    "Avancement projet/09102026/09102026.docx",
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-55"
+   ],
+   "estimate_days": null,
+   "comments": [
+    "« Avec Raph et Gali » noté au point du 09/10 pour la recherche de méthodes de cartographie."
+   ]
+  },
+  {
+   "ref": "A-32",
+   "title": "Lister les informations utiles sur le personnel de la base",
+   "description": "**Contexte :** sondage « cartographie socio-démographique » demandé au point du 09/10.\n\n**Contenu / résultat :** liste par catégories (profil, localisation, conditions de vie, divers militaire, divers) : situation maritale, enfants, foyer, logement et temps de trajet, mode de transport (places vélo, prime mobilité, covoiturage), CATI à jour, habilitation, moyens de communication (Tchap…), militaire/civil.\n\n**Reste à faire :** passer chaque donnée au crible de la minimisation (situation familiale et habilitation sont sensibles) ; voir l’OMSO / DRHAAE pour les mises à jour liées aux mutations.\n\n**Source :** `Avancement projet/Informations pouvant être intéressantes à avoir sur base.docx` ; `Avancement projet/09102026/09102026.docx`",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [
+    "brancourt"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Sondage"
+   ],
+   "start_date": "2026-10-09",
+   "target_date": null,
+   "completed_date": "2026-10-13",
+   "documents": [
+    "Avancement projet/Informations pouvant être intéressantes à avoir sur base.docx",
+    "Avancement projet/09102026/09102026.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-31"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-38",
+   "title": "Cartographier les flux de transmission à l’intégration",
+   "description": "**Contenu / résultat :** cartographie « acteur – action – donnée – outil – stockage – difficulté » (guide, étape 2), en deux versions : **V1** d’après la notice seule (6 canaux, 5 destinataires en copie, 8 à 13 mails par candidat, calendrier jusqu’au 24 août) ; **V2** croisant la notice et le terrain (mind map du 29/09) : 5 canaux sur 6 passent par l’équipe admin, 3 chemins vers le service médical, clés USB en station blanche, pochettes archivées au Testart, BRH absent de la notice, envoi direct CEMPN non réalisé. La V2 contient la matrice pièce × canal (CNI jusqu’à 7 exemplaires, carte vitale 6, RIB 5), ce qui couvre l’action « reporter les redondances dans la cartographie ».\n\n**Source :** `Informations et retex différents services/Flux de transmission EAE 2025.html` ; `Informations et retex différents services/Flux de transmission EAE 2025 V2.html` ; `NoteRéunion.docx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "wacogne",
+    "flohic"
+   ],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Livrable"
+   ],
+   "start_date": "2026-10-06",
+   "target_date": null,
+   "completed_date": "2026-10-13",
+   "documents": [
+    "Informations et retex différents services/Flux de transmission EAE 2025.html",
+    "Informations et retex différents services/Flux de transmission EAE 2025 V2.html",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-13"
+   ],
+   "estimate_days": null,
+   "comments": [
+    "Date de fin estimée (avant le livrable 1 du 13/10). Responsable déduit de l’action « Vinc / WAC : cartographie des données »."
+   ]
+  },
+  {
+   "ref": "A-39",
+   "title": "Construire le simulateur du nombre de mails par candidat",
+   "description": "**Contenu / résultat :** outil intégré à la cartographie V2 qui répartit les pièces en mails sous deux contraintes (6 PJ max, taille de message, +37 % d’encodage) selon la situation du candidat : **8 mails au minimum, 9 en profil typique, 14 au maximum**, jusqu’à 5 destinataires en copie par mail administratif. Présenté dans le livrable 1 pour chiffrer l’irritant.\n\n**Source :** `Informations et retex différents services/Flux de transmission EAE 2025 V2.html` ; `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Démonstrateur"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": "2026-10-13",
+   "documents": [
+    "Informations et retex différents services/Flux de transmission EAE 2025 V2.html",
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": "A-38",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": [
+    "Date estimée (présenté dans le livrable 1 du 13/10)."
+   ]
+  },
+  {
+   "ref": "A-57",
+   "title": "Produire le livrable 1 « Problématique, méthode et état des lieux »",
+   "description": "**Contenu / résultat :** présentation de 15 diapositives (groupe PROJPLUR, 9 membres) : l’irritant (pièces redemandées, 3 canaux, redemandes des brigadiers, circuit à 3 relais ; charge jugée « plus lourde qu’un départ en OPEX »), la problématique et ses 4 indicateurs, l’audit (cartographie), le chiffrage par le simulateur (8 / 9 / 14 mails), le risque des données sur PC personnels, les méthodes, l’état des lieux (8 services), la faisabilité (étapes 1 à 4 portées par l’équipe, appui requis pour stockage, RGPD, exploitation), les pistes d’amélioration et 5 demandes de décision.\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "done",
+   "priority": "high",
+   "assignees": [],
+   "module": "Restitution & communication",
+   "labels": [
+    "Livrable",
+    "Jalon"
+   ],
+   "start_date": "2026-10-12",
+   "target_date": null,
+   "completed_date": "2026-10-13",
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-04",
+    "A-38",
+    "A-39"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-21",
+   "title": "Entretien avec le secrétariat élèves",
+   "description": "**Reste à faire :** mener l’entretien avec le support commun ; service prioritaire (fortes redemandes). Voir aussi le secrétariat EFC cité en réunion.\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx` ; `NoteRéunion.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": null,
+   "target_date": "2026-10-26",
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx",
+    "NoteRéunion.docx"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-22",
+   "title": "Entretien avec la section administration élèves / bureau incorporation",
+   "description": "**Reste à faire :** entretien avec les destinataires des mails administratifs (4 boîtes nominatives + incorporation@) ; y confirmer les pratiques réelles relevées dans la cartographie (taille maximale des mails, destinataire de la clé USB, devenir des originaux).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx` ; `Informations et retex différents services/Flux de transmission EAE 2025 V2.html`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": null,
+   "target_date": "2026-10-26",
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx",
+    "Informations et retex différents services/Flux de transmission EAE 2025 V2.html"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-23",
+   "title": "Entretien avec la section solde",
+   "description": "**Reste à faire :** entretien prioritaire ; le RETEX signale des relances par mail pour obtenir les pièces de solde (pochette 1 : RIB, identité, famille, services).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx` ; `Avancement projet/22092026/Etat de l'art.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": null,
+   "target_date": "2026-10-26",
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx",
+    "Avancement projet/22092026/Etat de l'art.docx"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-24",
+   "title": "Entretien avec les enseignants",
+   "description": "**Reste à faire :** mener l’entretien avec le support commun (service identifié dans le livrable 1).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": null,
+   "target_date": "2026-10-26",
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-25",
+   "title": "Entretien avec le bureau des cadets étrangers",
+   "description": "**Reste à faire :** mener l’entretien avec le support commun (service identifié dans le livrable 1).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": null,
+   "target_date": "2026-10-26",
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-26",
+   "title": "Entretien avec la formation militaire",
+   "description": "**Reste à faire :** mener l’entretien avec le support commun (service identifié dans le livrable 1).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": null,
+   "target_date": "2026-10-26",
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": "A-18",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-01",
+   "title": "Établir le plan d’actions PI-EAE (34 actions, 5 lots)",
+   "description": "**Contexte** : plan établi le 29/10/2026 à partir des notes de réunion (NoteRéunion, 22/09, 29/09, 09/10), sans utiliser l’Excel de planification. L’échéance du 26/10 (fin du recueil, livrable « définition du problème + audit ») est passée.\n\n**Contenu / résultat** : 34 actions réparties en 5 lots — A recueil (clore les entretiens), B cartographie et analyse, C état de l’art et benchmark, D restitution et gouvernance, E volet base (sondage). Chaque action a un porteur proposé, une échéance (cette semaine, S+1 à S+4) et une priorité. 5 priorités de la semaine : relance CMA, entretiens restants, questions au C2, flux « pratique », date de la mini-restitution.\n\n**Reste à faire** : valider les porteurs en équipe, attribuer les actions « à attribuer », trancher les points ouverts (voir sous-tickets).\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Livrable",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": 1,
+   "comments": [
+    "Porteurs proposés d’après les rôles notés le 22/09 ; à valider en équipe."
+   ]
+  },
+  {
+   "ref": "B-02",
+   "title": "Attribuer en réunion les actions « à attribuer » du plan d’actions",
+   "description": "**Contexte** : plusieurs actions du plan ne sont rattachées à personne dans les notes : entretiens PEP intégration / brigadier, CDT EFC1 et secrétariat EFC, Cne Derradji, responsable LTV, questions au C2, explication des redondances, ProConnect, OMSO DRHAAE, informations de crise.\n\n**Reste à faire** : à la prochaine réunion d’équipe, désigner un porteur (binôme pour les entretiens) pour chacune et valider les porteurs proposés.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (§4 « Points à trancher »)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Réunion",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-10-30",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": "B-01",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-03",
+   "title": "Trancher en équipe les points ouverts du plan d’actions",
+   "description": "**Contexte** : le plan d’actions liste des points à trancher.\n\n**Reste à faire**\n- [ ] Moment du DPO : proposition = premier contact court maintenant, consultation complète après le benchmark (la note du 22/09 dit « tôt », la dernière réunion « plus tard »).\n- [ ] Statut des échéances passées : la venue de M. Agostini (13/10) et le livrable du 26/10 ont-ils eu lieu ?\n- [ ] Dater la note « NoteRéunion », non datée, pour garder une trace de l’avancement.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (§4) ; fichier généré/Recapitulatif_travaux.docx (§5)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Réunion",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-10-30",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Recapitulatif_travaux.docx"
+   ],
+   "parent": "B-01",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-04",
+   "title": "Rédiger la fiche de cadrage V2",
+   "description": "**Contexte** : version 2 proposée le 29/10/2026 ; reprend la V1, complète les parties entre crochets et l’aligne sur l’avancement réel (audit chiffré, état de l’art, benchmark). Le tableau des hypothèses de la V1 (image cassée) a été réécrit.\n\n**Contenu / résultat** : problématique et 4 indicateurs ; objectifs chiffrés (1 dépôt par pièce contre 7, 1 canal contre 7, aucune donnée médicale) ; périmètre (hors médical, hors développement sur mesure) ; 8 livrables ; hypothèses ; répartition des 9 membres (Claeys chef de projet, Wacogne planification/conception, Lazaro état de l’art, Loubatier communication/médical, Flohic RGPD, Gali technique, Brancourt rédaction, Al Qarni et Niord tests) ; calendrier sur 6 mois ; risques ; arbitrages.\n\n**Reste à faire** : relecture en équipe, compléter disponibilités et dates exactes, remise à l’encadrant.\n\n**Source :** fichier généré/Fiche_de_cadrage_v2.docx\n\n---\n**Également évoqué dans les notes de l’équipe** (« Compléter et faire valider la fiche de cadrage ») :\n\n**Contexte :** document de référence demandé par l’encadrant pour suivre l’avancement (4 à 6 pages).\n\n**Contenu / résultat :** sections 1 à 5 renseignées : constat (redondance des pièces papier / mail / clé USB, RGPD non cadré), objectif principal (plateforme de stockage et d’extraction), objectifs spécifiques (approbations, lieu de stockage conforme, plateforme), périmètre (médical exclu après consultation du service médical), résultat minimal « logiciel étagère », démarche en 4 étapes, première confrontation au réel (DPO + questionnaire), critères d’évaluation.\n\n**Reste à faire :** sections 6 à 10 encore au modèle (organisation de l’équipe — la fiche parle de 7 membres au lieu de 9 —, calendrier et jalons, moyens, risques, points à arbitrer), tableau des livrables incomplet, validation par l’encadrant. Une v2 existe peut-être dans « fichier généré » (lot B).\n\n**Source :** `Fiche de cadrage.docx`",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Livrable",
+    "Documentation"
+   ],
+   "start_date": "2026-09-22",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Fiche_de_cadrage_v2.docx",
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": 1,
+   "comments": [
+    "Dernière modification du document : 26/10/2026."
+   ]
+  },
+  {
+   "ref": "B-08",
+   "title": "Relancer le CMA (ADC Buzet) pour obtenir le RETEX de l’incorporation",
+   "description": "**Contexte** : priorité n°1 de la semaine (« ne pas les lâcher », NoteRéunion 29/09). Le CMA avait proposé de transmettre le RETEX de la dernière incorporation après l’entretien sur le service médical.\n\n**Contenu / résultat** : mail n°1 prêt (« Relance du CMA — RETEX de l’incorporation »), à compléter (date souhaitée, signature).\n\n**Reste à faire** : envoyer la relance, proposer de passer le récupérer ou 15 min d’échange ; relancer à défaut de réponse.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 1) ; fichier généré/Mails_prets_a_envoyer.docx (mail 1)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Action",
+    "Communication",
+    "Santé"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-10-30",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-09",
+   "title": "Envoyer au C2 la batterie de questions de cadrage du sondage",
+   "description": "**Contexte** : suite au mail de M. Camachon demandant au C2 de clarifier sa demande de sondage (volet base).\n\n**Contenu / résultat** : mail n°2 prêt (copie M. Camachon) avec 8 questions : décision visée (prime mobilité, places vélos, plan de rappel, crise), public visé, anonyme ou nominatif, informations prioritaires, mise à jour dans le temps, accès aux résultats, calendrier, désignation d’un interlocuteur métier et du DPO.\n\n**Reste à faire** : désigner le porteur, compléter grade/nom du destinataire, envoyer, suivre la réponse.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 8, porteur à attribuer) ; fichier généré/Mails_prets_a_envoyer.docx (mail 2)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Sondage",
+    "Communication",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-10-30",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-21",
+   "title": "Construire le tableau des procédures et des redondances",
+   "description": "**Contexte** : établi le 29/10/2026 à partir de la notice d’intégration n°46/EAE/DGFM/CMDT du 16/06/2025, du flux de transmission V2 et de l’état de l’art ; complète le classement de sensibilité des pièces.\n\n**Contenu / résultat** : chaîne de transmission en 17 étapes (irritant, hypothèse « pourquoi », question d’entretien) ; redondances des 37 pièces : 105 exemplaires demandés (185 copies réelles estimées), dont 68 évitables ; CNI/passeport jusqu’à 7 exemplaires ; 20 pièces demandées 3 fois ou plus ; 11 pièces médicales passent aussi par la clé USB remise à l’équipe admin.\n\n**Reste à faire** : les colonnes « Besoin réel » et « Pourquoi » sont des hypothèses à confirmer en entretien (voir sous-tickets).\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Tableau_procedures_redondances.xlsx ; fichier généré/Plan_actions_PI-EAE.docx (actions 12 et 13)\n\n---\n**Également évoqué dans les notes de l’équipe** (« Décortiquer toutes les procédures administratives (tableau des procédures) ») :\n\n**Contexte :** demande de la réunion de début octobre : refaire le tableau des procédures administratives sur toute la chaîne de transmission et comprendre l’origine des redondances (ex. pochette demandée, stockée puis rendue une semaine après).\nUn « Tableau_procedures_redondances » existe peut-être dans « fichier généré » (lot B) : à rapprocher.\n\n**Source :** `NoteRéunion.docx`",
+   "state": "in_progress",
+   "priority": "high",
+   "assignees": [
+    "wacogne",
+    "claeys"
+   ],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Livrable",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Tableau_procedures_redondances.xlsx",
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-38"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "B-31",
+   "title": "Définir les classes d’information et la matrice des droits V2",
+   "description": "**Contexte** : proposition du 29/10/2026 (action 15 : déterminer les grandes classes d’information à partir du référentiel élèves et du classement de sensibilité), à valider par le DPO et l’officier de sécurité.\n\n**Contenu / résultat** : 10 classes (identité, coordonnées, famille, nationalité, finances, scolarité, parcours militaire, logistique, engagements, santé hors plateforme) ; 42 pièces rattachées ; 11 profils dont chaque service réel et l’équipe admin 2A ; droits par action et par classe ; durées de conservation proposées. Principes : moindre privilège, aucune donnée médicale (statut seulement), journalisation 6 mois à 1 an. Changements V1 → V2 documentés.\n\n**Reste à faire** : arbitrer l’accès de l’équipe admin 2A ; validation DPO / officier de sécurité.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Matrice_droits_V2_classes_information.xlsx ; fichier généré/Plan_actions_PI-EAE.docx (action 15)",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "Livrable",
+    "RGPD"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-11-13",
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Matrice_droits_V2_classes_information.xlsx",
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-26",
+    "B-28"
+   ],
+   "estimate_days": 3,
+   "comments": []
+  },
+  {
+   "ref": "B-34",
+   "title": "Préparer le dossier de questions au DPO, au CND et à l’officier de sécurité",
+   "description": "**Contexte** : regroupe les questions restées « à confirmer » dans l’état de l’art, le benchmark et le classement de sensibilité, pour les poser en une fois (29/10/2026).\n\n**Contenu / résultat** : pitch en 1 minute ; 17 questions au DPO (registre Sicl@de, base légale, AIPD, responsable de traitement, minimisation, durées, information, droits, journalisation), 8 au CND / service numérique (doctrine, instance DN Armées, SecNumCloud / loi SREN, ProConnect, passerelle intradef, M365, Doctolib intradef, homologation RGS), 6 à l’officier de sécurité / RSSI (IGI 1300, clés USB, PC personnels, incidents, exigences minimales, passation).\n\n**Reste à faire** : préciser qui est le « CND » ; noter les réponses ; reporter dans le référentiel élèves et la matrice V2.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Questions_DPO_CND_securite.docx ; fichier généré/Plan_actions_PI-EAE.docx (action 29)",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "Livrable",
+    "RGPD"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Questions_DPO_CND_securite.docx",
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-31"
+   ],
+   "estimate_days": 2,
+   "comments": []
+  },
+  {
+   "ref": "B-36",
+   "title": "Préciser l’interlocuteur derrière le sigle « CND »",
+   "description": "**Contexte** : le sigle figure dans les notes de réunion sans être développé ; il avait été développé par erreur en « Centre numérique de la Défense » puis retiré du benchmark et du dossier de questions.\n\n**Reste à faire** : demander à l’encadrant ou aux auteurs de la note qui est le « CND » et obtenir le contact.\n\n**Source :** fichier généré/Recapitulatif_travaux.docx (§5 et §6) ; fichier généré/Questions_DPO_CND_securite.docx (§3)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-10-30",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Recapitulatif_travaux.docx",
+    "fichier généré/Questions_DPO_CND_securite.docx"
+   ],
+   "parent": "B-34",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-45",
+   "title": "Rédiger l’état de l’art du recueil de données",
+   "description": "**Contexte** : actions 18 et 19 (état des connaissances exhaustif, pratiques d’autres organismes et auto-évaluation). Livrable réutilisable par les promotions suivantes.\n\n**Contenu / résultat** : cadre réglementaire (RGPD, « Dites-le-nous une fois », CNIL, ANSSI, spécificités Armées / Sicl@de) ; pratiques (nucléaire, santé, enseignement supérieur, armées, entreprises, briques de l’État : Démarches Numériques, FranceConnect, ProConnect, API Particulier) ; littérature (charge administrative, once-only, gouvernance des données, e-RH) ; méthodes de cartographie (BPMN, flux de données, registre, CRUD, RACI, AIPD, EBIOS) ; grille d’auto-évaluation : 10 critères sur 12 en écart fort ; 36 références. Recommandation n°1 : sortir le médical des flux administratifs.\n\n**Reste à faire** : relecture par Lazaro ; points « à confirmer » ; aucune source fiable sur d’autres écoles d’officiers ; procédures EDF non publiques.\n\n**Source :** fichier généré/Etat_de_l_art_recueil_donnees.docx ; fichier généré/Plan_actions_PI-EAE.docx (actions 18 à 20)\n\n---\n**Également évoqué dans les notes de l’équipe** (« Étudier le recueil de données dans d’autres organismes ») :\n\n**Contexte :** demande de l’encadrant : un état de l’art = état des connaissances, exhaustif.\n\n**Reste à faire :** comprendre comment d’autres entités recueillent ces données (réglementation, ANSSI, nucléaire, médical, EDF…), s’auto-évaluer par rapport à elles et en tirer des recommandations.\nUn document « Etat_de_l_art_recueil_donnees » existe peut-être dans « fichier généré » (lot B) : à rapprocher.\n\n**Source :** `NoteRéunion.docx`",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "lazaro"
+   ],
+   "module": "État de l’art & benchmark",
+   "labels": [
+    "Livrable",
+    "Documentation",
+    "Benchmark"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Etat_de_l_art_recueil_donnees.docx",
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-12"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "B-47",
+   "title": "Réaliser le benchmark des solutions clés en main",
+   "description": "**Contexte** : action 21 : Clustdoc, DocuWare, SharePoint + Power Platform, Netlify, autres SaaS, outils de pilotage.\n\n**Contenu / résultat** : 9 solutions comparées sur 8 critères + 2 outils de pilotage (tableau de bord natif DN, Grist) ; 32 sources consultées en octobre 2026. Recommandation : Démarches Numériques en piste prioritaire (gratuit pour les administrations, hébergé en France), Oodrive Work (qualifié SecNumCloud) en piste 2, Clustdoc en plan B ; Microsoft 365 et Netlify écartés. Liste des points à vérifier avec le DPO et le CND.\n\n**Reste à faire** : faire confirmer les points marqués « non trouvé ».\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Benchmark_solutions_cles_en_main.docx ; fichier généré/Plan_actions_PI-EAE.docx (action 21)\n\n---\n**Également évoqué dans les notes de l’équipe** (« Comparer les solutions clés en main ») :\n\n**Contexte :** la fiche de cadrage privilégie un « logiciel étagère » (sécurité intégrée, maintenance après le départ de l’équipe).\n\n**Reste à faire :** examiner Clustdoc, DocuWare, SharePoint + Power Platform, Netlify, offres SaaS et outils de pilotage, selon les critères de la fiche : conformité RGPD/sécurité, coût, maintenance, facilité d’usage, accès pour des élèves pas encore incorporés.\nUn « Benchmark_solutions_cles_en_main » existe peut-être dans « fichier généré » (lot B) : à rapprocher.\n\n**Source :** `NoteRéunion.docx` ; `Fiche de cadrage.docx`",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "gali",
+    "wacogne"
+   ],
+   "module": "État de l’art & benchmark",
+   "labels": [
+    "Livrable",
+    "Benchmark"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Benchmark_solutions_cles_en_main.docx",
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "NoteRéunion.docx",
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "B-50",
+   "title": "Rédiger le plan du démonstrateur Démarches Numériques",
+   "description": "**Contexte** : plan complet, à lancer après validation de la piste à la mini-restitution.\n\n**Contenu / résultat** : les 37 pièces / 105 exemplaires deviennent 22 champs « pièce » déposés une seule fois ; 7 canaux → 2 ; cloisonnement par trois démarches liées (D1 socle, D2 solde, D3 double nationalité) car DN ne gère pas de droits par champ ; 56 champs ; circuit de traitement et relances (J−60, J−30, J−15) ; durées de conservation proposées ; indicateurs ; plan de test (5 à 10 volontaires, 1 testeur par service) ; critères de réussite (0 pièce déposée deux fois, saisie ≤ 45 min, SUS ≥ 70) ; calendrier sur 6 semaines (S1 2–6 nov. → S6 7–11 déc.) ; plan de repli.\n\n**Reste à faire** : lancer la demande de compte administrateur (§3.3) et dérouler le calendrier (sous-tickets).\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "gali"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Livrable",
+    "Démonstrateur"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-47"
+   ],
+   "estimate_days": 5,
+   "comments": [
+    "Calendrier à réaligner : le plan démarre en S1 (2–6 nov.) alors que le récapitulatif conseille de lancer la demande de compte après l’accord donné à la mini-restitution, dont la date reste à fixer (S+3 dans le plan d’actions). La fiche de cadrage V2 place, elle, le paramétrage en décembre et les tests en janvier."
+   ]
+  },
+  {
+   "ref": "B-58",
+   "title": "Préparer la mini-restitution aux autorités",
+   "description": "**Contexte** : actions 25 et 27 : point intermédiaire avec les autorités qui ont besoin d’en connaître ; pitch pour M. Agostini.\n\n**Contenu / résultat** : diaporama de 14 diapositives avec notes de l’orateur (audit de la chaîne, chiffrage, redondances, risques, état de l’art et auto-évaluation, benchmark, recommandation, démonstrateur, feuille de route, arbitrages) ; pitch de 2 minutes pour M. Agostini dans les notes de la diapo 1 ; aligné sur la recommandation finale (trois démarches liées).\n\n**Reste à faire** : fixer la date ; répéter avec les notes.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Mini_restitution_point_etape.pptx ; fichier généré/Plan_actions_PI-EAE.docx (actions 25 et 27)\n\n---\n**Également évoqué dans les notes de l’équipe** (« Organiser une mini restitution intermédiaire ») :\n\n**Reste à faire :** faire un point intermédiaire avec les autorités pour montrer le travail à ceux qui ont besoin d’en connaître ; trouver le nom du PEP PIEAE de la promotion 2026 et associer le CDT Del’Arosa.\nUn support « Mini_restitution_point_etape » existe peut-être dans « fichier généré » (lot B) : à rapprocher.\n\n**Source :** `NoteRéunion.docx`",
+   "state": "review",
+   "priority": "high",
+   "assignees": [
+    "claeys",
+    "wacogne"
+   ],
+   "module": "Restitution & communication",
+   "labels": [
+    "Livrable",
+    "Communication"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-11-20",
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Mini_restitution_point_etape.pptx",
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-45",
+    "B-47",
+    "B-21",
+    "A-57"
+   ],
+   "estimate_days": 2,
+   "comments": []
+  },
+  {
+   "ref": "B-59",
+   "title": "Trouver le nom du PEP PIEAE de la 26 et contacter le CDT Del’Arosa",
+   "description": "**Contexte** : NoteRéunion : identifier les destinataires de la mini-restitution.\n\n**Reste à faire** : obtenir le nom du PEP PIEAE de la 26 (M. Camachon peut aider : point du mail hebdomadaire) et prendre contact avec le CDT Del’Arosa.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 26) ; fichier généré/Mails_prets_a_envoyer.docx (mails 10 et 11)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Restitution & communication",
+   "labels": [
+    "Communication",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": "2026-10-30",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": "B-58",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-61",
+   "title": "Envoyer chaque semaine le point d’avancement à M. Camachon",
+   "description": "**Contexte** : action 28 (alimenter M. Camachon par mail chaque semaine) ; fonctionnement collectif prévu dans la fiche V2.\n\n**Contenu / résultat** : mail n°11 type prêt : fait cette semaine, en cours, en attente (RETEX CMA, retour du C2), prochaine étape (mini-restitution), aide demandée (ex. identifier le PEP PIEAE de la 26).\n\n**Reste à faire** : envoi hebdomadaire.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 28) ; fichier généré/Mails_prets_a_envoyer.docx (mail 11) ; fichier généré/Fiche_de_cadrage_v2.docx (§6)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Restitution & communication",
+   "labels": [
+    "Communication",
+    "Action"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": [
+    "Tâche récurrente : chaque semaine."
+   ]
+  },
+  {
+   "ref": "B-63",
+   "title": "Rédiger le récapitulatif des travaux du 29/10",
+   "description": "**Contexte** : synthèse de tous les fichiers produits le 29/10/2026 dans « fichier généré ».\n\n**Contenu / résultat** : tableau des 13 livrables (usage, reste à faire) ; chiffres clés (37 pièces, 105 exemplaires dont 68 évitables, CNI × 7, 7 canaux, 8 à 14 mails par candidat, 11 pièces médicales via clé USB, 10 critères sur 12 en écart fort, 56 champs / 22 pièces) ; ce qui ressort ; ordre d’utilisation conseillé ; points à confirmer ; corrections faites (sigle CND, diapo 11, nombre de solutions).\n\n**Source :** fichier généré/Recapitulatif_travaux.docx",
+   "state": "done",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Documentation"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Recapitulatif_travaux.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-64",
+   "title": "Préparer le kit de mesure du démonstrateur",
+   "description": "**Contexte** : mesure des 4 indicateurs de la problématique avant / après et des critères de réussite du plan (§8 et §9).\n\n**Contenu / résultat** : tableur (onglets Avant, Après — candidats, Après — services, Cloisonnement, SUS, Synthèse calculée) ; questionnaires candidats et services anonymes ; 7 grilles d’observation (section administration élèves, SAP, secrétariat, solde, gestionnaire nationalité, BRH, encadrement) ; fiche anomalies et suggestions.\n\n**Reste à faire** : imprimer les questionnaires et les grilles.\n\n**Source :** fichier généré/Kit_mesure/Kit_mesure_demonstrateur.xlsx ; fichier généré/Kit_mesure/Questionnaires_et_grilles_observation.docx (et .pdf)",
+   "state": "review",
+   "priority": "medium",
+   "assignees": [
+    "niord"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Livrable",
+    "Démonstrateur"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Kit_mesure/Kit_mesure_demonstrateur.xlsx",
+    "fichier généré/Kit_mesure/Questionnaires_et_grilles_observation.docx",
+    "fichier généré/Kit_mesure/Questionnaires_et_grilles_observation.pdf"
+   ],
+   "parent": "B-50",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": [
+    "Attribution d’après le rôle « Tests — mesures des indicateurs » (fiche de cadrage V2)."
+   ]
+  },
+  {
+   "ref": "B-65",
+   "title": "Créer les 10 candidats fictifs et leurs documents SPÉCIMEN",
+   "description": "**Contexte** : profils de test du démonstrateur ; tout est inventé (noms, IBAN d’une banque fictive, NIR fictifs), chaque document porte la mention SPÉCIMEN.\n\n**Contenu / résultat** : 10 profils (standard, ancienne réserviste, double nationalité, pacsée avec enfant, salarié civil et Sciences Po, dossier incomplet, information médicale, désistement, appel tardif, pièces non conformes) ; 123 documents factices (archive zip) ; une fiche par profil avec scénario, valeurs à saisir et fichiers à déposer.\n\n**Reste à faire** : décompresser le zip ; remettre sa fiche à chaque volontaire.\n\n**Source :** fichier généré/Candidats_fictifs/Fiches_candidats_fictifs.docx ; fichier généré/Candidats_fictifs/Candidats_fictifs_documents.zip",
+   "state": "review",
+   "priority": "medium",
+   "assignees": [
+    "alquarni"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Livrable",
+    "Démonstrateur"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Candidats_fictifs/Fiches_candidats_fictifs.docx",
+    "fichier généré/Candidats_fictifs/Candidats_fictifs_documents.zip"
+   ],
+   "parent": "B-50",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": [
+    "Attribution d’après le rôle « Tests — scénarios de test » (fiche de cadrage V2)."
+   ]
+  },
+  {
+   "ref": "B-66",
+   "title": "Rédiger les guides candidat et services du démonstrateur",
+   "description": "**Contexte** : deux guides d’une page pour le briefing de J1 du test.\n\n**Contenu / résultat** : guide candidat (préparer ses fichiers, créer son compte e-mail / FranceConnect, remplir D1 puis D2 et D3 si concerné, brouillon et dépôt, suivi : déposé → en instruction → à corriger → accepté ; aucune pièce médicale) ; guide services (traiter un dossier, temps noté en annotation AP8, anomalies à l’observateur).\n\n**Reste à faire** : compléter les contacts entre crochets.\n\n**Source :** fichier généré/Guides/Guide_candidat_deposer_dossier.docx ; fichier généré/Guides/Guide_services_traiter_dossier.docx (et .pdf)",
+   "state": "review",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Livrable",
+    "Démonstrateur",
+    "Documentation"
+   ],
+   "start_date": "2026-10-29",
+   "target_date": null,
+   "completed_date": "2026-10-29",
+   "documents": [
+    "fichier généré/Guides/Guide_candidat_deposer_dossier.docx",
+    "fichier généré/Guides/Guide_services_traiter_dossier.docx",
+    "fichier généré/Guides/Guide_candidat_deposer_dossier.pdf",
+    "fichier généré/Guides/Guide_services_traiter_dossier.pdf"
+   ],
+   "parent": "B-50",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-05",
+   "title": "Relire la fiche de cadrage V2 en équipe et la remettre à M. Camachon",
+   "description": "**Contexte** : étape n°2 de l’ordre d’utilisation conseillé dans le récapitulatif des travaux. La fiche prévoit un tableau « Validation avec l’encadrant » (date de revue, décision, réserves).\n\n**Reste à faire**\n- [ ] Relecture collective (cohérence vérifiée par le responsable rédaction)\n- [ ] Remise à M. Camachon et prise de date de revue\n- [ ] Reporter sa décision : validé / validé sous réserve / à retravailler\n\n**Source :** fichier généré/Fiche_de_cadrage_v2.docx ; fichier généré/Recapitulatif_travaux.docx",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "claeys",
+    "brancourt"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Livrable",
+    "Réunion"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Fiche_de_cadrage_v2.docx",
+    "fichier généré/Recapitulatif_travaux.docx"
+   ],
+   "parent": "B-04",
+   "depends_on": [
+    "B-06"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-06",
+   "title": "Compléter la fiche V2 : disponibilités de chacun et dates exactes du projet",
+   "description": "**Contexte** : la fiche V2 laisse « à confirmer » la disponibilité réelle (temps par semaine, examens, stages, permissions) de chacun des 9 membres et la période exacte du projet (indiquée « septembre 2026 – mars 2027 », à confirmer avec l’encadrant ; le plan du démonstrateur prévoit lui une fin des tests mi-décembre).\n\n**Reste à faire**\n- [ ] Recueillir les disponibilités en réunion\n- [ ] Confirmer les dates de début et de fin avec l’encadrant et aligner le calendrier (fiche §7 et plan du démonstrateur §10)\n\n**Source :** fichier généré/Fiche_de_cadrage_v2.docx (§6, §7)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Réunion",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Fiche_de_cadrage_v2.docx",
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-04",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-10",
+   "title": "Mener l’entretien PEP intégration et brigadier référent",
+   "description": "**Contexte** : entretien restant du lot A ; regard sur l’intégration et le suivi des élèves en cours d’année (documents redemandés, circuit élève → brigade → promotion → service).\n\n**Contenu / résultat** : mail n°3 de demande de RDV (30 min) prêt.\n\n**Reste à faire** : désigner un binôme, envoyer la demande, mener l’entretien (à plusieurs, grille existante, arguments chiffrés du simulateur de mails), rédiger le compte rendu et reporter les réponses dans le tableau des procédures.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (actions 2 et 10) ; fichier généré/Mails_prets_a_envoyer.docx (mail 3)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-11",
+   "title": "Mener l’entretien CDT EFC1",
+   "description": "**Contexte** : recueillir les besoins de l’EFC1 en documents et informations sur les élèves et les difficultés pour les obtenir.\n\n**Contenu / résultat** : mail n°4 de demande de RDV (30 min) prêt.\n\n**Reste à faire** : désigner un binôme, envoyer la demande, mener l’entretien, compte rendu, report dans le tableau des procédures.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 3) ; fichier généré/Mails_prets_a_envoyer.docx (mail 4)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-12",
+   "title": "Mener l’entretien avec le secrétariat EFC",
+   "description": "**Contexte** : le secrétariat est au cœur de la gestion des documents élèves : documents reçus, canaux, lieu de stockage, pertes de temps.\n\n**Contenu / résultat** : mail n°5 de demande de RDV (30 min) prêt.\n\n**Reste à faire** : désigner un binôme, envoyer, mener l’entretien, compte rendu, report dans le tableau des procédures.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 3) ; fichier généré/Mails_prets_a_envoyer.docx (mail 5)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-13",
+   "title": "Mener l’entretien avec le Cne Derradji (OTC)",
+   "description": "**Contexte** : le support d’entretien est déjà prêt ; voir aussi l’OTC.\n\n**Contenu / résultat** : mail n°6 de demande de RDV prêt (préciser l’objet : volet OTC / documents redemandés en cours d’année).\n\n**Reste à faire** : désigner le porteur, envoyer, mener l’entretien, compte rendu.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 4) ; fichier généré/Mails_prets_a_envoyer.docx (mail 6)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-15",
+   "title": "Solliciter la cellule qualité : processus métier et méthode d’audit",
+   "description": "**Contexte** : réunion du 09/10 ; appui méthodologique pour l’audit du processus d’intégration.\n\n**Contenu / résultat** : mail n°7 « Demande d’appui — Cellule qualité » prêt (liste ou cartographie des processus métier de la base, méthode d’analyse de processus / d’audit, échange de 30 min).\n\n**Reste à faire** : envoyer, mener l’échange, intégrer la méthode à l’état de l’art.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 6) ; fichier généré/Mails_prets_a_envoyer.docx (mail 7)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "lazaro"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Communication"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-16",
+   "title": "Finaliser les RDV BDE et SIM et rédiger leurs comptes rendus",
+   "description": "**Contexte** : rendez-vous prévus le 22/09 (entretien BDE pour Brancourt, entretien SIM pour Al Qarni et Niord selon la répartition des rôles).\n\n**Reste à faire** : caler ou finaliser les rendez-vous, rédiger les comptes rendus avec la fiche type, reporter dans le tableau des procédures.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 7) ; fichier généré/Fiche_de_cadrage_v2.docx (§6)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "brancourt",
+    "alquarni",
+    "niord"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-17",
+   "title": "Vérifier les procédures médicales avec la nouvelle infirmière",
+   "description": "**Contexte** : NoteRéunion : la nouvelle infirmière ne connaît peut-être pas toutes les procédures médicales de l’incorporation.\n\n**Reste à faire** : faire le point avec l’antenne médicale sur le circuit actuel des pièces médicales (11 pièces médicales passent aussi par la clé USB remise à l’équipe admin selon le tableau des redondances).\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 9)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Santé"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-24",
+   "title": "Compléter le flux de transmission avec le flux pratique et les irritants",
+   "description": "**Contexte** : priorité de la semaine : finaliser le flux « pratique » (vécu) avec les irritants intégrés, et pas seulement le flux théorique de la notice.\n\n**Reste à faire** : enrichir le flux de transmission V2 avec le vécu recueilli en entretien et y placer les irritants.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 11)\n\n---\n**Également évoqué dans les notes de l’équipe** (« Confirmer sur le terrain les hypothèses de la cartographie ») :\n\n**Reste à faire :** faire confirmer par le bureau incorporation ou le SIC la taille maximale d’un mail (10 Mo est une hypothèse), le destinataire de la clé USB, le flux télémédecine (absent de l’état de l’art) et le devenir des originaux médicaux.\n\n**Source :** `Informations et retex différents services/Flux de transmission EAE 2025 V2.html`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "wacogne",
+    "claeys"
+   ],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "Informations et retex différents services/Flux de transmission EAE 2025 V2.html"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-22",
+    "A-38",
+    "A-22"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-29",
+   "title": "Identifier les contacts : DPO, correspondant archives, RSSI, responsable scolarité",
+   "description": "**Contexte** : l’onglet « Contacts à identifier » du référentiel élèves est vide pour le DPO de l’EAE, le correspondant archives (réseau SHD), le RSSI / officier SSI et le responsable scolarité.\n\n**Reste à faire** : trouver nom et contact de chacun et les reporter dans le référentiel.\n\n**Source :** Droits - RGPD/Referentiel_eleves_cycle_de_vie.xlsx (Mode d’emploi)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "Droits - RGPD/Referentiel_eleves_cycle_de_vie.xlsx"
+   ],
+   "parent": "B-28",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-35",
+   "title": "Envoyer le premier contact au DPO",
+   "description": "**Contexte** : proposition : un premier contact court maintenant, la consultation complète après le benchmark. Au ministère des Armées, la fonction de DPD relève de la DAJ ; chaque responsable de traitement désigne un représentant (registre Sicl@de).\n\n**Contenu / résultat** : mail n°12 « Premier contact — DPO » prêt : présentation du projet (données personnelles, aucune donnée médicale), règles existantes (durées, outils autorisés, registre), demande d’un échange de 15 min.\n\n**Reste à faire** : identifier le DPO / représentant RGPD de l’école, envoyer, relancer à 15 jours (risque « réponse tardive du DPO »).\n\n**Source :** fichier généré/Mails_prets_a_envoyer.docx (mail 12) ; fichier généré/Questions_DPO_CND_securite.docx ; fichier généré/Fiche_de_cadrage_v2.docx (§9)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Communication",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Mails_prets_a_envoyer.docx",
+    "fichier généré/Questions_DPO_CND_securite.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": "B-34",
+   "depends_on": [
+    "B-29"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-51",
+   "title": "Identifier un administrateur DN existant et désigner l’administrateur titulaire",
+   "description": "**Contexte** : S1 du plan : demander conseil à un administrateur déjà actif dans la chaîne AAE (DRH-AAE, EETAAE), voire une co-administration temporaire ; désigner un cadre permanent (section administration élèves ou PEP intégration) comme administrateur titulaire, avec un élève co-administrateur, pour la pérennité.\n\n**Reste à faire** : contacter la DRH-AAE / Division Examens Sélections Concours ; obtenir la désignation par le commandement EAE.\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§3.3, §11)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-52",
+   "title": "Vérifier le compte ProConnect et l’accès des instructeurs à internet",
+   "description": "**Contexte** : NoteRéunion « Checker compte ProConnect ». ProConnect (successeur d’AgentConnect en 2024) connecte les administrateurs et instructeurs de DN via le portail d’identité du ministère ; les candidats utilisent e-mail ou FranceConnect.\n\n**Reste à faire** : vérifier qu’un agent peut se connecter à DN via ProConnect (compte intradef ?), et l’accès des postes instructeurs à internet et à la messagerie (avec le CND et l’officier SSI).\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 23) ; fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§3.2, §3.3) ; fichier généré/Questions_DPO_CND_securite.docx (question 21)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx",
+    "fichier généré/Questions_DPO_CND_securite.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-53",
+   "title": "JALON — Déposer la demande de compte administrateur Démarches Numériques",
+   "description": "**Contexte** : jalon S1 « Demande de compte déposée ». Le compte administrateur est réservé aux agents publics ; les autorisations sont délivrées par la DNUM du ministère. Risque bloquant : délai de validation non publié.\n\n**Reste à faire** : déposer la demande (adresse professionnelle, ministère des Armées, 3 démarches, environ 165 dossiers par an ; identité, RIB, attestation de sécurité sociale, aucune donnée de santé). Repli si le compte n’est pas ouvert fin S2 : démarche de test créée par un administrateur existant, ou décalage de deux semaines.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe. (agent désigné, avec l’aide de Wacogne)\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§3.3, §10, §11)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "wacogne"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Jalon",
+    "Démonstrateur"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [
+    "B-51",
+    "B-52"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-54",
+   "title": "Obtenir l’accord du commandement pour le test et un testeur par service",
+   "description": "**Contexte** : S1–S2 du plan : accord du commandement pour le test avec fausses données et mobilisation d’un testeur par service (section administration élèves, solde, SAP, secrétariat / scolarité, BRH, encadrement).\n\n**Reste à faire** : solliciter PEP intégration, CDT EFC1, DGFM ; réserver des créneaux dès la mini-restitution (risque « services peu disponibles »).\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§3.3, §9.1) ; fichier généré/Fiche_de_cadrage_v2.docx (§9)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur",
+    "Action"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-60",
+   "title": "Fixer la date de la mini-restitution et envoyer l’invitation",
+   "description": "**Contexte** : la mini-restitution est à programmer (date à fixer, S+3 dans le plan d’actions).\n\n**Contenu / résultat** : mail n°10 prêt, adressé au PEP PIEAE de la 26, au CDT Del’Arosa et à M. Agostini, copie M. Camachon : 30 min sur la cartographie et les irritants, le chiffrage (8 à 14 mails par candidat, pièces demandées jusqu’à 6 fois) et les premières pistes.\n\n**Reste à faire** : fixer date, heure et lieu ; envoyer ; répéter la présentation avec les notes de l’orateur et le pitch pour M. Agostini.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 25) ; fichier généré/Mails_prets_a_envoyer.docx (mail 10) ; fichier généré/Recapitulatif_travaux.docx",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Restitution & communication",
+   "labels": [
+    "Communication",
+    "Réunion"
+   ],
+   "start_date": "2026-11-02",
+   "target_date": "2026-11-06",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx",
+    "fichier généré/Recapitulatif_travaux.docx"
+   ],
+   "parent": "B-58",
+   "depends_on": [
+    "B-59"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-14",
+   "title": "Identifier puis rencontrer le responsable LTV",
+   "description": "**Contexte** : interlocuteur noté en réunion, sigle « LTV » à préciser.\n\n**Contenu / résultat** : mail n°9 « Recherche du responsable LTV » prêt (à adresser à un secrétariat / point de contact).\n\n**Reste à faire** : préciser le sigle, obtenir nom et coordonnées, organiser l’entretien.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 5) ; fichier généré/Mails_prets_a_envoyer.docx (mail 9)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Entretien",
+    "Communication"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-18",
+   "title": "Demander à l’OMSO DRHAAE le taux de rotation et la gestion des mutations",
+   "description": "**Contexte** : volet base (réunion du 09/10) : dimensionner la mise à jour des informations sur le personnel dans le temps.\n\n**Contenu / résultat** : mail n°8 prêt : ordre de grandeur du taux de rotation annuel sur la BA 701 et répercussion des mutations auprès des services ; aucune donnée nominative demandée.\n\n**Reste à faire** : désigner le porteur, envoyer, exploiter la réponse dans le cadrage du sondage.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 32) ; fichier généré/Mails_prets_a_envoyer.docx (mail 8)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Sondage",
+    "Communication"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Mails_prets_a_envoyer.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-22",
+   "title": "Remplir « Confirmé ? » et « Réponse obtenue » du tableau pendant les entretiens",
+   "description": "**Contexte** : cellules sur fond jaune du tableau des procédures, à compléter pendant ou après les entretiens (questions de la colonne K).\n\n**Reste à faire** : à chaque entretien, confirmer ou infirmer l’hypothèse de besoin et noter la réponse ; vérifier la lecture de la ligne « photo d’identité » de l’annexe I.\n\n**Source :** fichier généré/Tableau_procedures_redondances.xlsx ; fichier généré/Recapitulatif_travaux.docx (§5)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "wacogne",
+    "claeys"
+   ],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Entretien",
+    "Action"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Tableau_procedures_redondances.xlsx"
+   ],
+   "parent": "B-21",
+   "depends_on": [
+    "B-10",
+    "B-11",
+    "B-12"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-23",
+   "title": "Expliquer les redondances : pourquoi chaque pièce est redemandée",
+   "description": "**Contexte** : NoteRéunion : comprendre pourquoi les pièces sont redemandées (ex. pochettes demandées, stockées puis rendues une semaine après).\n\n**Reste à faire** : pour chaque pièce redondante, établir la raison réelle à partir des entretiens et compléter la colonne « Pourquoi ».\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 13, porteur à attribuer) ; fichier généré/Tableau_procedures_redondances.xlsx",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Action"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Tableau_procedures_redondances.xlsx"
+   ],
+   "parent": "B-21",
+   "depends_on": [
+    "B-22"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-25",
+   "title": "Intégrer le côté administration : création de compte comme seul prérequis à l’envoi",
+   "description": "**Contexte** : NoteRéunion : les informations pour créer le compte sont le seul prérequis nécessaire pour que l’élève puisse envoyer ses pièces.\n\n**Reste à faire** : intégrer ce point au flux et au tableau des procédures.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 14)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Action"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-32",
+   "title": "Statuer sur la classification et sur le stockage actuel sur les PC des admins",
+   "description": "**Contexte** : NoteRéunion : classification « à voir, pas sûr » ; irritant : données stockées sur les ordinateurs personnels des élèves administrateurs, sans durée de conservation.\n\n**Reste à faire** : valider le classement retenu (matrice V2) et proposer une règle immédiate pour le stockage sur PC personnels (question posée à l’officier de sécurité).\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 16) ; fichier généré/Questions_DPO_CND_securite.docx (questions 14 et 28)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Action"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Questions_DPO_CND_securite.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-31"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-42",
+   "title": "Recouper les informations RGPD de la fiche de cadrage et du PPT",
+   "description": "**Contexte** : NoteRéunion : voir les infos RGPD avec la fiche de cadrage et le PPT.\n\n**Reste à faire** : vérifier la cohérence des éléments RGPD entre la fiche de cadrage et le support de présentation.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 24)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Documentation"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-44",
+   "title": "Faire valider par l’antenne médicale le statut « dossier médical » hors plateforme",
+   "description": "**Contexte** : NoteRéunion : réfléchir à un espace médical séparé. Décision retenue dans la matrice V2 et le plan du démonstrateur : aucune pièce médicale dans la plateforme, seul un statut « non transmis / transmis / reçu » est visible ; recommandation n°1 de l’état de l’art.\n\n**Reste à faire** : faire valider le statut et le texte de rappel du circuit médical par l’antenne médicale (CMA) en S2 ; obtenir la liste transmise pour mettre à jour le statut.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 17) ; fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§3.3, §10)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "Santé",
+    "RGPD"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-56",
+   "title": "Paramétrer la démarche D1 (dossier socle) en mode test",
+   "description": "**Contexte** : semaine S2 (9–13 nov., 11/11 férié), jalon « D1 testable » ; l’onglet « Tester » de DN permet d’essayer sans publier.\n\n**Reste à faire** : paramétrer D1 en mode test ; préparer fausses pièces et personas ; entretiens de validation des champs avec les services.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§5, §10)",
+   "state": "backlog",
+   "priority": "high",
+   "assignees": [
+    "gali",
+    "flohic"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [
+    "B-53"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "B-67",
+   "title": "Réaliser la mesure « avant » du démonstrateur",
+   "description": "**Contexte** : semaine S2 du plan : P01, P02 et P06 passent par le circuit actuel (simulateur de mails) avec 2 services ; on mesure le temps de tri, le nombre de mails et le nombre de copies.\n\n**Reste à faire** : organiser la session et saisir l’onglet « Avant » du kit de mesure.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§9.2, §10) ; fichier généré/Kit_mesure/Kit_mesure_demonstrateur.xlsx",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [
+    "alquarni",
+    "niord"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur"
+   ],
+   "start_date": "2026-11-09",
+   "target_date": "2026-11-13",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx",
+    "fichier généré/Kit_mesure/Kit_mesure_demonstrateur.xlsx"
+   ],
+   "parent": "B-50",
+   "depends_on": [
+    "B-64",
+    "B-65"
+   ],
+   "estimate_days": 2,
+   "comments": []
+  },
+  {
+   "ref": "B-19",
+   "title": "Cadrer le sondage socio-démographique du volet base",
+   "description": "**Contexte** : demande du C2 relayée par M. Camachon (réunion du 09/10). La fiche V2 traite ce volet en extension, selon la réponse du C2.\n\n**Contenu / résultat** : thèmes notés : domicile, mobilité, temps de trajet, horaires (prime mobilité, places vélos…).\n\n**Reste à faire** : construire le questionnaire une fois les réponses du C2 et de l’OMSO obtenues ; passer la liste des données au crible RGPD.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe. (« Gali + Raph »)\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 31) ; fichier généré/Fiche_de_cadrage_v2.docx (§4)",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [
+    "gali",
+    "lazaro"
+   ],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Sondage"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-09",
+    "B-18"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-20",
+   "title": "Lister les informations utiles en situation de crise (volet base)",
+   "description": "**Contexte** : réunion du 09/10, volet base.\n\n**Reste à faire** : recenser les besoins : CATI, Tchap, moyens de communication, réservistes, base sans civils à 4 h.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 33, porteur à attribuer)",
+   "state": "backlog",
+   "priority": "low",
+   "assignees": [],
+   "module": "Recueil terrain (entretiens, sondages)",
+   "labels": [
+    "Sondage"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-09"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-37",
+   "title": "Rencontrer le DPO et lui présenter le plan du démonstrateur",
+   "description": "**Contexte** : consultation complète après le benchmark, à deux, avec les documents à apporter (tableau des procédures, classement de sensibilité, matrice V2, benchmark, plan du démonstrateur).\n\n**Reste à faire**\n- [ ] Poser les 17 questions DPO et noter les réponses\n- [ ] Présenter le plan du démonstrateur (fausses données) et préparer la mise en service réelle : responsable de traitement, registre, mentions d’information, AIPD ou non, durées\n- [ ] Faire valider les durées de conservation proposées (§7 du plan)\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Questions_DPO_CND_securite.docx (§2) ; fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§3.3, §7)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Réunion"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Questions_DPO_CND_securite.docx",
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-34",
+   "depends_on": [
+    "B-35"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-38",
+   "title": "Interroger le CND / service numérique sur la solution en ligne",
+   "description": "**Contexte** : conditionne la piste prioritaire (Démarches Numériques) ; risque « refus d’utiliser un service internet » (repli : Oodrive Work SecNumCloud).\n\n**Reste à faire** : poser les 8 questions : doctrine du ministère, instance DN propre aux Armées en 2026, SecNumCloud imposé par la loi SREN pour RIB/NIR, connexion des agents (ProConnect, intradef) et ouverture d’un compte administrateur, passerelle intradef / internet, M365 / SharePoint, Doctolib intradef, homologation RGS. Si la réponse exclut un service internet : basculer vers Oodrive Work et prévenir l’encadrant.\n\n**Source :** fichier généré/Questions_DPO_CND_securite.docx (§3) ; fichier généré/Fiche_de_cadrage_v2.docx (§9)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Réunion"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Questions_DPO_CND_securite.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": "B-34",
+   "depends_on": [
+    "B-36"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-39",
+   "title": "Interroger l’officier de sécurité / RSSI et demander son avis SSI",
+   "description": "**Contexte** : risque majeur relevé par l’audit (données sur PC personnels, clés USB). Le plan du démonstrateur prévoit de demander l’avis SSI (homologation complémentaire, AIPD) en S1–S3.\n\n**Reste à faire** : poser les 6 questions (niveau de protection IGI 1300, sort des clés USB après la station blanche, PC personnels et alternative pour la PI 2027, procédure en cas de perte / fuite, exigences minimales, passation entre promotions) et recueillir l’avis sur le démonstrateur.\n\n**Source :** fichier généré/Questions_DPO_CND_securite.docx (§4) ; fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§3.3)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "flohic",
+    "gali"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Réunion"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Questions_DPO_CND_securite.docx",
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-34",
+   "depends_on": [
+    "B-29"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-43",
+   "title": "Passer la liste des données du sondage au crible RGPD",
+   "description": "**Contexte** : volet base (réunion du 09/10) : minimisation et données sensibles.\n\n**Reste à faire** : une fois la liste du sondage cadrée, vérifier chaque donnée (finalité, anonymat, données sensibles) et lancer tôt les validations.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 34)",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Sondage"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-19"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-46",
+   "title": "Relire l’état de l’art et lever les points « à confirmer »",
+   "description": "**Contexte** : reste à faire indiqué dans le récapitulatif des travaux.\n\n**Reste à faire**\n- [ ] Relecture et structuration de la méthode pour la rendre intelligible (réunion du 09/10)\n- [ ] Vérifier les points « à confirmer »\n- [ ] Valider la partie D (méthodes de cartographie de l’information, action 20)\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Etat_de_l_art_recueil_donnees.docx ; fichier généré/Recapitulatif_travaux.docx",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "lazaro"
+   ],
+   "module": "État de l’art & benchmark",
+   "labels": [
+    "Documentation",
+    "Action"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Etat_de_l_art_recueil_donnees.docx",
+    "fichier généré/Recapitulatif_travaux.docx"
+   ],
+   "parent": "B-45",
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-49",
+   "title": "Étudier le croisement intradef / internet et Doctolib intradef avec le CND",
+   "description": "**Contexte** : NoteRéunion : possibilité de croiser des données entre intradef et internet (voir avec le CND) ; Doctolib intradef comme canal d’alimentation possible.\n\n**Reste à faire** : étudier les deux pistes (questions 22 et 24 du dossier CND) ; Doctolib intradef reste hors périmètre des pièces administratives.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 22) ; fichier généré/Questions_DPO_CND_securite.docx\n\n---\n**Également évoqué dans les notes de l’équipe** (« Étudier le croisement de données intradef / internet avec le CND ») :\n\n**Reste à faire :** voir avec le CND la possibilité de croiser des données entre intradef et internet ; pistes techniques notées en réunion : Doctolib intradef comme canal d’alimentation, compte ProConnect à vérifier.\n\n**Source :** `NoteRéunion.docx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "gali"
+   ],
+   "module": "État de l’art & benchmark",
+   "labels": [
+    "Benchmark",
+    "Action"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Questions_DPO_CND_securite.docx",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-36"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-57",
+   "title": "Paramétrer D2 et D3, annotations et exports ; test interne de bout en bout",
+   "description": "**Contexte** : semaine S3 (16–20 nov.), revue go / no-go du test. Points à tester : lien entre dossiers (« Lien vers un autre dossier »), sélection de colonnes dans un modèle d’export (non documentée), expiration des dossiers terminés.\n\n**Reste à faire** : paramétrer D2 (solde) et D3 (double nationalité), annotations privées AP1 à AP8, étiquettes, modèles d’export ; test interne ; mentions RGPD.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§4, §6, §10, §11)",
+   "state": "backlog",
+   "priority": "high",
+   "assignees": [
+    "gali",
+    "flohic"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur",
+    "Jalon"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [
+    "B-56"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "B-68",
+   "title": "Recruter 5 à 10 volontaires et un testeur par service",
+   "description": "**Contexte** : semaine S3 du plan ; volontaires de 2e année jouant des candidats fictifs ; un testeur par service, de préférence un vrai agent.\n\n**Reste à faire** : recruter les volontaires et les testeurs, leur remettre fiches de profil et guides, rappeler la consigne (jamais de vraie pièce).\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§9.1, §10)",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [
+    "loubatier",
+    "claeys"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur",
+    "Communication"
+   ],
+   "start_date": "2026-11-16",
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [
+    "B-54"
+   ],
+   "estimate_days": 3,
+   "comments": []
+  },
+  {
+   "ref": "B-41",
+   "title": "JALON — Obtenir les avis du DPO et de la sécurité",
+   "description": "**Contexte** : jalon de décision de la feuille de route (« Avis DPO et sécurité ») et dépendance critique de la fiche V2 : avis du DPO et du CND avant tout test.\n\n**Reste à faire** : obtenir des positions écrites (critère de réussite : position écrite du DPO, du CND et de l’officier de sécurité).\n\n**Source :** fichier généré/Mini_restitution_point_etape.pptx (diapo 12) ; fichier généré/Fiche_de_cadrage_v2.docx (§3, §7)\n\n---\n**Également évoqué dans les notes de l’équipe** (« Identifier le DPO et lui soumettre les questions de conformité ») :\n\n**Reste à faire :** identifier le DPO/DPD (« le connaître et le consulter », 22/09) et faire trancher : régime applicable (RGPD ou régime défense), base légale art. 6 et dérogation art. 9, nécessité d’une AIPD, statut « pièces médicales reçues / non reçues », qualification des allergies et tests physiques, validation du classement de sensibilité des pièces. La fiche de cadrage prévoit une **validation écrite du DPO** sur la solution retenue.\nUn « Questions_DPO_CND_securite » existe peut-être dans « fichier généré » (lot B) : à rapprocher.\n\n**Source :** `Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx` ; `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx` ; `Informations et retex différents services/Classement_sensibilite_pieces_integration.xlsx` ; `Fiche de cadrage.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "Jalon",
+    "RGPD"
+   ],
+   "start_date": null,
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Mini_restitution_point_etape.pptx",
+    "fichier généré/Fiche_de_cadrage_v2.docx",
+    "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx",
+    "Informations et retex différents services/Classement_sensibilite_pieces_integration.xlsx",
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-37",
+    "B-38",
+    "B-39",
+    "A-42",
+    "A-46"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-55",
+   "title": "JALON — Mini-restitution : obtenir les arbitrages du commandement",
+   "description": "**Contexte** : jalon « Aujourd’hui : valider la piste » de la feuille de route.\n\n**Reste à faire** — obtenir les 4 arbitrages demandés (diapo 13) :\n- [ ] Valider la piste : Démarches Numériques pour un démonstrateur, médical hors plateforme, refonte de la notice\n- [ ] Désigner un interlocuteur DPO et l’officier de sécurité de l’école\n- [ ] Autoriser l’ouverture d’un compte administrateur DN via ProConnect\n- [ ] Autoriser un test de 4 à 6 semaines avec des volontaires et de fausses pièces\n- [ ] Recueillir le regard de M. Agostini sur le process cible et le choix des outils\n\n**Source :** fichier généré/Mini_restitution_point_etape.pptx (diapos 12–13)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Restitution & communication",
+   "labels": [
+    "Jalon",
+    "Réunion"
+   ],
+   "start_date": null,
+   "target_date": "2026-11-20",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Mini_restitution_point_etape.pptx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-58"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-62",
+   "title": "Recommander la refonte de la notice d’intégration (volet administration, incohérences)",
+   "description": "**Contexte** : NoteRéunion (29/09) : rajouter le côté administration lors de la création de la note d’intégration. Livrable prévu « Notice d’intégration refondue » : une liste unique de pièces, un seul canal, sans pièce médicale côté administration, sans les pièces déjà détenues par les armées ni les incohérences relevées.\n\n**Reste à faire** : rédiger la recommandation et le projet de notice refondue pour le commandement.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_actions_PI-EAE.docx (action 30) ; fichier généré/Fiche_de_cadrage_v2.docx (§4) ; fichier généré/Recapitulatif_travaux.docx (§3)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "brancourt"
+   ],
+   "module": "Restitution & communication",
+   "labels": [
+    "Livrable",
+    "Documentation"
+   ],
+   "start_date": "2026-11-23",
+   "target_date": "2026-11-27",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_actions_PI-EAE.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx",
+    "fichier généré/Recapitulatif_travaux.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-21"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-69",
+   "title": "JALON — Mener la campagne de test du démonstrateur",
+   "description": "**Contexte** : semaine S4 (23–27 nov.), jalon « Tous les dossiers déposés ».\n\n**Reste à faire** : J1 briefing (30 min) et envoi du lien ; J1–J3 dépôts chronométrés ; J3–J5 instruction (AP1 à AP8), demandes de correction et test du cloisonnement ; J6 relance groupée ; J8 acceptation, exports, tableau de bord.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe. (Alqarni, Niord, Gali, testeurs des services)\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§9.2, §10)",
+   "state": "backlog",
+   "priority": "high",
+   "assignees": [
+    "alquarni",
+    "niord",
+    "gali"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Jalon",
+    "Démonstrateur"
+   ],
+   "start_date": "2026-11-23",
+   "target_date": "2026-11-27",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-50",
+   "depends_on": [
+    "B-57",
+    "B-66",
+    "B-68",
+    "B-41",
+    "B-55"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "B-70",
+   "title": "Calculer les 4 indicateurs et dépouiller questionnaires et débriefs",
+   "description": "**Contexte** : semaine S5 (30 nov.–4 déc.), jalon « Indicateurs calculés ».\n\n**Reste à faire** : acceptation et exports ; tableau de bord ; calcul des 4 indicateurs avant / après ; questionnaire SUS (cible ≥ 70) ; débriefs de 45 min (candidats, services) ; contrôle de la suppression du titre d’identité ; vérifier les critères de réussite.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§9.3, §10) ; fichier généré/Kit_mesure/Kit_mesure_demonstrateur.xlsx",
+   "state": "backlog",
+   "priority": "high",
+   "assignees": [
+    "niord",
+    "alquarni"
+   ],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Jalon",
+    "Démonstrateur"
+   ],
+   "start_date": "2026-11-30",
+   "target_date": "2026-12-04",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx",
+    "fichier généré/Kit_mesure/Kit_mesure_demonstrateur.xlsx"
+   ],
+   "parent": "B-50",
+   "depends_on": [
+    "B-69",
+    "B-67"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "B-71",
+   "title": "Rédiger le rapport du démonstrateur et le dossier de mise en service PI 2027",
+   "description": "**Contexte** : semaine S6 (7–11 déc.), jalon « Décision du commandement ».\n\n**Reste à faire** : rapport du démonstrateur ; restitution au commandement et à M. Camachon ; dossier de mise en service pour la PI 2027 ; suppression des données de test.\n\nPorteur proposé dans le plan d’actions d’après les rôles notés le 22/09 — à valider en équipe.\n\n**Source :** fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§10)",
+   "state": "backlog",
+   "priority": "high",
+   "assignees": [
+    "brancourt",
+    "claeys"
+   ],
+   "module": "Restitution & communication",
+   "labels": [
+    "Livrable",
+    "Jalon"
+   ],
+   "start_date": "2026-12-07",
+   "target_date": "2026-12-11",
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-70"
+   ],
+   "estimate_days": 5,
+   "comments": []
+  },
+  {
+   "ref": "A-10",
+   "title": "Préparer le rendez-vous avec le C2 sur le sondage",
+   "description": "**Contexte :** M. Camachon a écrit au C2 pour clarifier sa demande de sondage ; la note de cadrage du sondage est « à définir après le RDV avec le C2 ».\n\n**Reste à faire :** proposer une batterie de questions au C2 ; faire préciser la décision que le sondage doit éclairer, le public cible et le calendrier (phase 0) ; trancher anonyme ou nominatif et lister les seules données nécessaires (phase 2) — conditions posées par la feuille de route.\n\n**Source :** `NoteRéunion.docx` ; `Documentation et archives/EtapesProjetBase.docx` ; `Documentation et archives/feuille_de_route_sondage.pptx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Sondage",
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "NoteRéunion.docx",
+    "Documentation et archives/EtapesProjetBase.docx",
+    "Documentation et archives/feuille_de_route_sondage.pptx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-11",
+   "title": "Arbitrer les points ouverts de la finalité",
+   "description": "**Contexte :** §5 « Points à trancher » de la finalité v0.1.\n\n**Reste à faire :**\n- choisir le processus du **volet base** de la Partie 1 (accueil d’un personnel muté sur la BA 701, ou mise à jour des coordonnées et de la personne à prévenir) ;\n- décider si le **recrutement interne** entre dès la Partie 1 ou en Partie 2 ;\n- cadrer l’extension Partie 2 évoquée par les services (suivi des qualifications et de la POEIC).\n(Données médicales et base juridique : voir les tickets RGPD.)\n\n**Source :** `Informations et retex différents services/Finalite_projet_v0.1.docx` ; `Informations et retex différents services/Presentation et sondage services.docx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Finalite_projet_v0.1.docx",
+    "Informations et retex différents services/Presentation et sondage services.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-03"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-34",
+   "title": "Établir une table de référence unique des noms de fichiers",
+   "description": "**Reste à faire :** une seule table au format `NOM_Prenom_CodeDocument`, sans accent ni espace, un code par pièce, reprise à l’identique dans chaque tableau (rejoint la note 2023 sur le nommage). Responsable : « responsable technique » (à désigner).\n\n**Source :** `Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-33"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-35",
+   "title": "Construire le tableau « pièce → destinataire » et passer en boîtes fonctionnelles",
+   "description": "**Reste à faire :** un tableau unique indiquant pour chaque pièce son destinataire, et remplacer les 4 adresses nominatives (fausses à chaque mutation) par des boîtes fonctionnelles. Responsables notés : « Vinc / WAC ».\n\n**Source :** `Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "wacogne",
+    "flohic"
+   ],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-33"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-36",
+   "title": "Proposer les corrections de la notice d’intégration",
+   "description": "**Reste à faire :** corriger les renvois d’annexes, les libellés (« Cette partie »), les années non mises à jour et le nom de l’armée (« Armée de l’Air et de l’Espace ») ; recommander d’associer l’administration lors de la rédaction de la prochaine note d’intégration. Responsable à attribuer.\n\n**Source :** `Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx` ; `NoteRéunion.docx`",
+   "state": "todo",
+   "priority": "low",
+   "assignees": [],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx",
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-33"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-37",
+   "title": "Faire relire les constats sur la notice par le bureau incorporation",
+   "description": "**Reste à faire :** soumettre l’ensemble des constats (sections 1 à 5) au bureau incorporation pour validation. Responsable à attribuer.\n\n**Source :** `Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Cartographie des flux & procédures",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-33"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-43",
+   "title": "Faire valider le circuit des données de santé et l’exigence vaccinale",
+   "description": "**Reste à faire :** avec le DPD et le service de santé : circuit réel des pièces médicales, sort du compte rendu CEMPN envoyé à l’administration, durées de conservation, canal sécurisé, exigence des « 3 doses » de vaccin COVID. Responsable noté : « Loub ».\n\n**Source :** `Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx` ; `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "loubatier"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Santé"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx",
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-42"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-45",
+   "title": "Réviser les questions du sondage pour exclure toute donnée de santé",
+   "description": "**Reste à faire :** réduire les questions ouvertes (risque d’informations de santé spontanées), traiter allergies, régimes, handicaps et tests physiques comme des données de santé tant que le DPO n’a pas tranché, relier chaque question à un usage (matrice question / usage). Responsables notés : Loub et Lazaro.\n\n**Source :** `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "loubatier",
+    "lazaro"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Sondage"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-42"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-48",
+   "title": "Définir les rôles de données et la gestion de l’obsolescence",
+   "description": "**Reste à faire :** cadre légal, rôles data owner / custodian / steward, cartographie des données et règles d’obsolescence (mutation, départ, purge, matrice de fraîcheur du guide §7). Responsables notés : « Vinc / WAC ».\n\n**Source :** `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx` ; `Informations et retex différents services/Méthodologie_Collecte_données.docx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "wacogne",
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx",
+    "Informations et retex différents services/Méthodologie_Collecte_données.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-49",
+   "title": "Trancher une solution d’hébergement provisoire des données déjà collectées",
+   "description": "**Contexte :** les mails et pièces des élèves (dont des données médicales) sont aujourd’hui stockés sur les **ordinateurs personnels** des élèves administrateurs de la PI-EAE : surface d’attaque multipliée, aucune maîtrise de la donnée, non-conformité RGPD, aucune garantie d’effacement à la sortie de promotion.\n\n**Reste à faire :** obtenir de l’école une solution transitoire validée (prochaine étape n°5 du livrable 1).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "todo",
+   "priority": "urgent",
+   "assignees": [],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-55"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-53",
+   "title": "Traduire les irritants en exigences fonctionnelles (cahier des charges)",
+   "description": "**Contexte :** « transformer cette liste en cahier des charges validé » après les entretiens (livrable 1).\n\n**Exigences déjà identifiées :** dépôt unique par l’élève consultable par les services habilités ; un seul canal faisant foi ; espaces élèves et cadres/services ; tableau de bord de suivi des envois ; mails de rappel automatiques ; extraction en dossier ou en tableau ; hébergement maîtrisé avec droits et traçabilité ; **deux zones étanches** administrative / médicale ; année de promotion et dates clés saisies comme paramètres.\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx` ; `Informations et retex différents services/Presentation et sondage services.docx` ; `Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx` ; `Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur",
+    "Livrable"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx",
+    "Informations et retex différents services/Presentation et sondage services.docx",
+    "Informations et retex différents services/Données médicales cadre réglementaire et impact sur le sondage.docx",
+    "Informations et retex différents services/Incohérences de la notice d'intégration EAE 2025.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-18"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-54",
+   "title": "Choisir entre logiciel étagère et développement interne",
+   "description": "**Contexte :** étape 3 de la démarche (mois 2-3) ; la fiche de cadrage privilégie l’étagère, choix « à confirmer par la comparaison et l’avis du DPO ».\n\n**Reste à faire :** comparer au moins deux pistes sur la conformité RGPD et la sécurité, le coût, la maintenance, la facilité d’usage et l’accès des élèves non incorporés, puis décider (approbation du commandement).\n\n**Source :** `Fiche de cadrage.docx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur",
+    "Jalon"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-47",
+    "B-41",
+    "A-53"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-55",
+   "title": "Trancher le périmètre internet ou intradef",
+   "description": "**Contexte :** le projet est cadré « internet uniquement, pas d’intradef », mais le brigadier juge l’accès internet **non acceptable** (données trop sensibles), alors que le service médical l’accepte.\n\n**Reste à faire :** arbitrer le périmètre technique avec l’encadrant et la DSI, au vu de l’ensemble des entretiens.\n\n**Source :** `Informations et retex différents services/Questions brigadier/ProjetPluriQuestionBrigadierCapitaineDerradji.docx` ; `Informations et retex différents services/Presentation et sondage SM .docx` ; `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Informations et retex différents services/Questions brigadier/ProjetPluriQuestionBrigadierCapitaineDerradji.docx",
+    "Informations et retex différents services/Presentation et sondage SM .docx",
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-20"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-56",
+   "title": "Évaluer la solution (prise en main par service et gain mesuré)",
+   "description": "**Reste à faire (critères de la fiche de cadrage) :** test de prise en main par une personne de chaque service sur un scénario réel (déposer, retrouver, extraire un document) avec observation du temps et des difficultés ; comparaison avec l’existant sur les 4 indicateurs (redemandes, temps de traitement, canaux, délais).\nUn « Kit_mesure » existe peut-être dans « fichier généré » (lot B) : à rapprocher.\n\n**Source :** `Fiche de cadrage.docx` ; `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Démonstrateur & outils",
+   "labels": [
+    "Démonstrateur"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Fiche de cadrage.docx",
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-54"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-58",
+   "title": "Faire valider la problématique, les indicateurs et le périmètre de faisabilité",
+   "description": "**Reste à faire (prochaines étapes 1 à 3 du livrable 1) :** confirmer que la cartographie et la grille d’audit sont la bonne base, valider la problématique et les 4 indicateurs avant/après, confirmer ce que l’équipe porte elle-même et ce qui demande un appui (stockage, RGPD, exploitation).\n\n**Source :** `Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx`",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [],
+   "module": "Restitution & communication",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Avancement projet/Livrable1_Problematique_Methode_Etat_des_lieux.pptx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-57"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-60",
+   "title": "Identifier et contacter les interlocuteurs clés",
+   "description": "**Reste à faire :** DGFM ; PEP intégration et brigadier référent ; CDT EFC1 ; secrétariat EFC ; chef pour le sujet LTV ; voir l’OTC (via Derradji) ; tenir M. Camachon informé par mail des échanges.\n\n**Source :** `NoteRéunion.docx`",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [],
+   "module": "Restitution & communication",
+   "labels": [
+    "Communication",
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "NoteRéunion.docx"
+   ],
+   "parent": null,
+   "depends_on": [],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "A-61",
+   "title": "Présenter la recommandation finale au commandement",
+   "description": "**Contexte :** objectif « fournir un premier livrable de l’outil » avec présentation au commandement et aux cadres et décision formalisée ; à l’issue du projet, remise d’une recommandation appuyée par un benchmark (le projet servira d’exemple pour la demande de M. Camachon à l’échelle de la base aérienne).\n\n**Reste à faire :** préparer la recommandation et la présentation finale.\n\n**Source :** `Fiche de cadrage.docx`",
+   "state": "backlog",
+   "priority": "high",
+   "assignees": [],
+   "module": "Restitution & communication",
+   "labels": [
+    "Jalon",
+    "Communication"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Fiche de cadrage.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "A-54",
+    "A-56"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-07",
+   "title": "Faire trancher les arbitrages listés dans la fiche de cadrage",
+   "description": "**Contexte** : la fiche V2 (§10) liste les décisions encore nécessaires, avec la proposition de l’équipe.\n\n**Reste à faire**\n- [ ] Solution du démonstrateur : Démarches Numériques (encadrant, commandement — à la mini-restitution)\n- [ ] Accès de l’équipe admin 2A aux pièces sensibles : suivi de complétude seulement (DPO, commandement — décembre) → voir B-36\n- [ ] Copie intégrale ou extrait d’acte de naissance : extrait sauf besoin justifié (SAP, DPO — décembre)\n- [ ] Maintien de la pochette mutuelle : suppression, adhésion Unéo automatique depuis 2025 (BRH — décembre)\n- [ ] Pièces CEMPN transmises directement au service médical (antenne médicale — décembre)\n- [ ] Place du volet « base » : extension après le démonstrateur (M. Camachon, C2 — novembre)\n\n**Source :** fichier généré/Fiche_de_cadrage_v2.docx (§10)",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [
+    "claeys"
+   ],
+   "module": "Cadrage & organisation",
+   "labels": [
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": null,
+   "depends_on": [
+    "B-04"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-30",
+   "title": "Remplacer les lignes d’exemple du référentiel et faire valider les durées",
+   "description": "**Contexte** : les 9 lignes de l’inventaire sont des exemples « EX- » à valider, corriger ou supprimer ; statut à passer à « À valider DPO » / « À valider archives » puis « Validé ».\n\n**Reste à faire** : compléter l’inventaire avec les réponses des entretiens (guide de collecte), puis faire valider par le DPO et le correspondant archives.\n\n**Source :** Droits - RGPD/Referentiel_eleves_cycle_de_vie.xlsx",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "Droits - RGPD/Referentiel_eleves_cycle_de_vie.xlsx"
+   ],
+   "parent": "B-28",
+   "depends_on": [
+    "B-29",
+    "B-41"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-33",
+   "title": "Faire arbitrer l’accès de l’équipe admin 2A au contenu des pièces sensibles",
+   "description": "**Contexte** : proposition de la matrice V2 : les élèves administrateurs de 2e année suivent la complétude des dossiers sans lire les pièces sensibles (niveau 3 et plus).\n\n**Reste à faire** : soumettre la proposition au DPO et au commandement (échéance indiquée : décembre dans la fiche V2) ; reporter la décision dans la matrice.\n\n**Source :** fichier généré/Matrice_droits_V2_classes_information.xlsx ; fichier généré/Questions_DPO_CND_securite.docx (question 16) ; fichier généré/Fiche_de_cadrage_v2.docx (§10)",
+   "state": "todo",
+   "priority": "high",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Matrice_droits_V2_classes_information.xlsx",
+    "fichier généré/Questions_DPO_CND_securite.docx",
+    "fichier généré/Fiche_de_cadrage_v2.docx"
+   ],
+   "parent": "B-31",
+   "depends_on": [
+    "B-41"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-40",
+   "title": "Reporter les réponses DPO / CND / sécurité dans les livrables",
+   "description": "**Contexte** : suite à donner du dossier de questions.\n\n**Reste à faire**\n- [ ] Reporter chaque réponse dans le référentiel élèves (Inventaire, Matrice accès) et la matrice des droits V2\n- [ ] Mettre à jour les hypothèses de la fiche de cadrage (§5) et le plan du démonstrateur\n\n**Source :** fichier généré/Questions_DPO_CND_securite.docx (§5)",
+   "state": "backlog",
+   "priority": "medium",
+   "assignees": [
+    "flohic"
+   ],
+   "module": "RGPD, droits & conformité",
+   "labels": [
+    "RGPD",
+    "Documentation"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Questions_DPO_CND_securite.docx"
+   ],
+   "parent": "B-34",
+   "depends_on": [
+    "B-37",
+    "B-38",
+    "B-39"
+   ],
+   "estimate_days": null,
+   "comments": []
+  },
+  {
+   "ref": "B-48",
+   "title": "Faire confirmer les points « non trouvé » du benchmark",
+   "description": "**Contexte** : points non confirmés : qualification SecNumCloud de Démarches Numériques, existence d’une instance propre au ministère des Armées en 2026, fonctionnement du lien entre dossiers, sélection de colonnes dans les exports.\n\n**Reste à faire** : obtenir les réponses (CND, support DN, attestation de qualification à la DINUM) et mettre à jour le benchmark.\n\n**Source :** fichier généré/Benchmark_solutions_cles_en_main.docx ; fichier généré/Recapitulatif_travaux.docx (§5) ; fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx (§11)",
+   "state": "todo",
+   "priority": "medium",
+   "assignees": [
+    "gali"
+   ],
+   "module": "État de l’art & benchmark",
+   "labels": [
+    "Benchmark",
+    "Action"
+   ],
+   "start_date": null,
+   "target_date": null,
+   "completed_date": null,
+   "documents": [
+    "fichier généré/Benchmark_solutions_cles_en_main.docx",
+    "fichier généré/Recapitulatif_travaux.docx",
+    "fichier généré/Plan_demonstrateur_Demarches_Numeriques.docx"
+   ],
+   "parent": "B-47",
+   "depends_on": [
+    "B-38"
+   ],
+   "estimate_days": null,
+   "comments": []
+  }
+ ],
+ "pages": [
+  {
+   "title": "Réunion du 22/09/2026 — lancement et répartition des rôles",
+   "emoji": "🗓️",
+   "source": "Avancement projet/22092026/AVANCEMENT du Projet pluridisciplinaire.docx",
+   "summary_markdown": "## Avancement au 22/09/2026\n\n| Membre | Rôle | Avancement |\n|---|---|---|\n| Lazaro | État de l’art | Consultation des précédents responsables admin PIEAE ; document Word (ligne à suivre, documents remis, ce qui n’allait pas) |\n| Loubatier | Communication | Création du questionnaire ; RDV avec l’ADC Buzet du CMA |\n| Flohic | Équipe technique / test | Liste SSI / matrice des droits (à compléter) |\n| Wacogne | Équipe planification | Modèle d’exposition, proposition d’interface du futur site |\n| Gali | Équipe technique / test | Travail sur l’interface, début du codage |\n| Alquarni et Niord | Testeurs | Prise de RDV avec la SIM |\n| Claeys | Planification / chef de projet | Planification des phases et prochaines échéances |\n| Brancourt | Responsable rédaction | Prise de RDV avec le bureau BDE |\n\n## Informations importantes\n- Pierre Agostini : personne qui veille aux processus — prendre contact avec lui.\n- Connaître le DPO (délégué à la protection des données) et le consulter.\n- Entretiens directifs et semi-directifs.\n"
+  },
+  {
+   "title": "Réunion du 29/09/2026 — point d’avancement",
+   "emoji": "🗓️",
+   "source": "Avancement projet/29092026/29092026.docx",
+   "summary_markdown": "## Avancée au 29/09/2026\n- **État de l’art :** réalisation d’une mind map.\n- **Loubatier :** entretien avec le service médical (besoins pour l’incorporation, documents demandés et sensibles, fonctionnement). RETEX de l’incorporation à envoyer par le CMA. Compte rendu effectué.\n- **Wacogne :** définition de la problématique.\n- **Flohic :** référentiel sur la gestion des données et le RGPD, questionnaire RGPD, mise à jour de la matrice des droits Excel.\n\n## Incohérences relevées dans la notice\n- L’annexe I exige « 3 doses » de vaccin COVID alors que la partie II prévoit de commencer la vaccination à l’intégration.\n- Le dossier médical CEMPN/CEMI doit être ramené en papier, mais l’annexe I lui donne un nom de fichier pour la clé USB (même cas pour le billet de train original).\n- Le § 1.2 de la partie I indique une seule adresse d’envoi ; la partie II en indique cinq, avec 6 pièces jointes maximum par mail.\n- La fiche de renseignements doit être scellée « CONFIDENTIEL PERSONNEL » en papier, mais elle est aussi envoyée par mail à cinq destinataires.\n"
+  },
+  {
+   "title": "Réunion de suivi avec l’encadrant (début octobre 2026)",
+   "emoji": "🗒️",
+   "source": "NoteRéunion.docx",
+   "summary_markdown": "_Date estimée : 06/10/2026 (date de création de la note)._\n\n## Retours sur les travaux présentés\n- Fiche de questions par interlocuteur ; réfléchir à un espace pour le médical ; la classification reste à revoir.\n- Irritant : redondance des données, classification inadaptée (stockage sur le PC admin).\n- Attention aux procédures : la nouvelle infirmière ne les connaît peut-être pas toutes.\n- Seules les informations de création du compte sont nécessaires pour pouvoir envoyer.\n\n## Cartographie\n- Refaire une matrice de l’existant : flux de transmission des données, avec les irritants.\n- Décortiquer tous les processus, refaire le tableau des procédures administratives sur toute la chaîne.\n- Pourquoi des redondances ? (pochette demandée, stockée puis rendue une semaine après). Avoir les flux pratiques, pas seulement théoriques.\n\n## État de l’art\n- État des connaissances, exhaustif : comment fonctionne le recueil de données dans d’autres organismes (réglementation, ANSSI, nucléaire, médical, EDF…), s’auto-évaluer et en tirer des recommandations.\n- Voir les solutions clés en main : Clustdoc, DocuWare, SharePoint + Power Platform, Netlify, SaaS, outils de pilotage.\n\n## Interlocuteurs et actions\n- DPO : à voir au moment des propositions.\n- DGFM ; PEP intégration + brigadier référent ; CDT EFC1 ; secrétariat EFC ; OTC (via Derradji) ; chef pour le sujet LTV.\n- CND : possibilité de croiser des données intradef / internet. Doctolib intradef comme canal possible. Vérifier le compte ProConnect.\n- Faire un point intermédiaire / mini restitution (trouver le PEP PIEAE de la promotion 2026, CDT Del’Arosa).\n- Proposer une batterie de questions pour le C2 (M. Camachon lui a écrit pour clarifier la demande de sondage) ; déterminer les grandes classes d’information.\n- CMA en attente du RETEX : ne pas les lâcher.\n- Entretiens : montrer qu’on a des arguments, y aller à plusieurs, la grille de questions existe déjà.\n- Ajouter le volet administration lors de la création de la note d’intégration.\n- Échanges de mails pour tenir M. Camachon informé.\n"
+  },
+  {
+   "title": "Réunion du 09/10/2026 — point d’avancement",
+   "emoji": "🗓️",
+   "source": "Avancement projet/09102026/09102026.docx",
+   "summary_markdown": "## Sondage « cartographie socio-démographique »\n- Connaître le lieu de vie du personnel, sa mobilité, ses horaires (prime mobilité, places vélo supplémentaires…), le temps de trajet moyen, le taux de rotation annuel.\n- Voir l’OMSO / DRHAAE pour les mutations et les mises à jour.\n- Informations utiles en cas de PRODEF ou de crise : arrêts obligatoires sur le trajet, vie maritale, vie sur base et hors base, CATI à jour, Tchap installé, moyens de communication, présence de réservistes la nuit (RGPD à vérifier).\n\n## Méthode et appuis\n- Solliciter la cellule qualité : elle possède la liste des processus métier et sait mener un audit.\n- État de l’art : définir le cadre de travail et mettre l’ensemble en cohérence ; chercher des méthodes de cartographie de l’information (avec Raph et Gali).\n- Préparer un pitch pour Pierre Agostini (venue probable le **13/10 à 16 h**) : lui présenter le rendu et recueillir ses souhaits.\n- Lazaro : structurer la méthode et la rendre intelligible.\n\n## Échéances\n- Lundi 26 octobre : séminaire d’information FABLAB (à transmettre).\n- **Deadline du 26/10 :** finir la partie recueil d’informations, produire le livrable de définition du problème (irritant) et l’audit.\n"
+  },
+  {
+   "title": "Récapitulatif des travaux (29/10/2026)",
+   "emoji": "📋",
+   "source": "fichier généré/Recapitulatif_travaux.docx",
+   "summary_markdown": "Synthèse des livrables produits le 29/10/2026 (dossier « fichier généré »).\n\n## Chiffres à retenir\n| Indicateur | Valeur |\n|---|---|\n| Pièces recensées dans la notice | 37 |\n| Exemplaires demandés (tous canaux, tous profils) | 105, dont 68 évitables |\n| Pièce la plus redondante | CNI : 7 exemplaires |\n| Canaux de transmission | 7 |\n| Mails par candidat avant l’arrivée | 8 à 14 |\n| Pièces médicales via la clé USB remise à l’équipe admin | 11 |\n| Critères de bonnes pratiques en écart fort | 10 sur 12 |\n| Formulaire cible | 56 champs / 22 pièces |\n\n## Ce qui ressort\n- **Solution** : Démarches Numériques en piste prioritaire ; Oodrive Work (SecNumCloud) en piste 2 ; Clustdoc en plan B ; Microsoft 365 et Netlify écartés.\n- **Architecture** : trois démarches liées (socle, solde, double nationalité) pour cloisonner ; export restreint pour l’encadrement.\n- **Médical** : aucune pièce médicale dans la plateforme, seulement un statut.\n- **Notice** : à refondre (liste unique, sans pièces déjà détenues, sans incohérences).\n- **Équipe admin 2A** : suivi de complétude sans ouvrir les pièces sensibles (à arbitrer).\n- **Méthode** : le gain vient d’abord de la simplification des pièces et de la gouvernance, avant l’outil.\n\n## Ordre d’utilisation conseillé\n1. Envoyer les mails (relance CMA, questions au C2, demandes de rendez-vous, premier contact DPO).\n2. Relire la fiche de cadrage V2 en équipe et la remettre à l’encadrant.\n3. Mener les entretiens avec le tableau des procédures et le dossier de questions.\n4. Fixer la date de la mini-restitution et la préparer.\n5. Après accord : demande de compte administrateur Démarches Numériques, puis plan du démonstrateur.\n6. Test : mesure « avant » en semaine 2, briefing avec les guides, fiches et fichiers fictifs, observation, questionnaires à J9.\n\n## Points à confirmer\n- Sigle « CND » à préciser.\n- Échéances passées : venue de M. Agostini (13/10) et livrable du 26/10.\n- Porteurs des actions et disponibilités à valider en équipe.\n- Hypothèses de besoin du tableau des redondances à confirmer en entretien.\n- Démarches Numériques : SecNumCloud, instance Armées, lien entre dossiers.\n- Réglementaire : loi SREN (RIB, NIR), durées de conservation, registre et représentant RGPD à l’EAE.\n"
+  },
+  {
+   "title": "Plan d’actions PI-EAE",
+   "emoji": "🗺️",
+   "source": "fichier généré/Plan_actions_PI-EAE.docx"
+  },
+  {
+   "title": "Mails prêts à envoyer",
+   "emoji": "✉️",
+   "source": "fichier généré/Mails_prets_a_envoyer.docx"
+  },
+  {
+   "title": "Questions au DPO, au CND et à l’officier de sécurité",
+   "emoji": "❓",
+   "source": "fichier généré/Questions_DPO_CND_securite.docx"
+  },
+  {
+   "title": "Fiche de cadrage V2",
+   "emoji": "🎯",
+   "source": "fichier généré/Fiche_de_cadrage_v2.docx"
+  },
+  {
+   "title": "Guide de collecte — Référentiel élèves (questions RGPD)",
+   "emoji": "🗂️",
+   "source": "Droits - RGPD/Questions_RGPD.docx"
+  },
+  {
+   "title": "Guide candidat — déposer son dossier (démonstrateur)",
+   "emoji": "🧾",
+   "source": "fichier généré/Guides/Guide_candidat_deposer_dossier.docx"
+  },
+  {
+   "title": "Guide services — traiter un dossier (démonstrateur)",
+   "emoji": "🧾",
+   "source": "fichier généré/Guides/Guide_services_traiter_dossier.docx"
+  }
+ ]
+}

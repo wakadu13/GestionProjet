@@ -1,0 +1,70 @@
+{# Propriétés d'un ticket, modifiables en ligne (rendues aussi côté API après modification) #}
+{% import "macros.html" as ui %}
+
+{% macro prop_state(i) -%}
+{{ state_icon(i.state_group, i.state.color if i.state else None) }}<span class="pl">{{ i.state.name if i.state else 'Sans état' }}</span>
+{%- endmacro %}
+
+{% macro prop_priority(i) -%}
+{{ priority_icon(i.priority) }}<span class="pl">{{ M.PRIORITY_LABELS.get(i.priority, 'Aucune') }}</span>
+{%- endmacro %}
+
+{% macro prop_assignees(i) -%}
+{%- if i.assignees -%}{{ ui.avatars(i.assignees, 18, 3) }}{% if i.assignees|length == 1 %}<span class="pl">{{ i.assignees[0].short_name }}</span>{% endif %}
+{%- else -%}{{ icon('user', 13) }}<span class="pl">Assigner</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro prop_labels(i) -%}
+{%- if i.labels -%}
+{% for l in i.labels[:2] %}<span class="lbl"><i style="background:{{ l.color }}"></i>{{ l.name }}</span>{% endfor %}{% if i.labels|length > 2 %}<span class="lbl">+{{ i.labels|length - 2 }}</span>{% endif %}
+{%- else -%}{{ icon('tag', 13) }}<span class="pl">Étiquettes</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro prop_cycle(i) -%}
+{{ icon('cycle', 13) }}<span class="pl">{{ i.cycle.name if i.cycle else 'Cycle' }}</span>
+{%- endmacro %}
+
+{% macro prop_modules(i) -%}
+{{ icon('module', 13) }}<span class="pl">{% if i.modules %}{{ i.modules[0].name }}{% if i.modules|length > 1 %} +{{ i.modules|length - 1 }}{% endif %}{% else %}Module{% endif %}</span>
+{%- endmacro %}
+
+{% macro prop_estimate(i) -%}
+{{ icon('estimate', 13) }}<span class="pl">{{ i.estimate_display or 'Estimation' }}</span>
+{%- endmacro %}
+
+{% macro value_of(i, kind) -%}
+{%- if kind == 'state' -%}{{ i.state_id or '' }}
+{%- elif kind == 'priority' -%}{{ i.priority }}
+{%- elif kind == 'assignees' -%}{{ i.assignees|map(attribute='id')|join(',') }}
+{%- elif kind == 'labels' -%}{{ i.labels|map(attribute='id')|join(',') }}
+{%- elif kind == 'cycle' -%}{{ i.cycle_id or '' }}
+{%- elif kind == 'modules' -%}{{ i.modules|map(attribute='id')|join(',') }}
+{%- elif kind == 'estimate' -%}{{ '' if i.estimate is none else i.estimate }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro is_empty(i, kind) -%}
+{%- if (kind == 'assignees' and not i.assignees) or (kind == 'labels' and not i.labels) or (kind == 'cycle' and not i.cycle) or (kind == 'modules' and not i.modules) or (kind == 'estimate' and i.estimate is none) or (kind == 'priority' and i.priority == 'none') -%}is-empty{%- endif -%}
+{%- endmacro %}
+
+{% macro prop(i, kind, editable=True, cls='') -%}
+{%- set p = i.project -%}
+{%- if kind == 'cycle' and not p.cycles_enabled -%}
+{%- elif kind == 'modules' and not p.modules_enabled -%}
+{%- elif kind == 'estimate' and (p.estimate_type or 'none') == 'none' -%}
+{%- else -%}
+<button type="button" class="prop prop-{{ kind }} {{ is_empty(i, kind) }} {{ cls }}" data-issue="{{ i.id }}" data-project="{{ i.project_id }}" data-pick="{{ kind }}" data-value="{{ value_of(i, kind) }}" {% if not editable %}disabled{% endif %} title="{{ {'state':'État','priority':'Priorité','assignees':'Assignés','labels':'Étiquettes','cycle':'Cycle','modules':'Modules','estimate':'Estimation'}[kind] }}">
+{%- if kind == 'state' %}{{ prop_state(i) }}{% elif kind == 'priority' %}{{ prop_priority(i) }}{% elif kind == 'assignees' %}{{ prop_assignees(i) }}{% elif kind == 'labels' %}{{ prop_labels(i) }}{% elif kind == 'cycle' %}{{ prop_cycle(i) }}{% elif kind == 'modules' %}{{ prop_modules(i) }}{% elif kind == 'estimate' %}{{ prop_estimate(i) }}{% endif -%}
+</button>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro date_prop(i, field, editable=True, cls='') -%}
+{%- set v = i[field] -%}
+{%- set overdue = field == 'target_date' and i.is_overdue -%}
+{%- set soon = field == 'target_date' and i.due_soon -%}
+<label class="prop prop-date prop-{{ 'start' if field == 'start_date' else 'target' }} {% if not v %}is-empty{% endif %} {% if overdue %}is-overdue{% elif soon %}is-soon{% endif %} {{ cls }}" title="{{ 'Date de début' if field == 'start_date' else 'Échéance' }}{% if v %} : {{ v|date_long }}{% endif %}">
+  {{ icon('calendar' if field == 'start_date' else 'flag', 13) }}<span class="pl" data-date-label>{{ v|date if v else ('Début' if field == 'start_date' else 'Échéance') }}</span>
+  {% if editable %}<input type="date" data-issue="{{ i.id }}" data-field="{{ field }}" value="{{ v.isoformat() if v else '' }}">{% endif %}
+</label>
+{%- endmacro %}

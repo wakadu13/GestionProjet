@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Modifier · {{ page.title }}{% endblock %}
+{% block content_class %}flush{% endblock %}
+
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <a href="{{ url_for('pages.index', pid=project.id) }}">{{ icon('page', 15) }} Pages</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <a href="{{ url_for('pages.view', pid=project.id, page_id=page.id) }}">{{ page.emoji }} {{ page.title|truncate(40) }}</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current">{{ icon('edit', 14) }} Modification</span>
+  </div>
+  <div class="header-actions">
+    <span class="muted small" data-save-status>Enregistrement automatique activé</span>
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('pages.versions', pid=project.id, page_id=page.id) }}">{{ icon('history', 14) }} Historique</a>
+    <a class="btn btn-sm" href="{{ url_for('pages.view', pid=project.id, page_id=page.id) }}">Fermer</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<form id="page-form" method="post" action="{{ url_for('pages.edit', pid=project.id, page_id=page.id) }}" style="display:flex;flex-direction:column;flex:1;min-height:0">
+  {{ ui.csrf() }}
+  <input type="hidden" name="explicit" value="0">
+  <div class="subbar" style="gap:8px">
+    <input class="input input-sm" name="emoji" value="{{ page.emoji }}" maxlength="16" title="Emoji de la page" style="width:52px;text-align:center;font-size:16px">
+    <input class="input input-lg input-bare grow" name="title" value="{{ page.title }}" placeholder="Titre de la page" autocomplete="off" required style="font-weight:650;min-width:200px">
+    <div class="flex gap-4 md-toolbar" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px 4px">
+      <button type="button" data-page-tool="bold" title="Gras (Ctrl+B)">{{ icon('bold', 15) }}</button>
+      <button type="button" data-page-tool="italic" title="Italique (Ctrl+I)">{{ icon('italic', 15) }}</button>
+      <button type="button" data-page-tool="heading" title="Titre">{{ icon('heading', 15) }}</button>
+      <button type="button" data-page-tool="ul" title="Liste à puces">{{ icon('list-ul', 15) }}</button>
+      <button type="button" data-page-tool="task" title="Liste de tâches">{{ icon('list-check', 15) }}</button>
+      <button type="button" data-page-tool="quote" title="Citation">{{ icon('quote', 15) }}</button>
+      <button type="button" data-page-tool="code" title="Code">{{ icon('code', 15) }}</button>
+      <button type="button" data-page-tool="link" title="Lien">{{ icon('link', 15) }}</button>
+      <button type="button" data-page-tool="table" title="Tableau">{{ icon('table', 15) }}</button>
+    </div>
+    <button type="button" class="btn btn-sm active" data-preview-toggle title="Afficher / masquer l’aperçu">{{ icon('eye', 14) }} Aperçu</button>
+    <button class="btn btn-sm btn-primary" title="Enregistrer et créer une version (Ctrl+S)">{{ icon('check', 14) }} Enregistrer</button>
+  </div>
+  <div class="page-editor" data-page-editor style="flex:1;min-height:0;grid-template-rows:minmax(0,1fr)">
+    <textarea name="content" data-mention placeholder="Écris en markdown… (# titre, - liste, - [ ] tâche, **gras**, @mention, EAE-12 pour lier un ticket)" spellcheck="true">{{ page.content or '' }}</textarea>
+    <div class="preview md" data-page-preview></div>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var f = document.getElementById('page-form');
+    if (!f) return;
+    f.addEventListener('submit', function (e) {
+      if (e.submitter) f.querySelector('[name=explicit]').value = '1';
+    });
+  })();
+</script>
+{% endblock %}

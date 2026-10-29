@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Archives · {{ project.name }}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">{{ ui.project_crumb(project) }}<span class="current">{{ icon('archive', 15) }} Tickets archivés</span></div>
+  <div class="header-actions"><a class="btn btn-sm" href="{{ url_for('issues.export', pid=project.id, fmt='xlsx') }}?archived=1">{{ icon('download', 14) }} Tout exporter</a></div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner">
+{% if issues %}
+<div class="panel">
+  <table class="table">
+    <thead><tr><th>ID</th><th>Titre</th><th>État</th><th>Assignés</th><th>Archivé</th><th></th></tr></thead>
+    <tbody>
+    {% for i in issues %}
+    <tr>
+      <td class="key">{{ i.key }}</td>
+      <td><a href="{{ url_for('issues.detail', pid=project.id, seq=i.sequence_id) }}">{{ i.title }}</a></td>
+      <td><span class="flex gap-4">{{ state_icon(i.state_group, i.state.color if i.state else None) }} {{ i.state.name if i.state }}</span></td>
+      <td>{{ ui.avatars(i.assignees) }}</td>
+      <td class="muted">{{ i.archived_at|ago }}</td>
+      <td class="right">{% if can(current_user, 'edit', project) %}
+        <form method="post" action="{{ url_for('issues.action', pid=project.id, seq=i.sequence_id, action='restore') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs">{{ icon('refresh', 13) }} Restaurer</button></form>
+        {{ ui.confirm_button(url_for('issues.action', pid=project.id, seq=i.sequence_id, action='delete'), '', 'Supprimer définitivement ' ~ i.key ~ ' ?', 'btn btn-xs btn-danger-ghost', 'trash') }}
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ ui.empty('archive', 'Aucun ticket archivé', 'Les tickets archivés manuellement ou automatiquement (voir Paramètres › Automatisations) apparaissent ici.') }}
+{% endif %}
+</div>
+{% endblock %}

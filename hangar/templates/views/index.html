@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Vues{% if project %} · {{ project.name }}{% endif %}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {% if project %}{{ ui.project_crumb(project) }}{% endif %}
+    <span class="current">{{ icon('eye', 15) }} Vues{% if not project %} de l’espace{% endif %}</span>
+  </div>
+  <div class="header-actions">
+    {% if project %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('issues.index', pid=project.id) }}">{{ icon('filter', 14) }} Composer une vue depuis les tickets</a>
+    {% else %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('home.workspace_issues', scope='all') }}">{{ icon('filter', 14) }} Composer une vue depuis les tickets</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="inner">
+{% if views %}
+<p class="help mb">Une vue mémorise une combinaison de filtres, de regroupement et de disposition. {% if project %}Elle s’applique aux tickets du projet {{ project.name }}.{% else %}Les vues de l’espace portent sur les tickets de tous tes projets.{% endif %}</p>
+<div class="panel">
+  {% for v in views %}
+  <div class="cycle-row">
+    <span style="color:var(--accent-text)">{{ icon('eye', 18) }}</span>
+    <div class="grow" style="min-width:0">
+      <div class="flex gap">
+        <a class="name ellipsis" href="{{ url_for('saved_views.open', pid=v.project_id, vid=v.id) if v.project_id else url_for('saved_views.open_global', vid=v.id) }}">{{ v.name }}</a>
+        {% if v.is_public %}<span class="badge">{{ icon('globe', 12) }} Publique</span>{% else %}<span class="badge badge-warning">{{ icon('lock', 12) }} Privée</span>{% endif %}
+      </div>
+      {% if v.description %}<div class="small muted ellipsis" style="margin-top:3px">{{ v.description }}</div>{% endif %}
+    </div>
+    <span class="count-pill" title="Tickets correspondants">{{ count_for(v) }}</span>
+    <span class="small muted nowrap" title="Créée le {{ v.created_at|datetime }}">{{ v.created_at|ago }}</span>
+    {{ ui.avatar(v.owner, 22) }}
+    {{ ui.fav_button('view', v.id) }}
+    {% if v.owner_id == current_user.id or current_user.is_admin %}
+    {{ ui.confirm_button(url_for('saved_views.delete', vid=v.id), '', 'Supprimer la vue « ' ~ v.name ~ ' » ?', 'btn btn-ghost btn-icon btn-sm', 'trash') }}
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+{{ ui.empty('eye', 'Aucune vue enregistrée', 'Ouvre la liste des tickets, applique des filtres et un affichage (regroupement, tri, disposition), puis clique sur « Enregistrer la vue » dans la barre d’outils pour la retrouver ici.') }}
+<div class="center-text">
+  <a class="btn btn-primary" href="{{ url_for('issues.index', pid=project.id) if project else url_for('home.workspace_issues', scope='all') }}">{{ icon('layers', 14) }} Aller aux tickets</a>
+</div>
+{% endif %}
+</div>
+{% endblock %}

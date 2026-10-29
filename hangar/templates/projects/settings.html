@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Paramètres · {{ project.name }}{% endblock %}
+{% set p = project %}
+{% set dis = '' if is_admin else 'disabled' %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">{{ ui.project_crumb(project) }}<span class="current">{{ icon('settings', 15) }} Paramètres</span></div>
+  {% if not is_admin %}<div class="header-actions"><span class="badge badge-warning">Lecture seule — réservé aux administrateurs du projet</span></div>{% endif %}
+</div>
+{% endblock %}
+{% block content %}
+<div class="settings">
+  <nav class="settings-nav">
+    {% for k, lab, ic in sections %}<a class="{% if section == k %}active{% endif %}" href="{{ url_for('projects.settings', pid=p.id, section=k) }}">{{ icon(ic, 15) }} {{ lab }}</a>{% endfor %}
+  </nav>
+  <div class="settings-body">
+
+  {% if section == 'general' %}
+    <h2>Général</h2><p class="help">Identité et cadrage du projet.</p>
+    <form method="post" class="panel panel-b">
+      {{ ui.csrf() }}
+      <div class="grid-2" style="grid-template-columns: 80px 1fr">
+        <div class="field"><label>Icône</label><input class="input" name="emoji" value="{{ p.emoji }}" maxlength="4" style="text-align:center;font-size:18px" {{ dis }}></div>
+        <div class="field"><label>Nom</label><input class="input" name="name" value="{{ p.name }}" required {{ dis }}></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Identifiant</label><input class="input mono" name="identifier" value="{{ p.identifier }}" required maxlength="10" {{ dis }}><span class="help">Le changer renomme toutes les clés de tickets.</span></div>
+        <div class="field"><label>Couleur</label><div class="color-swatches">{% for c in PALETTE %}<label><input type="radio" name="color" value="{{ c }}" {% if c == p.color %}checked{% endif %} {{ dis }}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
+      </div>
+      <div class="field"><label>Description</label><textarea class="input" name="description" rows="6" {{ dis }}>{{ p.description }}</textarea><span class="help">Markdown accepté.</span></div>
+      <div class="grid-2">
+        <div class="field"><label>Responsable du projet</label><select class="input" name="lead_id" {{ dis }}><option value="">—</option>{% for u in p.member_users %}<option value="{{ u.id }}" {% if u.id == p.lead_id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Assigné par défaut</label><select class="input" name="default_assignee_id" {{ dis }}><option value="">Personne</option>{% for u in p.member_users %}<option value="{{ u.id }}" {% if u.id == p.default_assignee_id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Début</label><input class="input" type="date" name="start_date" value="{{ p.start_date.isoformat() if p.start_date }}" {{ dis }}></div>
+        <div class="field"><label>Fin prévue</label><input class="input" type="date" name="target_date" value="{{ p.target_date.isoformat() if p.target_date }}" {{ dis }}></div>
+        <div class="field"><label>Visibilité</label><select class="input" name="network" {{ dis }}><option value="public" {% if p.network == 'public' %}selected{% endif %}>Public</option><option value="private" {% if p.network == 'private' %}selected{% endif %}>Privé</option></select></div>
+      </div>
+      {% if is_admin %}<div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>{% endif %}
+    </form>
+
+  {% elif section == 'members' %}
+    <h2>Membres</h2><p class="help">{{ p.members|length }} membre(s). Les administrateurs du projet gèrent ses paramètres ; les invités peuvent consulter, commenter et soumettre des demandes.</p>
+    {% if is_admin and candidates %}
+    <form method="post" class="panel panel-b mb flex gap wrap">
+      {{ ui.csrf() }}<input type="hidden" name="action" value="add">
+      <select class="input" name="user_ids" multiple size="{{ [candidates|length, 5]|min }}" style="height:auto;flex:1;min-width:240px">{% for u in candidates %}<option value="{{ u.id }}">{{ u.display_name }} (@{{ u.username }})</option>{% endfor %}</select>
+      <div class="col gap"><select class="input" name="role">{% for k, lab in ROLES.items() %}<option value="{{ k }}" {% if k == 'member' %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select><button class="btn btn-primary">{{ icon('user-plus', 14) }} Ajouter</button><span class="help">Ctrl+clic pour en choisir plusieurs.</span></div>
+    </form>
+    {% endif %}
+    <div class="panel">
+      <table class="table">
+        <thead><tr><th>Membre</th><th>Rôle dans l’espace</th><th>Rôle dans le projet</th><th>Depuis</th><th></th></tr></thead>
+        <tbody>
+        {% for m in p.members|sort(attribute='user.first_name') %}
+        <tr>
+          <td><a href="{{ url_for('team.profile', username=m.user.username) }}">{{ ui.user_chip(m.user) }}</a></td>
+          <td><span class="badge">{{ ROLES[m.user.role] }}</span></td>
+          <td>{% if is_admin %}<form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="role"><input type="hidden" name="member_id" value="{{ m.id }}"><select class="input input-sm" name="role" data-autosubmit style="width:auto">{% for k, lab in ROLES.items() %}<option value="{{ k }}" {% if k == m.role %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></form>{% else %}{{ ROLES[m.role] }}{% endif %}</td>
+          <td class="muted">{{ m.joined_at|date(True) }}</td>
+          <td class="right">{% if is_admin %}{{ ui.confirm_button(url_for('projects.settings', pid=p.id, section='members'), '', 'Retirer ' ~ m.user.display_name ~ ' du projet ? Il sera désassigné de ses tickets.', 'btn btn-xs btn-danger-ghost', 'x', {'action': 'remove', 'member_id': m.id}) }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  {% elif section == 'features' %}
+    <h2>Fonctionnalités</h2><p class="help">Active uniquement ce dont l’équipe a besoin.</p>
+    <form method="post" class="panel">
+      {{ ui.csrf() }}
+      {% for f, ic, lab, desc in [('cycles_enabled', 'cycle', 'Cycles', 'Itérations à durée fixe (sprints) avec burndown.'), ('modules_enabled', 'module', 'Modules', 'Regroupements fonctionnels ou phases du projet.'), ('views_enabled', 'eye', 'Vues', 'Filtres enregistrés et partagés.'), ('pages_enabled', 'page', 'Pages', 'Documentation, comptes rendus, notes de décision.'), ('intake_enabled', 'inbox', 'Intake', 'Boîte de réception des demandes à trier.'), ('time_tracking_enabled', 'timer', 'Suivi du temps', 'Saisie du temps passé sur les tickets.')] %}
+      <div class="flex gap-12" style="padding:14px 16px;border-bottom:1px solid var(--border-2)">
+        <span class="muted">{{ icon(ic, 20) }}</span>
+        <div class="grow"><b>{{ lab }}</b><div class="help">{{ desc }}</div></div>
+        <label class="switch"><input type="checkbox" name="{{ f }}" value="1" {% if p[f] %}checked{% endif %} {{ dis }}></label>
+      </div>
+      {% endfor %}
+      {% if is_admin %}<div class="panel-b"><div class="form-actions" style="margin:0"><button class="btn btn-primary">Enregistrer</button></div></div>{% endif %}
+    </form>
+
+  {% elif section == 'states' %}
+    <h2>États</h2><p class="help">Les états décrivent le cycle de vie des tickets. Chaque état appartient à un groupe (Backlog, Non commencé, En cours, Terminé, Annulé) utilisé pour les statistiques.</p>
+    {% for g, glab, gcol in M.STATE_GROUPS %}
+    <div class="state-group">
+      <div class="flex gap mb" style="margin-bottom:8px">{{ state_icon(g) }}<h3>{{ glab }}</h3></div>
+      {% for s in p.states if s.group == g %}
+      <div class="state-item">
+        {{ state_icon(s.group, s.color, 16) }}
+        {% if is_admin %}
+        <form method="post" class="inline">{{ ui.csrf() }}<input type="hidden" name="action" value="edit"><input type="hidden" name="state_id" value="{{ s.id }}">
+          <input class="input input-sm" type="color" name="color" value="{{ s.color }}" style="width:34px">
+          <input class="input input-sm" name="name" value="{{ s.name }}" style="max-width:200px">
+          <input class="input input-sm grow" name="description" value="{{ s.description }}" placeholder="Description">
+          <button class="btn btn-xs">OK</button>
+        </form>
+        {% else %}<b class="grow">{{ s.name }}</b><span class="muted small">{{ s.description }}</span>{% endif %}
+        <span class="muted tiny nowrap">{{ state_counts.get(s.id, 0) }} ticket(s)</span>
+        {% if s.is_default %}<span class="badge badge-accent">Par défaut</span>{% elif is_admin %}
+          <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="default"><input type="hidden" name="state_id" value="{{ s.id }}"><button class="btn btn-xs btn-ghost" title="Définir par défaut">Par défaut</button></form>{% endif %}
+        {% if is_admin %}
+          <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="up"><input type="hidden" name="state_id" value="{{ s.id }}"><button class="btn btn-xs btn-ghost btn-icon" title="Monter">{{ icon('chevron-up', 13) }}</button></form>
+          <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="down"><input type="hidden" name="state_id" value="{{ s.id }}"><button class="btn btn-xs btn-ghost btn-icon" title="Descendre">{{ icon('chevron-down', 13) }}</button></form>
+          {{ ui.confirm_button(url_for('projects.settings', pid=p.id, section='states'), '', 'Supprimer l’état « ' ~ s.name ~ ' » ? Ses tickets seront déplacés.', 'btn btn-xs btn-danger-ghost btn-icon', 'trash', {'action': 'delete', 'state_id': s.id}) }}
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% if is_admin %}
+      <form method="post" class="flex gap" style="padding-left:2px">{{ ui.csrf() }}<input type="hidden" name="action" value="add"><input type="hidden" name="group" value="{{ g }}">
+        <input class="input input-sm" type="color" name="color" value="{{ gcol }}" style="width:34px"><input class="input input-sm" name="name" placeholder="Nouvel état « {{ glab }} »" required style="max-width:260px"><button class="btn btn-xs">{{ icon('plus', 13) }} Ajouter</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+  {% elif section == 'labels' %}
+    <h2>Étiquettes</h2><p class="help">Pour classer les tickets (thème, partie, type de livrable…). Une étiquette peut avoir un parent.</p>
+    {% if is_admin %}
+    <form method="post" class="panel panel-b mb flex gap wrap">{{ ui.csrf() }}<input type="hidden" name="action" value="add">
+      <input class="input input-sm" type="color" name="color" value="{{ PALETTE[p.labels|length % PALETTE|length] }}" style="width:38px">
+      <input class="input input-sm" name="name" placeholder="Nom de l’étiquette" required style="max-width:240px">
+      <select class="input input-sm" name="parent_id" style="width:auto"><option value="">Sans parent</option>{% for l in p.labels %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select>
+      <button class="btn btn-sm btn-primary">{{ icon('plus', 14) }} Créer</button>
+    </form>
+    {% endif %}
+    <div class="panel">
+      {% for l in p.labels %}
+      <div class="state-item" style="border:0;border-bottom:1px solid var(--border-2);border-radius:0;margin:0">
+        <span class="dot" style="background:{{ l.color }};width:12px;height:12px"></span>
+        {% if is_admin %}
+        <form method="post" class="inline">{{ ui.csrf() }}<input type="hidden" name="action" value="edit"><input type="hidden" name="label_id" value="{{ l.id }}">
+          <input class="input input-sm" type="color" name="color" value="{{ l.color }}" style="width:34px"><input class="input input-sm" name="name" value="{{ l.name }}" style="max-width:240px">
+          <select class="input input-sm" name="parent_id" style="width:auto"><option value="">Sans parent</option>{% for o in p.labels if o.id != l.id %}<option value="{{ o.id }}" {% if o.id == l.parent_id %}selected{% endif %}>{{ o.name }}</option>{% endfor %}</select>
+          <button class="btn btn-xs">OK</button>
+        </form>
+        {% else %}<b class="grow">{{ l.name }}</b>{% if l.parent %}<span class="muted small">dans {{ l.parent.name }}</span>{% endif %}{% endif %}
+        <a class="muted tiny nowrap" href="{{ url_for('issues.index', pid=p.id, label=l.id) }}">{{ label_counts.get(l.id, 0) }} ticket(s)</a>
+        {% if is_admin %}{{ ui.confirm_button(url_for('projects.settings', pid=p.id, section='labels'), '', 'Supprimer l’étiquette « ' ~ l.name ~ ' » ?', 'btn btn-xs btn-danger-ghost btn-icon', 'trash', {'action': 'delete', 'label_id': l.id}) }}{% endif %}
+      </div>
+      {% else %}<div class="empty sm">Aucune étiquette.</div>{% endfor %}
+    </div>
+
+  {% elif section == 'estimates' %}
+    <h2>Estimations</h2><p class="help">Unité utilisée pour estimer l’effort des tickets (points, heures, jours-homme…). Les cycles cumulent ces valeurs.</p>
+    <form method="post" class="panel">{{ ui.csrf() }}
+      {% for k, (lab, vals) in ESTIMATE_TYPES.items() %}
+      <label class="flex gap-12" style="padding:12px 16px;border-bottom:1px solid var(--border-2);cursor:pointer">
+        <input type="radio" name="estimate_type" value="{{ k }}" {% if p.estimate_type == k %}checked{% endif %} {{ dis }} style="accent-color:var(--accent)">
+        <div class="grow"><b>{{ lab }}</b><div class="flex wrap gap-4 mt-0" style="margin-top:4px">{% for v, l in vals %}<span class="badge">{{ l }}</span>{% else %}<span class="help">Pas d’estimation sur les tickets.</span>{% endfor %}</div></div>
+      </label>
+      {% endfor %}
+      {% if is_admin %}<div class="panel-b"><div class="form-actions" style="margin:0"><button class="btn btn-primary">Enregistrer</button></div></div>{% endif %}
+    </form>
+
+  {% elif section == 'automations' %}
+    <h2>Automatisations</h2><p class="help">Appliquées automatiquement à l’ouverture de la liste des tickets.</p>
+    <form method="post" class="panel panel-b">{{ ui.csrf() }}
+      <div class="field"><label>{{ icon('archive', 14) }} Archiver automatiquement les tickets terminés ou annulés depuis</label>
+        <select class="input" name="auto_archive_months" style="max-width:260px" {{ dis }}>{% for m, lab in [(0, 'Jamais'), (1, '1 mois'), (3, '3 mois'), (6, '6 mois'), (12, '12 mois')] %}<option value="{{ m }}" {% if p.auto_archive_months == m %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
+      <div class="field"><label>{{ icon('x-circle', 14) }} Annuler automatiquement les tickets ouverts sans activité depuis</label>
+        <select class="input" name="auto_close_months" style="max-width:260px" {{ dis }}>{% for m, lab in [(0, 'Jamais'), (1, '1 mois'), (3, '3 mois'), (6, '6 mois'), (12, '12 mois')] %}<option value="{{ m }}" {% if p.auto_close_months == m %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select>
+        <span class="help">Les tickets passent dans le premier état du groupe « Annulé ».</span></div>
+      {% if is_admin %}<div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>{% endif %}
+    </form>
+
+  {% elif section == 'import' %}
+    <h2>Import / export</h2><p class="help">Importe un plan de tâches depuis Excel ou CSV (ex. un diagramme de Gantt existant) ou exporte les tickets.</p>
+    {% if can(current_user, 'edit', p) %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('issues.import_issues', pid=p.id) }}" class="panel panel-b mb">
+      {{ ui.csrf() }}
+      <h3 class="mb">{{ icon('upload', 16) }} Importer des tickets</h3>
+      <div class="field"><label>Fichier (.xlsx, .csv ou .json exporté par Hangar)</label><input class="input" type="file" name="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.json" required style="padding:5px"></div>
+      <label class="checkbox mb"><input type="checkbox" name="update_existing" value="1" checked> Mettre à jour les tickets existants (même identifiant d’origine ou même clé)</label>
+      <label class="checkbox mb"><input type="checkbox" name="create_members" value="1"> Créer les membres manquants (comptes à activer ensuite)</label>
+      <div class="help mb">
+        La ligne d’en-tête est détectée automatiquement. Colonnes reconnues : <b>Titre / Tâche</b> (obligatoire), ID, Description, Livrable, Statut / État, Priorité, Responsable, Appui, Début, Échéance, Étiquettes / Partie, Module / Phase, Cycle / Sprint, Estimation / Durée, Dépend de (crée des relations « bloqué par »), Commentaires, Source, Parent.
+      </div>
+      <div class="form-actions"><button class="btn btn-primary">Importer</button></div>
+    </form>
+    {% endif %}
+    <div class="panel panel-b">
+      <h3 class="mb">{{ icon('download', 16) }} Exporter</h3>
+      <div class="flex wrap gap">
+        <a class="btn" href="{{ url_for('issues.export', pid=p.id, fmt='xlsx') }}">{{ icon('table', 14) }} Excel</a>
+        <a class="btn" href="{{ url_for('issues.export', pid=p.id, fmt='csv') }}">{{ icon('page', 14) }} CSV</a>
+        <a class="btn" href="{{ url_for('issues.export', pid=p.id, fmt='md') }}">{{ icon('hash', 14) }} Markdown</a>
+        <a class="btn" href="{{ url_for('issues.export', pid=p.id, fmt='json') }}">{{ icon('code', 14) }} JSON</a>
+        <a class="btn" href="{{ url_for('issues.export', pid=p.id, fmt='xlsx', archived=1) }}">{{ icon('archive', 14) }} Tout, archives comprises</a>
+        <a class="btn" href="{{ url_for('issues.ical', pid=p.id) }}">{{ icon('calendar', 14) }} Calendrier .ics</a>
+      </div>
+    </div>
+
+  {% elif section == 'danger' %}
+    <h2>Zone sensible</h2><p class="help">Actions irréversibles ou à fort impact.</p>
+    <div class="danger-zone">
+      <h3>{{ 'Restaurer' if p.archived_at else 'Archiver' }} le projet</h3>
+      <p class="help mt-0" style="margin:6px 0 12px">{{ 'Le projet redeviendra visible et modifiable.' if p.archived_at else 'Le projet passe en lecture seule et disparaît des listes. Il reste restaurable.' }}</p>
+      {% if is_admin %}<form method="post">{{ ui.csrf() }}<input type="hidden" name="action" value="{{ 'restore' if p.archived_at else 'archive' }}"><button class="btn">{{ icon('archive', 14) }} {{ 'Restaurer' if p.archived_at else 'Archiver' }}</button></form>{% endif %}
+    </div>
+    <div class="danger-zone">
+      <h3 class="danger-text">Supprimer le projet</h3>
+      <p class="help mt-0" style="margin:6px 0 12px">Supprime définitivement le projet, ses {{ p.issues|length }} tickets, cycles, modules, pages et pièces jointes. Pense à faire une sauvegarde avant.</p>
+      {% if is_admin %}<form method="post" class="flex gap" data-confirm="Supprimer définitivement {{ p.name }} ?">{{ ui.csrf() }}<input type="hidden" name="action" value="delete"><input class="input" name="confirm" placeholder="Tape {{ p.identifier }} pour confirmer" style="max-width:260px" required><button class="btn btn-danger">{{ icon('trash', 14) }} Supprimer</button></form>{% endif %}
+    </div>
+  {% endif %}
+  </div>
+</div>
+{% endblock %}

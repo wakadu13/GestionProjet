@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Jetons d’API{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('key', 15) }} Jetons d’API</span></div></div>{% endblock %}
+{% block content %}
+<div class="settings">
+  {% include "settings/_nav.html" %}
+  <div class="settings-body">
+    <h2>Jetons d’API</h2><p class="help">Pour automatiser Hangar avec des scripts (Python, Excel/Power Query, etc.) via l’API REST locale <code>/api/v1</code>.</p>
+    {% if new_token %}
+    <div class="danger-zone" style="border-color:var(--success);background:var(--success-bg)">
+      <b>Nouveau jeton — copie-le maintenant, il ne sera plus affiché :</b>
+      <div class="flex gap mt"><div class="token grow">{{ new_token }}</div><button class="btn" type="button" data-copy="{{ new_token }}">{{ icon('copy', 14) }} Copier</button></div>
+    </div>
+    {% endif %}
+    <form method="post" class="panel panel-b mb flex gap wrap">
+      {{ ui.csrf() }}
+      <input class="input" name="name" placeholder="Nom du jeton (ex. Script d’export)" required style="max-width:300px">
+      <select class="input" name="days" style="width:auto"><option value="">Sans expiration</option><option value="7">7 jours</option><option value="30" selected>30 jours</option><option value="90">90 jours</option><option value="365">1 an</option></select>
+      <button class="btn btn-primary">{{ icon('plus', 14) }} Générer</button>
+    </form>
+    <div class="panel mb-lg">
+      <table class="table">
+        <thead><tr><th>Nom</th><th>Préfixe</th><th>Créé</th><th>Dernière utilisation</th><th>Expiration</th><th></th></tr></thead>
+        <tbody>
+        {% for t in tokens %}
+        <tr><td>{{ t.name }}</td><td class="mono">{{ t.prefix }}…</td><td class="muted">{{ t.created_at|ago }}</td><td class="muted">{{ t.last_used_at|ago if t.last_used_at else 'Jamais' }}</td><td class="muted">{{ t.expires_at|date(True) if t.expires_at else '—' }}</td>
+          <td class="right"><form method="post" class="inline-form" data-confirm="Révoquer ce jeton ?">{{ ui.csrf() }}<input type="hidden" name="delete" value="{{ t.id }}"><button class="btn btn-xs btn-danger-ghost">Révoquer</button></form></td></tr>
+        {% else %}<tr><td colspan="6" class="muted">Aucun jeton.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <h2>Exemples</h2>
+    <div class="panel panel-b md">
+<pre><code># Lister les projets
+curl -H "Authorization: Bearer hgr_…" {{ request.host_url }}api/v1/projects
+
+# Créer un ticket
+curl -X POST -H "Authorization: Bearer hgr_…" -H "Content-Type: application/json" \
+     -d '{"title": "Relancer le DPO", "priority": "high", "target_date": "2026-11-15"}' \
+     {{ request.host_url }}api/v1/projects/1/issues
+
+# Python
+import requests
+h = {"Authorization": "Bearer hgr_…"}
+tickets = requests.get("{{ request.host_url }}api/v1/projects/1/issues", headers=h).json()["issues"]</code></pre>
+      <p>Points d’accès : <code>GET /api/v1/me</code>, <code>GET /api/v1/projects</code>, <code>GET|POST /api/v1/projects/&lt;id&gt;/issues</code> (filtres <code>state_group</code>, <code>assignee</code>, <code>limit</code>), <code>GET|PATCH|DELETE /api/v1/issues/&lt;id&gt;</code>, <code>GET|POST /api/v1/issues/&lt;id&gt;/comments</code>.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "issues/_layouts.html" as L with context %}
+{% block title %}Planning{% if project %} · {{ project.name }}{% endif %}{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% set head_h = 48 + (plan.band_lanes * 18 + 6 if plan.bands else 0) %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {% if project %}{{ ui.project_crumb(project) }}{% endif %}
+    <span class="current">{{ icon('gantt', 15) }} Planning</span>
+    <span class="muted small" style="font-weight:400">{{ plan.issue_count }} ticket(s)</span>
+  </div>
+  <div class="header-actions pl-actions">
+    <div class="seg" title="Échelle">
+      {% for k, lab, w in ZOOMS %}<a href="?{{ qs(zoom=k) }}" class="{% if opts.zoom == k %}active{% endif %}">{{ lab }}</a>{% endfor %}
+    </div>
+    <div class="dd">
+      <button class="btn btn-sm" type="button" data-menu>{{ icon('layers', 14) }} Couloirs : {{ dict(GROUPS)[opts.group] }}</button>
+      <div class="menu" style="min-width:190px">
+        <div class="menu-h">Regrouper par</div>
+        {% for k, lab in GROUPS %}<a class="menu-item" href="?{{ qs(group=k) }}">{% if opts.group == k %}{{ icon('check', 14) }}{% else %}<span style="width:14px;display:inline-block"></span>{% endif %} {{ lab }}</a>{% endfor %}
+      </div>
+    </div>
+    <div class="dd">
+      {% set nf = filters|length - (1 if 'q' in filters else 0) %}
+      <button class="btn btn-sm {% if nf or opts.hide_done %}active{% endif %}" type="button" data-menu>{{ icon('filter', 14) }} Filtres{% if nf %} <span class="count-pill">{{ nf }}</span>{% endif %}</button>
+      <form class="menu panel-menu" method="get" style="width:300px">
+        <input type="hidden" name="zoom" value="{{ opts.zoom }}"><input type="hidden" name="group" value="{{ opts.group }}">
+        <div class="pm-section">
+          <div class="pm-h">Assigné</div>
+          <select class="input input-sm" name="assignee">
+            <option value="">Tous</option>
+            <option value="me" {% if 'me' in filters.get('assignee', []) %}selected{% endif %}>Moi</option>
+            <option value="none" {% if 'none' in filters.get('assignee', []) %}selected{% endif %}>Non assigné</option>
+            {% for u in members %}<option value="{{ u.id }}" {% if u.id|string in filters.get('assignee', []) %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="pm-section">
+          <div class="pm-h">Groupe d’état</div>
+          <select class="input input-sm" name="state_group">
+            <option value="">Tous</option>
+            {% for g, lab, col in M.STATE_GROUPS %}<option value="{{ g }}" {% if g in filters.get('state_group', []) %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="pm-section">
+          <div class="pm-h">Étiquette</div>
+          <select class="input input-sm" name="label">
+            <option value="">Toutes</option>
+            {% for l, p in labels %}<option value="{{ l.id }}" {% if l.id|string in filters.get('label', []) %}selected{% endif %}>{{ l.name }}{% if not project %} · {{ p.identifier }}{% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        {% if not project %}
+        <div class="pm-section">
+          <div class="pm-h">Projet</div>
+          <select class="input input-sm" name="project">
+            <option value="">Tous</option>
+            {% for p in projects %}<option value="{{ p.id }}" {% if p.id|string in filters.get('project', []) %}selected{% endif %}>{{ p.emoji }} {{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="pm-section">
+          <label class="opt switch"><input type="checkbox" name="hide_done" value="1" {% if opts.hide_done %}checked{% endif %}> Masquer les tickets terminés / annulés</label><input type="hidden" name="hide_done" value="0">
+        </div>
+        <div class="pm-foot">
+          <a class="btn btn-sm btn-ghost" href="?zoom={{ opts.zoom }}&group={{ opts.group }}&hide_done=0">Réinitialiser</a>
+          <button class="btn btn-sm btn-primary">Appliquer</button>
+        </div>
+      </form>
+    </div>
+    <button class="btn btn-sm btn-ghost" type="button" data-pl-arrows title="Afficher / masquer les dépendances">{{ icon('link', 14) }} Dépendances</button>
+    <button class="btn btn-sm btn-ghost btn-icon" type="button" data-pl-collapse-all title="Tout replier / déplier">{{ icon('chevron-up', 15) }}</button>
+    <button class="btn btn-sm" type="button" data-pl-today>{{ icon('target', 14) }} Aujourd’hui</button>
+    <button class="btn btn-sm btn-ghost btn-icon" type="button" onclick="window.print()" title="Imprimer / enregistrer en PDF (astuce : échelle « Mois » et format paysage)">{{ icon('printer', 15) }}</button>
+    {% if project %}<a class="btn btn-sm btn-ghost btn-icon" href="{{ url_for('issues.index', pid=project.id, layout='gantt') }}" title="Vue Gantt de la liste des tickets">{{ icon('layers', 15) }}</a>{% endif %}
+  </div>
+</div>
+<div class="subbar pl-legend">
+  {% for c in chips %}<span class="chip"><span class="k">{{ c.name }} :</span> {{ c.label }}<a href="?{{ IQ.remove_filter_value(request.args, c.key, c.value) }}" title="Retirer">{{ icon('x', 12) }}</a></span>{% endfor %}
+  {% if opts.hide_done %}<span class="chip"><span class="k">Masqués :</span> terminés<a href="?{{ qs(hide_done='0') }}">{{ icon('x', 12) }}</a></span>{% endif %}
+  <div class="legend right">
+    {% for g, lab, col in M.STATE_GROUPS %}<span><i style="background:{{ col }}"></i>{{ lab }}</span>{% endfor %}
+    <span><i class="lg-ms"></i>Jalon</span>
+    <span><i class="lg-arrow"></i>Dépendance</span>
+    <span><i class="lg-arrow bad"></i>Conflit de dates</span>
+    <span><i class="lg-late"></i>En retard</span>
+    <span><i class="lg-today"></i>Aujourd’hui</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+{% if not plan.rows %}
+{{ ui.empty('gantt', 'Rien à planifier', 'Aucun ticket ne correspond à ces filtres. Ajoute des dates de début et d’échéance aux tickets pour les voir sur la frise.') }}
+{% else %}
+<div class="pl" data-planning data-dw="{{ plan.dw }}" data-start="{{ plan.start.isoformat() }}" data-row-h="{{ plan.row_h }}"
+     data-deps='{{ plan.deps_min|tojson }}' data-scope="{{ project.id if project else 'ws' }}">
+  {# ------------------------------------------------ Colonne de gauche #}
+  <div class="pl-left">
+    <div class="pl-head" style="height:{{ head_h }}px"><span>{{ dict(GROUPS)[opts.group] if opts.group != 'none' else 'Tickets' }}</span><span class="muted tiny">{{ plan.dated }}/{{ plan.issue_count }} datés</span></div>
+    <div class="pl-left-b" data-pl-left>
+      {% for r in plan.rows %}
+      {% if r.kind == 'project' %}
+      <div class="pl-lrow pl-proj" data-row data-key="{{ r.key }}" data-parents="{{ r.parents }}">
+        <button type="button" class="pl-toggle" data-pl-toggle="{{ r.key }}">{{ icon('chevron-down', 14) }}</button>
+        <span>{{ r.project.emoji }}</span><a class="grow ellipsis bold" href="{{ url_for('planning.index', pid=r.project.id) }}">{{ r.title }}</a>
+        <span class="count-pill">{{ r.count }}</span><span class="muted tiny">{{ r.pct }} %</span>
+      </div>
+      {% elif r.kind == 'group' %}
+      <div class="pl-lrow pl-group" data-row data-key="{{ r.key }}" data-parents="{{ r.parents }}">
+        <button type="button" class="pl-toggle" data-pl-toggle="{{ r.key }}">{{ icon('chevron-down', 14) }}</button>
+        {% if r.gkind == 'user' %}{{ ui.avatar(r.obj, 18) }}{% elif r.gkind == 'cycle' %}{{ icon('cycle', 14) }}{% else %}<span style="color:{{ r.color }}">{{ icon('module', 14) }}</span>{% endif %}
+        {% if r.obj and r.gkind == 'module' %}<a class="grow ellipsis" href="{{ url_for('modules.detail', pid=r.project.id, mid=r.obj.id) }}" title="{{ r.title }}">{{ r.title }}</a>
+        {% elif r.obj and r.gkind == 'cycle' %}<a class="grow ellipsis" href="{{ url_for('cycles.detail', pid=r.project.id, cid=r.obj.id) }}" title="{{ r.title }}">{{ r.title }}</a>
+        {% elif r.obj and r.gkind == 'user' %}<a class="grow ellipsis" href="{{ url_for('team.profile', username=r.obj.username) }}">{{ r.title }}</a>
+        {% else %}<span class="grow ellipsis">{{ r.title }}</span>{% endif %}
+        {% if r.late %}<span class="badge badge-danger" title="En retard">{{ r.late }}</span>{% endif %}
+        <span class="count-pill">{{ r.count }}</span>
+        {{ ui.ring(r.pct, r.color) }}
+      </div>
+      {% else %}
+      {% set i = r.issue %}
+      <div class="pl-lrow pl-issue {% if i.is_closed %}done{% endif %}" data-row data-key="{{ r.key }}" data-parents="{{ r.parents }}">
+        {{ state_icon(i.state_group, i.state.color if i.state else None) }}
+        <span class="key">{{ i.key }}</span>
+        <a class="grow ellipsis" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}" title="{{ i.title }}">{% if r.milestone %}<span class="pl-ms-ic">◆</span> {% endif %}{{ i.title }}</a>
+        {% if i.assignees %}{{ ui.avatars(i.assignees, 18, 2) }}{% endif %}
+        <span class="pl-dates muted tiny" data-pl-dates="{{ i.id }}">{% if r.start %}{{ r.start|date }}{% if r.end and r.end != r.start %} → {{ r.end|date }}{% endif %}{% else %}—{% endif %}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ------------------------------------------------ Frise #}
+  <div class="pl-right" data-pl-right>
+    <div class="pl-canvas" style="width:{{ plan.width }}px">
+      <div class="pl-head-r" style="height:{{ head_h }}px">
+        <div class="pl-tier">{% for t in plan.top %}<div class="pl-tick top" style="left:{{ t.left }}px;width:{{ t.width }}px">{{ t.label }}</div>{% endfor %}</div>
+        <div class="pl-tier sub">{% for t in plan.sub %}<div class="pl-tick {% if t.we %}we{% endif %} {% if t.today %}now{% endif %}" style="left:{{ t.left }}px;width:{{ t.width }}px">{{ t.label }}</div>{% endfor %}</div>
+        {% if plan.bands %}
+        <div class="pl-bands" style="height:{{ plan.band_lanes * 18 + 6 }}px">
+          {% for b in plan.bands %}<a class="pl-band {% if b.current %}current{% endif %}" href="{{ url_for('cycles.detail', pid=b.project.id, cid=b.cycle.id) }}" style="left:{{ b.left }}px;width:{{ b.width }}px;top:{{ 3 + b.lane * 18 }}px" title="{{ b.label }} : {{ b.cycle.start_date|date }} → {{ b.cycle.end_date|date }}">{{ icon('cycle', 11) }} {{ b.label }}</a>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="pl-body" data-pl-body>
+        {% for w in plan.weekends %}<div class="pl-we" style="left:{{ w.left }}px;width:{{ w.width }}px"></div>{% endfor %}
+        {% for xline in plan.month_lines %}<div class="pl-mline" style="left:{{ xline }}px"></div>{% endfor %}
+        {% for b in plan.bands if b.current %}<div class="pl-cur-cycle" style="left:{{ b.left }}px;width:{{ b.width }}px"></div>{% endfor %}
+        {% if plan.today_left is not none %}<div class="pl-today" style="left:{{ plan.today_left }}px" data-pl-today-line></div>{% endif %}
+        <svg class="pl-arrows" data-pl-svg width="{{ plan.width }}" height="{{ plan.height }}">
+          <defs>
+            <marker id="pl-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="pl-arr-head"/></marker>
+            <marker id="pl-arr-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="pl-arr-head bad"/></marker>
+          </defs>
+          <g data-pl-paths>
+          {% for d in plan.deps %}<path class="pl-dep {% if d.violated %}bad{% endif %}" d="{{ d.path }}" data-from="{{ d.from }}" data-to="{{ d.to }}" marker-end="url(#{{ 'pl-arr-bad' if d.violated else 'pl-arr' }})"/>{% endfor %}
+          </g>
+        </svg>
+        {% for r in plan.rows %}
+        <div class="pl-row pl-row-{{ r.kind }}" data-row data-key="{{ r.key }}" data-parents="{{ r.parents }}">
+          {% if r.kind == 'project' and r.bar %}
+            <div class="pl-pbar" style="left:{{ r.bar.left }}px;width:{{ r.bar.width }}px;--c:{{ r.color }}" title="{{ r.title }} : {{ r.start|date(True) }} → {{ r.end|date(True) }}"><span style="width:{{ r.pct }}%"></span></div>
+          {% elif r.kind == 'group' and r.bar %}
+            <div class="pl-gbar" style="left:{{ r.bar.left }}px;width:{{ r.bar.width }}px;--c:{{ r.color }}" title="{{ r.title }} : {{ r.start|date(True) }} → {{ r.end|date(True) }} · {{ r.pct }} % terminé"><span style="width:{{ r.pct }}%"></span></div>
+            <span class="pl-glabel" style="left:{{ r.bar.left + r.bar.width + 6 }}px">{{ r.title }} · {{ r.pct }} %</span>
+          {% elif r.kind == 'issue' %}
+            {% set i = r.issue %}
+            {% if r.bar %}
+            <div class="pl-bar {% if r.milestone %}ms{% endif %} {% if i.is_closed %}done{% endif %} {% if i.is_overdue %}overdue{% endif %}"
+                 data-id="{{ i.id }}" data-start="{{ r.start.isoformat() }}" data-end="{{ r.end.isoformat() }}" data-url="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}"
+                 {% if i.project_id in editable %}data-editable="1"{% endif %} {% if r.milestone %}data-milestone="1"{% endif %}
+                 style="left:{{ r.bar.left }}px;width:{{ r.bar.width }}px;--c:{{ r.color }}"
+                 title="{{ i.key }} · {{ i.title }}&#10;{{ r.start|date(True) }}{% if r.end != r.start %} → {{ r.end|date(True) }}{% endif %} · {{ i.state.name if i.state }}{% if i.assignees %} · {{ i.assignees|map(attribute='display_name')|join(', ') }}{% endif %}">
+              {% if not r.milestone %}<span class="h l"></span><span class="h r"></span>{% endif %}
+            </div>
+            <span class="pl-label" data-pl-label="{{ i.id }}" style="left:{{ r.bar.left + r.bar.width + 6 }}px"><span class="key">{{ i.key }}</span> {{ i.title|truncate(60) }}{% if i.assignees %} {{ ui.avatars(i.assignees, 16, 3) }}{% endif %}</span>
+            {% else %}
+            <span class="pl-nodate">Sans dates — <a href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">planifier {{ i.key }}</a></span>
+            {% endif %}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

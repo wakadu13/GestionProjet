@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}À propos{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('help', 15) }} À propos</span></div></div>{% endblock %}
+{% block content %}
+<div class="settings">
+  {% include "settings/_nav.html" %}
+  <div class="settings-body">
+    <div class="flex gap-12 mb"><span class="auth-logo" style="margin:0"><span class="lg">{{ icon('plane', 20) }}</span></span><div><h2>Hangar {{ version }}</h2><div class="muted">Gestion de projet et d’équipe, 100 % locale — inspirée de Plane.</div></div></div>
+    <div class="panel panel-b md">
+      <h3>Fonctionnalités</h3>
+      <ul>
+        <li><b>Tickets</b> : états personnalisables, priorités, assignés multiples, étiquettes, dates, estimations, sous-tickets, relations (bloque / bloqué par / lié / doublon), liens, pièces jointes, commentaires avec réactions et mentions, historique complet, temps passé.</li>
+        <li><b>Vues</b> : liste, tableau kanban, tableur avec actions groupées, calendrier, Gantt — filtres, regroupements, tris, vues enregistrées.</li>
+        <li><b>Cycles</b> (sprints) avec burndown, <b>modules</b>, <b>intake</b> (triage des demandes), <b>pages</b> (wiki markdown, modèles, versions, import Word).</li>
+        <li><b>Équipe</b> : rôles, profils, charge de travail hebdomadaire, absences, analytique personnalisée.</li>
+        <li><b>Notifications</b>, favoris, pense-bêtes, palette de commandes (Ctrl+K), raccourcis clavier, thème sombre.</li>
+        <li><b>Données</b> : import/export Excel, CSV, JSON, Markdown, iCalendar ; sauvegardes ; API REST avec jetons.</li>
+      </ul>
+      <h3>Technique</h3>
+      <p>Python · Flask · SQLAlchemy · SQLite. Aucune ressource externe : l’application fonctionne hors connexion.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

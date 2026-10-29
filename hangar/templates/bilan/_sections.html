@@ -1,0 +1,183 @@
+{# Rendu d'un bilan à partir de son dictionnaire de données (direct ou instantané enregistré) #}
+{% import "macros.html" as ui %}
+
+
+{% macro issue_row(i, mode='target') %}
+<a class="mini-issue" href="{{ i.url }}">
+  {{ state_icon(i.state_group, i.state_color) }}
+  <span class="key">{{ i.key }}</span>
+  <span class="t">{{ i.title }}</span>
+  {% if i.assignees %}<span class="muted small nowrap ellipsis" style="max-width:180px">{{ i.assignees|join(', ') }}</span>{% endif %}
+  {% if mode == 'completed' %}<span class="small success-text nowrap">{{ icon('check', 12) }} {{ fmtiso(i.completed) }}</span>
+  {% elif mode == 'late' %}<span class="small danger-text nowrap">{{ i.days_late }} j de retard</span>
+  {% elif i.target %}<span class="small muted nowrap">{{ icon('flag', 12) }} {{ fmtiso(i.target) }}</span>{% endif %}
+</a>
+{% endmacro %}
+
+{% macro kpis(data) %}
+{% set k = data.kpis %}
+<div class="stats mb-lg">
+  <div class="stat accent">
+    <div class="v">{{ k.progress }} %</div>
+    <div class="l">{{ icon('target', 13) }} Avancement global ({{ k.done_total }}/{{ k.total }})</div>
+    <div class="progress accent mt" style="margin-top:8px"><span style="width:{{ k.progress }}%"></span></div>
+    {% if k.progress != k.progress_start and data.period.days < 400 %}<div class="tiny {% if k.progress > k.progress_start %}success-text{% else %}muted{% endif %}" style="margin-top:4px">{{ '+' if k.progress >= k.progress_start }}{{ k.progress - k.progress_start }} pts sur la période</div>{% endif %}
+  </div>
+  <div class="stat success"><div class="v">{{ k.completed }}</div><div class="l">{{ icon('check-circle', 13) }} Terminés sur la période</div></div>
+  <div class="stat"><div class="v">{{ k.created }}</div><div class="l">{{ icon('plus', 13) }} Créés sur la période</div></div>
+  <div class="stat"><div class="v">{{ k.in_progress }}</div><div class="l">{{ state_icon('started', None, 13) }} En cours</div></div>
+  <div class="stat {% if k.overdue %}danger{% endif %}"><div class="v">{{ k.overdue }}</div><div class="l">{{ icon('alert', 13) }} En retard</div></div>
+  <div class="stat {% if k.blocked %}danger{% endif %}"><div class="v">{{ k.blocked }}</div><div class="l">{{ icon('lock', 13) }} Bloqués</div></div>
+  <div class="stat"><div class="v">{{ k.time_minutes|minutes }}</div><div class="l">{{ icon('timer', 13) }} Temps saisi</div></div>
+</div>
+{% endmacro %}
+
+{% macro health(data) %}
+{% set h = data.health %}
+<div class="panel panel-b mb" style="border-left: 4px solid {{ h.color }}">
+  <div class="flex gap-12 wrap">
+    <span class="status-pill" style="color: {{ h.color }}; border-color: color-mix(in srgb, {{ h.color }} 40%, transparent); background: color-mix(in srgb, {{ h.color }} 10%, transparent); font-size:13px; height:26px"><span class="dot" style="background: {{ h.color }}"></span>Météo : {{ h.label }}</span>
+    <span class="text-2">{{ h.detail }}</span>
+    {% if h.elapsed is not none %}
+    <div class="right" style="min-width:220px">
+      <div class="tiny muted">Temps écoulé {{ h.elapsed }} % · tickets terminés {{ h.progress }} %</div>
+      <div style="position:relative;height:8px;background:var(--bg-3);border-radius:4px;margin-top:4px">
+        <span style="position:absolute;left:0;top:0;bottom:0;width:{{ h.progress }}%;background:var(--success);border-radius:4px"></span>
+        <span style="position:absolute;top:-3px;bottom:-3px;left:{{ h.elapsed }}%;width:2px;background:var(--text)" title="Aujourd’hui : {{ h.elapsed }} % du temps écoulé"></span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro manual_block(r, sections, keys) %}
+{% for key, lab in sections if key in keys and r[key] %}
+<div class="panel mb"><div class="panel-h">{{ icon({'highlights': 'zap', 'difficulties': 'alert', 'decisions': 'check-circle', 'next_steps': 'arrow-right'}[key], 16) }}<h3>{{ lab }}</h3></div><div class="panel-b md">{{ r[key]|md }}</div></div>
+{% endfor %}
+{% endmacro %}
+
+{% macro body(data) %}
+<div class="home-grid">
+  <div class="col" style="gap:20px">
+    {% if data.attention %}
+    <div class="panel">
+      <div class="panel-h"><span class="warning-text">{{ icon('alert', 16) }}</span><h3>Points d’attention</h3><span class="count-pill">{{ data.attention|length }}</span></div>
+      <div class="panel-b"><ul style="margin:0;padding-left:18px">{% for a in data.attention %}<li style="margin:4px 0">{{ a }}</li>{% endfor %}</ul></div>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <div class="panel-h"><span class="success-text">{{ icon('check-circle', 16) }}</span><h3>Réalisé sur la période</h3><span class="count-pill">{{ data.completed|length }}</span></div>
+      {% if data.completed %}
+        {% for mod, items in data.completed|groupby('module') %}
+        <div class="menu-h" style="padding:10px 14px 2px">{{ mod }} · {{ items|length }}</div>
+        {% for i in items %}{{ issue_row(i, 'completed') }}{% endfor %}
+        {% endfor %}
+      {% else %}<div class="empty sm">Aucun ticket terminé sur cette période.</div>{% endif %}
+    </div>
+
+    {% if data.in_progress %}
+    <div class="panel">
+      <div class="panel-h">{{ state_icon('started', None, 16) }}<h3>En cours</h3><span class="count-pill">{{ data.in_progress|length }}</span></div>
+      {% for i in data.in_progress %}{{ issue_row(i) }}{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if data.overdue %}
+    <div class="panel">
+      <div class="panel-h"><span class="danger-text">{{ icon('alert', 16) }}</span><h3>En retard</h3><span class="count-pill">{{ data.overdue|length }}</span></div>
+      {% for i in data.overdue %}{{ issue_row(i, 'late') }}{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if data.blocked %}
+    <div class="panel">
+      <div class="panel-h"><span class="danger-text">{{ icon('lock', 16) }}</span><h3>Bloqués</h3><span class="count-pill">{{ data.blocked|length }}</span></div>
+      {% for i in data.blocked %}
+      <a class="mini-issue" href="{{ i.url }}">{{ state_icon(i.state_group, i.state_color) }}<span class="key">{{ i.key }}</span><span class="t">{{ i.title }}</span><span class="small muted nowrap">bloqué par {{ i.blockers|join(', ') }}</span></a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if data.upcoming %}
+    <div class="panel">
+      <div class="panel-h">{{ icon('flag', 16) }}<h3>Prochaines échéances</h3><span class="muted small">14 jours</span></div>
+      {% for i in data.upcoming %}{{ issue_row(i) }}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col" style="gap:20px">
+    {% if data.milestones %}
+    <div class="panel">
+      <div class="panel-h">{{ icon('diamond', 16) }}<h3>Jalons</h3></div>
+      <div class="panel-b tight">
+        {% for m in data.milestones %}
+        <a class="mini-issue" href="{{ m.url }}">
+          <span style="color: {{ {'done': 'var(--success)', 'late': 'var(--danger)', 'upcoming': 'var(--text-3)'}[m.status] }}">{{ icon({'done': 'check-circle', 'late': 'alert', 'upcoming': 'clock'}[m.status], 15) }}</span>
+          <span class="t" title="{{ m.title }}">{{ m.title }}</span><span class="small muted nowrap">{{ fmtiso(m.target) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if data.modules %}
+    <div class="panel">
+      <div class="panel-h">{{ icon('module', 16) }}<h3>Avancement par module</h3></div>
+      <div class="panel-b">
+        {% for m in data.modules %}
+        <a href="{{ m.url }}" style="display:block;margin-bottom:10px">
+          <div class="flex gap small"><span class="grow ellipsis bold">{{ m.name }}</span>{% if m.late %}<span class="badge badge-danger">en retard</span>{% endif %}<span class="muted">{{ m.done }}/{{ m.total }}</span><b>{{ m.pct }} %</b></div>
+          <div class="progress" style="margin-top:4px"><span style="width:{{ m.pct }}%;background:{{ m.status_color }}"></span></div>
+          <div class="tiny muted" style="margin-top:2px">{{ m.status }}{% if m.target %} · échéance {{ fmtiso(m.target) }}{% endif %}</div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if data.cycles %}
+    <div class="panel">
+      <div class="panel-h">{{ icon('cycle', 16) }}<h3>Cycles de la période</h3></div>
+      <div class="panel-b">
+        {% for c in data.cycles %}
+        <a href="{{ c.url }}" style="display:block;margin-bottom:10px"><div class="flex gap small"><b class="grow">{{ c.name }}</b><span class="muted">{{ c.status }}</span><b>{{ c.pct }} %</b></div><div class="progress accent" style="margin-top:4px"><span style="width:{{ c.pct }}%"></span></div><div class="tiny muted">{{ fmtiso(c.start) }} → {{ fmtiso(c.end) }} · {{ c.done }}/{{ c.total }} terminés</div></a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if data.members %}
+    <div class="panel">
+      <div class="panel-h">{{ icon('users', 16) }}<h3>Contributions de l’équipe</h3></div>
+      <table class="table small">
+        <thead><tr><th>Membre</th><th class="num" title="Terminés sur la période">Fini</th><th class="num">Ouverts</th><th class="num" title="En retard">Retard</th><th class="num">Temps</th></tr></thead>
+        <tbody>
+        {% for m in data.members %}
+        <tr><td><a class="flex gap-4" href="{{ m.url }}"><span class="avatar" style="--av:{{ m.color }};width:18px;height:18px;font-size:8px">{{ m.initials }}</span>{{ m.name }}</a></td>
+          <td class="num {% if m.completed %}success-text bold{% endif %}">{{ m.completed }}</td><td class="num">{{ m.open }}</td>
+          <td class="num {% if m.overdue %}danger-text{% endif %}">{{ m.overdue }}</td><td class="num muted">{{ m.minutes|minutes if m.minutes else '—' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if data.documents %}
+    <div class="panel">
+      <div class="panel-h">{{ icon('page', 16) }}<h3>Documents produits ou mis à jour</h3></div>
+      {% for d in data.documents %}<a class="mini-issue" href="{{ d.url }}"><span>{{ d.emoji }}</span><span class="t">{{ d.title }}</span><span class="muted tiny">{{ fmtiso(d.updated) }}</span></a>{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if data.time_by_module %}
+    <div class="panel">
+      <div class="panel-h">{{ icon('timer', 16) }}<h3>Temps par module</h3></div>
+      <div class="panel-b">{% for t in data.time_by_module %}<div class="bar-row"><span class="ellipsis">{{ t.name }}</span><div class="progress accent"><span style="width:{{ (100 * t.minutes / data.time_by_module[0].minutes)|round|int }}%"></span></div><span class="n">{{ t.minutes|minutes }}</span></div>{% endfor %}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}

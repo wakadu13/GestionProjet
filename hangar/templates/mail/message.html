@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}{{ m.subject }}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><a href="{{ url_for('mail.settings') }}#history">{{ icon('mail', 15) }} E-mails</a><span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current ellipsis" style="max-width:420px">{{ m.subject }}</span></div>
+  <div class="header-actions">
+    <a class="btn btn-sm" href="{{ url_for('mail.message_eml', mid=m.id) }}">{{ icon('download', 14) }} Fichier .eml</a>
+    <form method="post" action="{{ url_for('mail.message_action', mid=m.id, action='resend') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-sm">{{ icon('refresh', 14) }} Renvoyer</button></form>
+    <form method="post" action="{{ url_for('mail.message_action', mid=m.id, action='delete') }}" class="inline-form" data-confirm="Supprimer ce message ?">{{ ui.csrf() }}<button class="btn btn-sm btn-danger-ghost">{{ icon('trash', 14) }}</button></form>
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:900px;margin:0 auto">
+  <div class="panel panel-b mb">
+    <table class="table">
+      <tr><td class="muted" style="width:140px">Objet</td><td><b>{{ m.subject }}</b></td></tr>
+      <tr><td class="muted">Destinataire</td><td>{{ m.to_address }}{% if m.to_user %} ({{ m.to_user.display_name }}){% endif %}</td></tr>
+      {% if m.reply_to %}<tr><td class="muted">Répondre à</td><td>{{ m.reply_to }}</td></tr>{% endif %}
+      <tr><td class="muted">Type</td><td>{{ KIND_LABELS.get(m.kind, m.kind) }}{% if m.created_by %} · par {{ m.created_by.display_name }}{% endif %}</td></tr>
+      <tr><td class="muted">Statut</td><td><span class="badge {{ {'sent': 'badge-success', 'outbox': 'badge-accent', 'failed': 'badge-danger', 'queued': 'badge-warning'}.get(m.status, '') }}">{{ STATUS_LABELS.get(m.status, m.status) }}</span>{% if m.sent_at %} <span class="muted small">le {{ m.sent_at|datetime }}</span>{% endif %}</td></tr>
+      {% if m.error %}<tr><td class="muted">Erreur</td><td class="danger-text small">{{ m.error }}</td></tr>{% endif %}
+      <tr><td class="muted">Créé</td><td>{{ m.created_at|datetime }}</td></tr>
+    </table>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>Aperçu</h3></div>
+    <iframe sandbox="" srcdoc="{{ m.body_html }}" style="width:100%;height:640px;border:0;border-radius:0 0 8px 8px;background:#f3f4f6"></iframe>
+  </div>
+  <details class="mt"><summary class="muted small" style="cursor:pointer">Version texte</summary><pre class="diff mt" style="white-space:pre-wrap">{{ m.body_text }}</pre></details>
+</div>
+{% endblock %}

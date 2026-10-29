@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}E-mails automatiques{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('mail', 15) }} E-mails automatiques</span></div>
+  <div class="header-actions"><a class="btn btn-sm btn-primary" href="{{ url_for('mail.compose') }}">{{ icon('send', 14) }} Écrire un e-mail</a></div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="settings">
+  {% include "settings/_nav.html" %}
+  <div class="settings-body">
+    <h2>E-mails automatiques</h2>
+    <p class="help">Notifications, rappels d’échéance, récapitulatif hebdomadaire et bilan envoyés par e-mail aux membres qui ont renseigné une adresse.</p>
+
+    <div class="stats mb">
+      <div class="stat {% if cfg.enabled %}success{% endif %}"><div class="v" style="font-size:18px">{{ 'Activés' if cfg.enabled else 'Désactivés' }}</div><div class="l">{{ icon('zap', 13) }} Envois automatiques</div></div>
+      <div class="stat"><div class="v" style="font-size:18px">{{ 'SMTP' if cfg.mode == 'smtp' else 'Locale' }}</div><div class="l">{{ icon('send', 13) }} {{ cfg.smtp_host if cfg.mode == 'smtp' and cfg.smtp_host else 'Boîte d’envoi locale' }}</div></div>
+      <div class="stat"><div class="v">{{ users|selectattr('contact_email')|list|length }}/{{ users|length }}</div><div class="l">{{ icon('users', 13) }} Membres avec adresse</div></div>
+      <div class="stat {% if counts.get('failed') %}danger{% endif %}"><div class="v">{{ counts.get('queued', 0) }} · {{ counts.get('failed', 0) }}</div><div class="l">{{ icon('clock', 13) }} En attente · en échec</div></div>
+    </div>
+
+    {% if cfg.mode != 'smtp' %}
+    <div class="danger-zone" style="border-color:var(--accent);background:var(--accent-bg)">
+      <b>{{ icon('shield', 15) }} Mode « Boîte d’envoi locale » : rien ne quitte cet ordinateur.</b>
+      <p class="help mt-0" style="margin-top:4px">Chaque e-mail est enregistré en fichier <code>.eml</code> dans <code>{{ outbox_path }}</code> — tu peux l’ouvrir avec Thunderbird, Outlook ou l’application Mail pour le relire ou le transférer. Passe en mode SMTP pour un envoi réel.</p>
+    </div>
+    {% endif %}
+
+    <form method="post" class="panel panel-b mb-lg" id="config">
+      {{ ui.csrf() }}<input type="hidden" name="action" value="config">
+      <h3 class="mb">{{ icon('settings', 15) }} Envoi</h3>
+      <label class="switch mb"><input type="checkbox" name="enabled" value="1" {% if cfg.enabled %}checked{% endif %}> Activer les e-mails automatiques (notifications, rappels, récapitulatifs, bilan)</label>
+      <div class="field"><label>Mode d’envoi</label>
+        <div class="flex gap-16 wrap">
+          <label class="checkbox"><input type="radio" name="mode" value="outbox" {% if cfg.mode != 'smtp' %}checked{% endif %} data-mail-mode> Boîte d’envoi locale (fichiers .eml, aucun envoi réel)</label>
+          <label class="checkbox"><input type="radio" name="mode" value="smtp" {% if cfg.mode == 'smtp' %}checked{% endif %} data-mail-mode> Serveur SMTP (envoi réel)</label>
+        </div>
+      </div>
+      <div data-smtp-fields {% if cfg.mode != 'smtp' %}hidden{% endif %}>
+        <div class="field"><label>Préréglages</label>
+          <div class="flex wrap gap-4">{% for k, p in presets.items() %}<button type="button" class="btn btn-sm" data-preset="{{ k }}" data-host="{{ p.host }}" data-port="{{ p.port }}" data-security="{{ p.security }}" data-note="{{ p.note }}">{{ p.label }}</button>{% endfor %}</div>
+          <span class="help" data-preset-note></span>
+        </div>
+        <div class="grid-3">
+          <div class="field" style="grid-column: span 2"><label>Serveur SMTP</label><input class="input" name="smtp_host" value="{{ cfg.smtp_host or '' }}" placeholder="smtp.exemple.fr"></div>
+          <div class="field"><label>Port</label><input class="input" type="number" name="smtp_port" value="{{ cfg.smtp_port or 587 }}"></div>
+        </div>
+        <div class="grid-3">
+          <div class="field"><label>Sécurité</label><select class="input" name="smtp_security">{% for k, lab in [('starttls', 'STARTTLS (587)'), ('ssl', 'SSL/TLS (465)'), ('none', 'Aucune')] %}<option value="{{ k }}" {% if cfg.smtp_security == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
+          <div class="field"><label>Identifiant SMTP</label><input class="input" name="smtp_user" value="{{ cfg.smtp_user or '' }}" autocomplete="off"></div>
+          <div class="field"><label>Mot de passe SMTP</label><input class="input" type="password" name="smtp_password" placeholder="{{ '•••••••• (inchangé)' if cfg.smtp_password else '' }}" autocomplete="new-password">
+            {% if cfg.smtp_password %}<label class="checkbox small mt-0" style="margin-top:4px"><input type="checkbox" name="clear_password" value="1"> Effacer le mot de passe enregistré</label>{% endif %}</div>
+        </div>
+        <p class="help mb">{{ icon('alert', 12) }} Le mot de passe est stocké en clair dans la base locale (<code>data/hangar.db</code>). Préfère un mot de passe d’application dédié.</p>
+      </div>
+      <div class="grid-3">
+        <div class="field"><label>Nom de l’expéditeur</label><input class="input" name="from_name" value="{{ cfg.from_name or 'Hangar' }}"></div>
+        <div class="field"><label>Adresse d’expédition</label><input class="input" type="email" name="from_address" value="{{ cfg.from_address or '' }}" placeholder="projet@exemple.fr"></div>
+        <div class="field"><label>Adresse de Hangar (liens)</label><input class="input" name="base_url" value="{{ cfg.base_url or 'http://127.0.0.1:5000' }}"><span class="help">Ex. http://192.168.1.20:5000 si partagé sur le réseau.</span></div>
+      </div>
+
+      <h3 class="mb mt">{{ icon('clock', 15) }} Automatisations</h3>
+      <div class="col" style="gap:10px">
+        <label class="switch"><input type="checkbox" name="send_notifications" value="1" {% if cfg.send_notifications %}checked{% endif %}> <span><b>Notifications instantanées</b> — assignation, mention, commentaire, changement sur un ticket suivi</span></label>
+        <div class="flex gap wrap"><label class="switch"><input type="checkbox" name="send_reminders" value="1" {% if cfg.send_reminders %}checked{% endif %}> <span><b>Rappels d’échéance</b> chaque jour à</span></label>
+          <select class="input input-sm" name="reminder_hour" style="width:auto">{% for h in range(5, 23) %}<option value="{{ h }}" {% if cfg.reminder_hour == h %}selected{% endif %}>{{ h }} h</option>{% endfor %}</select>
+          <span class="help">tickets en retard, à rendre aujourd’hui ou demain</span></div>
+        <div class="flex gap wrap"><label class="switch"><input type="checkbox" name="send_digest" value="1" {% if cfg.send_digest %}checked{% endif %}> <span><b>Récapitulatif hebdomadaire</b> le</span></label>
+          <select class="input input-sm" name="digest_weekday" style="width:auto">{% for d in WEEKDAYS %}<option value="{{ loop.index0 }}" {% if cfg.digest_weekday == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select>
+          <span class="help">à l’heure des rappels</span></div>
+        <div class="flex gap wrap"><label class="switch"><input type="checkbox" name="send_bilan" value="1" {% if cfg.send_bilan %}checked{% endif %}> <span><b>Bilan de la semaine</b> aux responsables le</span></label>
+          <select class="input input-sm" name="bilan_weekday" style="width:auto">{% for d in WEEKDAYS %}<option value="{{ loop.index0 }}" {% if cfg.bilan_weekday == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select>
+          <span>à</span><select class="input input-sm" name="bilan_hour" style="width:auto">{% for h in range(6, 23) %}<option value="{{ h }}" {% if cfg.bilan_hour == h %}selected{% endif %}>{{ h }} h</option>{% endfor %}</select></div>
+      </div>
+      <p class="help mt">Les envois planifiés partent pendant que Hangar tourne (vérification toutes les 30 s). Dernier rappel : {{ cfg.last_reminder_date|date(True) if cfg.last_reminder_date else 'jamais' }} · récapitulatif : {{ cfg.last_digest_date|date(True) if cfg.last_digest_date else 'jamais' }} · bilan : {{ cfg.last_bilan_date|date(True) if cfg.last_bilan_date else 'jamais' }}.</p>
+      <div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>
+    </form>
+
+    <div class="grid-2 mb-lg" style="gap:16px">
+      <form method="post" class="panel panel-b" id="test">
+        {{ ui.csrf() }}<input type="hidden" name="action" value="test">
+        <h3 class="mb">{{ icon('send', 15) }} E-mail de test</h3>
+        <div class="flex gap"><input class="input" type="email" name="address" value="{{ current_user.contact_email or '' }}" placeholder="ton.adresse@exemple.fr" required><button class="btn">Envoyer</button></div>
+      </form>
+      <div class="panel panel-b" id="run">
+        <h3 class="mb">{{ icon('play', 15) }} Envoyer maintenant</h3>
+        <div class="flex wrap gap-4">
+          {% for job, lab in [('reminders', 'Rappels'), ('digest', 'Récapitulatifs'), ('bilan', 'Bilans')] %}
+          <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job }}"><button class="btn btn-sm">{{ lab }}</button></form>
+          {% endfor %}
+          <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="flush"><button class="btn btn-sm btn-ghost">Traiter la file</button></form>
+        </div>
+        <p class="help mt-0" style="margin-top:6px">Envoie immédiatement, sans attendre le jour prévu.</p>
+      </div>
+    </div>
+
+    <h2 id="members">Adresses des membres</h2>
+    <p class="help">Utilisées uniquement pour les e-mails (la connexion reste par identifiant). Chacun peut aussi la renseigner dans « Mon profil ».</p>
+    <form method="post" class="panel mb-lg">
+      {{ ui.csrf() }}<input type="hidden" name="action" value="members">
+      <table class="table">
+        <thead><tr><th>Membre</th><th>Adresse e-mail</th><th>Préférence</th></tr></thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ ui.user_chip(u) }}</td>
+          <td><input class="input input-sm" type="email" name="email_{{ u.id }}" value="{{ u.contact_email or '' }}" placeholder="aucune" style="max-width:280px"></td>
+          <td><select class="input input-sm" name="prefs_{{ u.id }}" style="width:auto">{% for k, lab in [('instant', 'Instantané'), ('digest', 'Récapitulatif seul'), ('off', 'Aucun e-mail')] %}<option value="{{ k }}" {% if (u.email_prefs or 'instant') == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="panel-b"><div class="form-actions" style="margin:0"><button class="btn btn-primary">Enregistrer les adresses</button></div></div>
+    </form>
+
+    <div class="flex gap mb" id="history"><h2 class="grow">Historique et boîte d’envoi</h2>
+      <form method="post" class="inline-form" data-confirm="Vider l’historique et supprimer les fichiers .eml de la boîte d’envoi ? (les messages en attente sont conservés)">{{ ui.csrf() }}<input type="hidden" name="action" value="clear"><button class="btn btn-sm btn-danger-ghost">{{ icon('trash', 14) }} Vider la boîte d’envoi</button></form>
+    </div>
+    <div class="panel">
+      <table class="table">
+        <thead><tr><th>Date</th><th>Type</th><th>Destinataire</th><th>Objet</th><th>Statut</th><th></th></tr></thead>
+        <tbody>
+        {% for m in history %}
+        <tr>
+          <td class="muted nowrap">{{ m.created_at|datetime }}</td>
+          <td><span class="badge">{{ KIND_LABELS.get(m.kind, m.kind) }}</span></td>
+          <td class="ellipsis" style="max-width:200px">{{ m.to_address }}</td>
+          <td class="ellipsis" style="max-width:320px"><a href="{{ url_for('mail.message', mid=m.id) }}">{{ m.subject }}</a></td>
+          <td><span class="badge {{ {'sent': 'badge-success', 'outbox': 'badge-accent', 'failed': 'badge-danger', 'queued': 'badge-warning'}.get(m.status, '') }}" {% if m.error %}title="{{ m.error }}"{% endif %}>{{ STATUS_LABELS.get(m.status, m.status) }}</span></td>
+          <td class="right nowrap">
+            <a class="btn btn-xs btn-ghost btn-icon" href="{{ url_for('mail.message', mid=m.id) }}" title="Voir">{{ icon('eye', 13) }}</a>
+            <form method="post" action="{{ url_for('mail.message_action', mid=m.id, action='resend') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs btn-ghost btn-icon" title="Renvoyer">{{ icon('refresh', 13) }}</button></form>
+            <form method="post" action="{{ url_for('mail.message_action', mid=m.id, action='delete') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs btn-ghost btn-icon" title="Supprimer">{{ icon('trash', 13) }}</button></form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">Aucun e-mail pour l’instant.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const fields = document.querySelector('[data-smtp-fields]');
+  document.querySelectorAll('[data-mail-mode]').forEach((r) => r.addEventListener('change', () => { fields.hidden = r.value !== 'smtp' || !r.checked; }));
+  document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
+    const f = b.closest('form');
+    f.smtp_host.value = b.dataset.host; f.smtp_port.value = b.dataset.port; f.smtp_security.value = b.dataset.security;
+    document.querySelector('[data-preset-note]').textContent = b.dataset.note;
+    f.smtp_user.focus();
+  }));
+})();
+</script>
+{% endblock %}

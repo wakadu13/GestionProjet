@@ -1,0 +1,468 @@
+{# Mises en page des tickets : liste, tableau, tableur, calendrier, Gantt + barre d'outils #}
+{% import "macros.html" as ui with context %}
+{% import "issues/_props.html" as P with context %}
+
+{% macro edit_map(projects) -%}
+{%- set ns = namespace(ids=[]) -%}
+{%- for p in projects -%}{%- if can(current_user, 'edit', p) -%}{%- set ns.ids = ns.ids + [p.id] -%}{%- endif -%}{%- endfor -%}
+{{ ns.ids|join(',') }}
+{%- endmacro %}
+
+{# ------------------------------------------------------------------ Barre d'outils #}
+
+{% macro layout_switch(opts, allowed=None) %}
+<div class="seg" role="tablist" title="Disposition">
+  {% for k, label, ic in IQ.LAYOUTS if not allowed or k in allowed %}
+  <a href="?{{ qs(layout=k) }}" class="{% if opts.layout == k %}active{% endif %}" title="{{ label }}">{{ icon(ic, 15) }}</a>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro hidden_keep(keys) %}
+{% for k in keys %}{% for v in request.args.getlist(k) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endfor %}
+{% endmacro %}
+
+{% macro opt_check(name, value, checked, label) %}
+<label class="opt" data-opt-text="{{ label|lower }}"><input type="checkbox" name="{{ name }}" value="{{ value }}" {% if checked %}checked{% endif %}>{{ caller() if caller else '' }}<span class="ellipsis">{{ label }}</span></label>
+{% endmacro %}
+
+{% macro filter_menu(filters, projects, opts, hide=()) %}
+{% set single = projects|length == 1 %}
+{% set active = filters|length - (1 if 'q' in filters else 0) %}
+<div class="dd">
+  <button class="btn btn-sm {% if active %}active{% endif %}" type="button" data-menu>{{ icon('filter', 14) }} Filtres{% if active %} <span class="count-pill">{{ active }}</span>{% endif %}</button>
+  <form class="menu panel-menu" method="get" data-filter-form>
+    {{ hidden_keep(['layout', 'group_by', 'order_by', 'sub_issues', 'show_closed', 'scope', 'month', 'zoom']) }}
+    <div class="pm-search"><input class="input input-sm" type="search" placeholder="Filtrer les options…" data-opt-filter></div>
+    <div class="pm-section">
+      <div class="pm-h">Recherche</div>
+      <input class="input input-sm" type="text" name="q" value="{{ filters.get('q', '') }}" placeholder="Titre, description ou clé (EAE-12)">
+    </div>
+    <div class="pm-section">
+      <div class="pm-h">Priorité</div>
+      {% for k, lab, col in M.PRIORITIES %}{% call opt_check('priority', k, k in filters.get('priority', []), lab) %}{{ priority_icon(k) }}{% endcall %}{% endfor %}
+    </div>
+    <div class="pm-section">
+      <div class="pm-h">{{ 'État' if single else 'Groupe d’état' }}</div>
+      {% if single %}
+        {% for s in projects[0].states %}{% call opt_check('state', s.id, s.id|string in filters.get('state', []), s.name) %}{{ state_icon(s.group, s.color) }}{% endcall %}{% endfor %}
+      {% else %}
+        {% for g, lab, col in M.STATE_GROUPS %}{% call opt_check('state_group', g, g in filters.get('state_group', []), lab) %}{{ state_icon(g) }}{% endcall %}{% endfor %}
+      {% endif %}
+    </div>
+    {% if single %}
+    <div class="pm-section">
+      <div class="pm-h">Groupe d’état</div>
+      {% for g, lab, col in M.STATE_GROUPS %}{% call opt_check('state_group', g, g in filters.get('state_group', []), lab) %}{{ state_icon(g) }}{% endcall %}{% endfor %}
+    </div>
+    {% endif %}
+    {% set members = {} %}
+    {% for p in projects %}{% for u in p.member_users %}{% do members.update({u.id: u}) %}{% endfor %}{% endfor %}
+    {% if 'assignee' not in hide %}
+    <div class="pm-section">
+      <div class="pm-h">Assigné à</div>
+      {% call opt_check('assignee', 'me', 'me' in filters.get('assignee', []), 'Moi') %}{{ ui.avatar(current_user, 18) }}{% endcall %}
+      {% call opt_check('assignee', 'none', 'none' in filters.get('assignee', []), 'Non assigné') %}{{ ui.avatar(None, 18) }}{% endcall %}
+      {% for u in members.values()|sort(attribute='display_name') %}{% call opt_check('assignee', u.id, u.id|string in filters.get('assignee', []), u.display_name) %}{{ ui.avatar(u, 18) }}{% endcall %}{% endfor %}
+    </div>
+    {% endif %}
+    <div class="pm-section">
+      <div class="pm-h">Échéance</div>
+      {% for k, lab in IQ.DATE_PRESETS %}{% call opt_check('target', k, k in filters.get('target', []), lab) %}{{ icon('flag', 13) }}{% endcall %}{% endfor %}
+    </div>
+    <div class="pm-section">
+      <div class="pm-h">Date de début</div>
+      {% for k, lab in IQ.DATE_PRESETS %}{% call opt_check('start', k, k in filters.get('start', []), lab) %}{{ icon('calendar', 13) }}{% endcall %}{% endfor %}
+    </div>
+    <div class="pm-section">
+      <div class="pm-h">Étiquettes</div>
+      {% call opt_check('label', 'none', 'none' in filters.get('label', []), 'Sans étiquette') %}<span class="dot" style="background:var(--border)"></span>{% endcall %}
+      {% for p in projects %}{% for l in p.labels %}{% call opt_check('label', l.id, l.id|string in filters.get('label', []), l.name ~ ('' if single else ' · ' ~ p.identifier)) %}<span class="dot" style="background:{{ l.color }}"></span>{% endcall %}{% endfor %}{% endfor %}
+    </div>
+    {% if 'cycle' not in hide %}
+    <div class="pm-section">
+      <div class="pm-h">Cycle</div>
+      {% call opt_check('cycle', 'none', 'none' in filters.get('cycle', []), 'Sans cycle') %}{{ icon('cycle', 13) }}{% endcall %}
+      {% for p in projects if p.cycles_enabled %}{% for c in p.cycles if not c.archived_at %}{% call opt_check('cycle', c.id, c.id|string in filters.get('cycle', []), c.name ~ ('' if single else ' · ' ~ p.identifier)) %}{{ icon('cycle', 13) }}{% endcall %}{% endfor %}{% endfor %}
+    </div>
+    {% endif %}
+    {% if 'module' not in hide %}
+    <div class="pm-section">
+      <div class="pm-h">Module</div>
+      {% call opt_check('module', 'none', 'none' in filters.get('module', []), 'Sans module') %}{{ icon('module', 13) }}{% endcall %}
+      {% for p in projects if p.modules_enabled %}{% for m in p.modules if not m.archived_at %}{% call opt_check('module', m.id, m.id|string in filters.get('module', []), m.name ~ ('' if single else ' · ' ~ p.identifier)) %}{{ icon('module', 13) }}{% endcall %}{% endfor %}{% endfor %}
+    </div>
+    {% endif %}
+    <div class="pm-section">
+      <div class="pm-h">Créé par</div>
+      {% call opt_check('created_by', 'me', 'me' in filters.get('created_by', []), 'Moi') %}{{ ui.avatar(current_user, 18) }}{% endcall %}
+      {% for u in members.values()|sort(attribute='display_name') %}{% call opt_check('created_by', u.id, u.id|string in filters.get('created_by', []), u.display_name) %}{{ ui.avatar(u, 18) }}{% endcall %}{% endfor %}
+    </div>
+    {% if not single %}
+    <div class="pm-section">
+      <div class="pm-h">Projet</div>
+      {% for p in projects %}{% call opt_check('project', p.id, p.id|string in filters.get('project', []), p.name) %}<span>{{ p.emoji }}</span>{% endcall %}{% endfor %}
+    </div>
+    {% endif %}
+    <div class="pm-section">
+      {% call opt_check('subscribed', '1', 'subscribed' in filters, 'Tickets que je suis') %}{{ icon('bell', 13) }}{% endcall %}
+    </div>
+    <div class="pm-foot">
+      <a class="btn btn-sm btn-ghost" href="?{{ qs(**dict.fromkeys(IQ.FILTER_KEYS + ['q', 'view'])) }}">Réinitialiser</a>
+      <button class="btn btn-sm btn-primary">Appliquer</button>
+    </div>
+  </form>
+</div>
+{% endmacro %}
+
+{% macro display_menu(opts, allow_group=True, multi=False) %}
+<div class="dd">
+  <button class="btn btn-sm" type="button" data-menu>{{ icon('sliders', 14) }} Affichage</button>
+  <form class="menu panel-menu" method="get" style="width:300px">
+    {{ hidden_keep(IQ.FILTER_KEYS + ['q', 'layout', 'scope', 'month', 'view']) }}
+    {% if allow_group and opts.layout in ('list', 'board') %}
+    <div class="pm-section">
+      <div class="pm-h">Regrouper par</div>
+      <select class="input input-sm" name="group_by" data-autosubmit>
+        {% for k, lab in IQ.GROUP_OPTIONS if not (multi and k == 'state') and not (not multi and k == 'project') %}
+        <option value="{{ k }}" {% if opts.group_by == k or (multi and k == 'state_group' and opts.group_by == 'state') %}selected{% endif %}>{{ lab }}</option>
+        {% endfor %}
+        {% if multi %}<option value="state_group" {% if opts.group_by == 'state_group' %}selected{% endif %}>Groupe d’état</option>{% endif %}
+      </select>
+    </div>
+    {% else %}<input type="hidden" name="group_by" value="{{ opts.group_by }}">{% endif %}
+    <div class="pm-section">
+      <div class="pm-h">Trier par</div>
+      <select class="input input-sm" name="order_by" data-autosubmit>
+        {% for k, lab in IQ.ORDER_OPTIONS %}<option value="{{ k }}" {% if opts.order_by == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+      </select>
+    </div>
+    {% if opts.layout == 'gantt' %}
+    <div class="pm-section">
+      <div class="pm-h">Échelle</div>
+      <select class="input input-sm" name="zoom" data-autosubmit>
+        {% for k, lab in [('day', 'Jours'), ('week', 'Semaines'), ('month', 'Mois')] %}<option value="{{ k }}" {% if opts.zoom == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="pm-section">
+      <label class="opt switch"><input type="checkbox" name="sub_issues" value="1" {% if opts.sub_issues %}checked{% endif %} data-autosubmit> Afficher les sous-tickets</label><input type="hidden" name="sub_issues" value="0">
+      <label class="opt switch"><input type="checkbox" name="show_closed" value="1" {% if opts.show_closed %}checked{% endif %} data-autosubmit> Afficher les tickets terminés / annulés</label><input type="hidden" name="show_closed" value="0">
+    </div>
+    {% if opts.layout in ('list', 'board', 'spreadsheet') %}
+    <div class="pm-section">
+      <div class="pm-h">Propriétés affichées</div>
+      <div class="flex wrap gap-4">
+      {% for k, lab in [('key', 'Identifiant'), ('state', 'État'), ('priority', 'Priorité'), ('assignees', 'Assignés'), ('labels', 'Étiquettes'), ('start', 'Début'), ('target', 'Échéance'), ('estimate', 'Estimation'), ('cycle', 'Cycle'), ('modules', 'Modules'), ('sub', 'Sous-tickets')] %}
+        <button type="button" class="btn btn-xs" data-prop-toggle="{{ k }}">{{ lab }}</button>
+      {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </form>
+</div>
+{% endmacro %}
+
+{% macro chips_bar(chips, extra='') %}
+{% if chips or extra %}
+<div class="subbar">
+  {% for c in chips %}
+  <span class="chip"><span class="k">{{ c.name }} :</span> {{ c.label }}<a href="?{{ IQ.remove_filter_value(request.args, c.key, c.value) }}" title="Retirer">{{ icon('x', 12) }}</a></span>
+  {% endfor %}
+  {% if request.args.get('q') %}<span class="chip"><span class="k">Recherche :</span> « {{ request.args.get('q') }} »<a href="?{{ qs(q=None) }}">{{ icon('x', 12) }}</a></span>{% endif %}
+  {% if chips %}<a class="btn btn-xs btn-ghost" href="?{{ qs(**dict.fromkeys(IQ.FILTER_KEYS + ['q', 'view'])) }}">Tout effacer</a>{% endif %}
+  {{ extra }}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro save_view_button(project=None, view=None) %}
+<button class="btn btn-sm btn-ghost" type="button" data-open="save-view-modal" title="Enregistrer comme vue">{{ icon('eye', 14) }}<span class="hide-sm">Enregistrer la vue</span></button>
+<dialog class="modal sm" id="save-view-modal">
+  <form method="post" action="{{ url_for('saved_views.save') }}">
+    {{ ui.csrf() }}
+    {% if project %}<input type="hidden" name="project_id" value="{{ project.id }}">{% endif %}
+    <input type="hidden" name="query" value="{{ request.query_string.decode() }}">
+    <div class="modal-h"><h2>Enregistrer la vue</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <p class="help">Les filtres et l’affichage actuels sont mémorisés {% if project %}dans le projet {{ project.name }}{% else %}au niveau de l’espace{% endif %}.</p>
+      <div class="field"><label>Nom</label><input class="input" name="name" required placeholder="Ex. Tickets bloquants de la semaine" value="{{ view.name if view else '' }}"></div>
+      <div class="field"><label>Description</label><input class="input" name="description" value="{{ view.description if view else '' }}"></div>
+      <label class="checkbox"><input type="checkbox" name="is_public" value="1" checked> Visible par toute l’équipe</label><input type="hidden" name="is_public" value="0">
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Enregistrer</button></div></div>
+  </form>
+</dialog>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Liste #}
+
+{% macro list_row(i, opts, eds, show_project=False, in_sub=False) %}
+{% set e = i.project_id|string in eds.split(',') %}
+<div class="lrow {% if i.is_closed %}done{% endif %}" data-id="{{ i.id }}" {% if e %}draggable="true"{% endif %}>
+  <span class="grip">{{ icon('grip', 14) }}</span>
+  <a class="key" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">{{ i.key }}</a>
+  <a class="title" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}" title="{{ i.title }}">{% if i.parent and not in_sub %}<span class="muted small">{{ i.parent.key }} › </span>{% endif %}{{ i.title }}</a>
+  {% set cp = i.children_progress %}{% if cp %}<span class="sub-ind" title="Sous-tickets terminés">{{ icon('subissue', 12) }}{{ cp.done }}/{{ cp.total }}</span>{% endif %}
+  {% if show_project %}<span class="proj-badge">{{ i.project.emoji }} {{ i.project.identifier }}</span>{% endif %}
+  <div class="props">
+    {{ P.prop(i, 'state', e) }}
+    {{ P.prop(i, 'priority', e) }}
+    {{ P.prop(i, 'assignees', e) }}
+    {{ P.prop(i, 'labels', e) }}
+    {{ P.date_prop(i, 'start_date', e) }}
+    {{ P.date_prop(i, 'target_date', e) }}
+    {{ P.prop(i, 'estimate', e) }}
+    {{ P.prop(i, 'cycle', e) }}
+    {{ P.prop(i, 'modules', e) }}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro quick_add(project_id, opts, group_key, extra={}) %}
+{% if project_id %}
+<div class="quick-add" data-quick-add data-project="{{ project_id }}" data-group-by="{{ opts.group_by }}" data-group-key="{{ group_key }}" {% for k, v in extra.items() %}data-{{ k }}="{{ v }}"{% endfor %}>
+  <button type="button" class="qa-open">{{ icon('plus', 14) }} Nouveau ticket</button>
+  <form><input class="input input-sm grow" name="title" placeholder="Titre du ticket puis Entrée (Échap pour annuler)" autocomplete="off"><button class="btn btn-sm btn-primary">Ajouter</button></form>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro list_view(groups, opts, projects, quick={}, show_project=False) %}
+{% set eds = edit_map(projects) %}
+{% set single_pid = projects[0].id if projects|length == 1 else None %}
+<div class="list-view" data-issues-root data-dnd-root data-group-by="{{ opts.group_by }}" data-dnd="{{ 1 if opts.group_by in IQ.DND_GROUPS else 0 }}">
+  {% for g in groups %}
+  <section class="lgroup" data-group-key="{{ g.key }}" data-collapse-key="{{ request.path }}:{{ opts.group_by }}:{{ g.key }}">
+    <header class="lgroup-h">
+      <button type="button" class="toggle" data-collapse>{{ icon('chevron-down', 14) }}</button>
+      {{ ui.group_icon(g) }}<span>{{ g.title }}</span><span class="count-pill">{{ g.issues|length }}</span>
+      {% set qp = single_pid or (g.obj.id if g.kind == 'project' else None) %}
+      {% if qp and qp|string in eds.split(',') %}
+      <div class="gh-actions"><button type="button" class="btn btn-ghost btn-icon btn-xs" data-quick-open title="Ajouter un ticket">{{ icon('plus', 14) }}</button></div>
+      {% endif %}
+    </header>
+    <div class="lgroup-body" data-drop>
+      {% for i in g.issues %}{{ list_row(i, opts, eds, show_project) }}{% endfor %}
+    </div>
+    {% if qp and qp|string in eds.split(',') %}{{ quick_add(qp, opts, g.key, quick) }}{% endif %}
+  </section>
+  {% else %}
+  {{ ui.empty('layers', 'Aucun ticket', 'Aucun ticket ne correspond à ces critères.') }}
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Tableau kanban #}
+
+{% macro board_card(i, opts, e, show_project=False) %}
+<div class="bcard" data-id="{{ i.id }}" {% if e %}draggable="true"{% endif %}>
+  <div class="bcard-top">
+    <span class="key">{{ i.key }}</span>
+    {% if show_project %}<span class="muted tiny">{{ i.project.emoji }}</span>{% endif %}
+    {% if i.blockers %}<span class="blocked" title="Bloqué par {{ i.blockers|map(attribute='key')|join(', ') }}">{{ icon('lock', 12) }}</span>{% endif %}
+    {% set cp = i.children_progress %}{% if cp %}<span class="sub-ind muted tiny flex gap-4">{{ icon('subissue', 12) }}{{ cp.done }}/{{ cp.total }}</span>{% endif %}
+  </div>
+  <a class="bcard-title" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">{{ i.title }}</a>
+  <div class="bcard-props">
+    {% if opts.group_by != 'state' %}{{ P.prop(i, 'state', e) }}{% endif %}
+    {% if opts.group_by != 'priority' %}{{ P.prop(i, 'priority', e) }}{% endif %}
+    {{ P.date_prop(i, 'target_date', e) }}
+    {% if i.labels %}{{ P.prop(i, 'labels', e) }}{% endif %}
+    {% if i.estimate is not none %}{{ P.prop(i, 'estimate', e) }}{% endif %}
+    {% if i.modules and opts.group_by != 'module' %}{{ P.prop(i, 'modules', e) }}{% endif %}
+    {{ P.prop(i, 'assignees', e, 'right') }}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro board_view(groups, opts, projects, quick={}, show_project=False) %}
+{% set eds = edit_map(projects) %}
+{% set single_pid = projects[0].id if projects|length == 1 else None %}
+<div class="board" data-issues-root data-dnd-root data-group-by="{{ opts.group_by }}" data-dnd="{{ 1 if opts.group_by in IQ.DND_GROUPS else 0 }}">
+  {% for g in groups %}
+  <div class="bcol" data-group-key="{{ g.key }}" data-collapse-key="{{ request.path }}:b:{{ opts.group_by }}:{{ g.key }}">
+    <div class="bcol-h">
+      {{ ui.group_icon(g) }}<span class="title">{{ g.title }}</span><span class="count-pill">{{ g.issues|length }}</span>
+      <div class="gh-actions">
+        {% set qp = single_pid or (g.obj.id if g.kind == 'project' else None) %}
+        {% if qp and qp|string in eds.split(',') %}<button type="button" class="btn btn-ghost btn-icon btn-xs" data-quick-open title="Ajouter">{{ icon('plus', 14) }}</button>{% endif %}
+        <button type="button" class="btn btn-ghost btn-icon btn-xs" data-collapse title="Replier">{{ icon('chevron-left', 14) }}</button>
+      </div>
+    </div>
+    <div class="bcol-body" data-drop>
+      {% for i in g.issues %}{{ board_card(i, opts, i.project_id|string in eds.split(','), show_project) }}{% endfor %}
+    </div>
+    {% if qp and qp|string in eds.split(',') %}{{ quick_add(qp, opts, g.key, quick) }}{% endif %}
+  </div>
+  {% else %}
+  {{ ui.empty('kanban', 'Aucun ticket') }}
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Tableur #}
+
+{% macro sheet_view(issues, opts, projects, show_project=False) %}
+{% set eds = edit_map(projects) %}
+{% set single = projects|length == 1 %}
+<form class="sheet-wrap" method="post" action="{{ url_for('issues.bulk') }}" data-issues-root data-bulk-form>
+  {{ ui.csrf() }}
+  <input type="hidden" name="next" value="{{ request.full_path }}">
+  <input type="hidden" name="bulk_action"><input type="hidden" name="value">
+  <table class="sheet">
+    <thead><tr>
+      <th style="width:34px"><input type="checkbox" data-select-all title="Tout sélectionner"></th>
+      <th class="hide-col-key">ID</th><th>Titre</th><th>État</th><th>Priorité</th><th>Assignés</th><th>Étiquettes</th>
+      <th>Début</th><th>Échéance</th><th>Estimation</th><th>Cycle</th><th>Modules</th><th>Sous-tickets</th>
+      {% if show_project %}<th>Projet</th>{% endif %}<th>Temps passé</th><th>Mis à jour</th><th>Créé le</th>
+    </tr></thead>
+    <tbody>
+      {% for i in issues %}
+      {% set e = i.project_id|string in eds.split(',') %}
+      <tr data-id="{{ i.id }}">
+        <td><input type="checkbox" name="ids" value="{{ i.id }}" data-row-check {% if not e %}disabled{% endif %}></td>
+        <td><a class="key" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">{{ i.key }}</a></td>
+        <td class="c-title"><a href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}" title="{{ i.title }}">{{ i.title }}</a></td>
+        <td>{{ P.prop(i, 'state', e) }}</td>
+        <td>{{ P.prop(i, 'priority', e) }}</td>
+        <td>{{ P.prop(i, 'assignees', e) }}</td>
+        <td>{{ P.prop(i, 'labels', e) }}</td>
+        <td>{{ P.date_prop(i, 'start_date', e) }}</td>
+        <td>{{ P.date_prop(i, 'target_date', e) }}</td>
+        <td>{{ P.prop(i, 'estimate', e) }}</td>
+        <td>{{ P.prop(i, 'cycle', e) }}</td>
+        <td>{{ P.prop(i, 'modules', e) }}</td>
+        <td class="muted">{% set cp = i.children_progress %}{% if cp %}{{ cp.done }}/{{ cp.total }}{% else %}–{% endif %}</td>
+        {% if show_project %}<td>{{ i.project.emoji }} {{ i.project.identifier }}</td>{% endif %}
+        <td class="muted">{{ i.time_spent_minutes|minutes if i.worklogs else '–' }}</td>
+        <td class="muted" title="{{ i.updated_at|datetime }}">{{ i.updated_at|ago }}</td>
+        <td class="muted">{{ i.created_at|date }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="17">{{ ui.empty('table', 'Aucun ticket') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="bulkbar" data-bulkbar>
+    <b data-bulk-count>0</b> sélectionné(s)
+    <select class="input input-sm" data-bulk="state" style="width:auto">
+      <option value="">État…</option>
+      {% if single %}{% for s in projects[0].states %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      {% else %}{% for g, lab, c in M.STATE_GROUPS %}<option value="{{ g }}">{{ lab }}</option>{% endfor %}{% endif %}
+    </select>
+    <select class="input input-sm" data-bulk="priority" style="width:auto"><option value="">Priorité…</option>{% for k, lab, c in M.PRIORITIES %}<option value="{{ k }}">{{ lab }}</option>{% endfor %}</select>
+    <select class="input input-sm" data-bulk="assignee" style="width:auto"><option value="">Assigner…</option>
+      {% set members = {} %}{% for p in projects %}{% for u in p.member_users %}{% do members.update({u.id: u}) %}{% endfor %}{% endfor %}
+      {% for u in members.values()|sort(attribute='display_name') %}<option value="{{ u.id }}">{{ u.display_name }}</option>{% endfor %}
+    </select>
+    {% if single %}
+    <select class="input input-sm" data-bulk="label" style="width:auto"><option value="">Étiquette…</option>{% for l in projects[0].labels %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select>
+    {% if projects[0].cycles_enabled %}<select class="input input-sm" data-bulk="cycle" style="width:auto"><option value="">Cycle…</option><option value="none">Aucun cycle</option>{% for c in projects[0].cycles if not c.archived_at %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>{% endif %}
+    {% if projects[0].modules_enabled %}<select class="input input-sm" data-bulk="module" style="width:auto"><option value="">Module…</option>{% for m in projects[0].modules if not m.archived_at %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select>{% endif %}
+    {% endif %}
+    <input type="date" class="input input-sm" data-bulk="target_date" style="width:auto" title="Échéance">
+    <button type="button" class="btn btn-sm" data-bulk-btn="unassign">Désassigner</button>
+    <button type="button" class="btn btn-sm" data-bulk-btn="archive">{{ icon('archive', 14) }} Archiver</button>
+    <button type="button" class="btn btn-sm btn-danger-ghost" data-bulk-btn="delete" data-confirm-msg="Supprimer définitivement les tickets sélectionnés ?">{{ icon('trash', 14) }}</button>
+    <button type="button" class="btn btn-sm btn-ghost btn-icon" data-bulk-clear title="Désélectionner">{{ icon('x', 14) }}</button>
+  </div>
+</form>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Calendrier #}
+
+{% macro calendar_view(cal, opts, projects) %}
+{% set eds = edit_map(projects) %}
+{% set single_pid = projects[0].id if projects|length == 1 else None %}
+<div class="cal" data-issues-root data-calendar>
+  <div class="cal-nav">
+    <a class="btn btn-sm btn-icon" href="?{{ qs(month=cal.prev) }}" title="Mois précédent">{{ icon('chevron-left', 15) }}</a>
+    <a class="btn btn-sm btn-icon" href="?{{ qs(month=cal.next) }}" title="Mois suivant">{{ icon('chevron-right', 15) }}</a>
+    <h2>{{ ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'][cal.first.month - 1] }} {{ cal.first.year }}</h2>
+    <a class="btn btn-sm" href="?{{ qs(month=cal.today) }}">Aujourd’hui</a>
+    {% if cal.undated %}<span class="muted small right">{{ cal.undated }} ticket(s) sans échéance</span>{% endif %}
+  </div>
+  <div class="cal-grid">
+    {% for d in ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'] %}<div class="cal-dow">{{ d }}</div>{% endfor %}
+    {% for week in cal.weeks %}{% for day in week %}
+    <div class="cal-day {% if not day.in_month %}out{% endif %} {% if day.is_today %}today{% endif %} {% if day.date.weekday() >= 5 %}weekend{% endif %}" data-date="{{ day.date.isoformat() }}" data-drop-date>
+      <div class="num"><span>{{ day.date.day }}</span>{% if single_pid and single_pid|string in eds.split(',') %}<button type="button" class="add" data-create-issue data-project="{{ single_pid }}" data-target="{{ day.date.isoformat() }}" title="Nouveau ticket ce jour">{{ icon('plus', 13) }}</button>{% endif %}</div>
+      {% for i in day.issues %}
+      <a class="cal-chip {% if i.is_closed %}done{% endif %}" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}" data-id="{{ i.id }}" {% if i.project_id|string in eds.split(',') %}draggable="true"{% endif %} title="{{ i.key }} · {{ i.title }}">{{ state_icon(i.state_group, i.state.color if i.state else None, 12) }}<span>{{ i.title }}</span></a>
+      {% endfor %}
+    </div>
+    {% endfor %}{% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Gantt #}
+
+{% macro gantt_view(g, opts, projects) %}
+{% set eds = edit_map(projects) %}
+{% set months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'] %}
+<div class="gantt" data-issues-root data-gantt data-day-w="{{ g.day_w }}" data-start="{{ g.start.isoformat() }}">
+  <div class="g-left">
+    <div class="g-left-h">{{ g.rows|length }} ticket(s)</div>
+    <div class="g-left-b" data-gantt-left>
+      {% for r in g.rows %}{% set i = r.issue %}
+      <div class="g-row-l">{{ state_icon(i.state_group, i.state.color if i.state else None) }}<span class="key">{{ i.key }}</span><a class="t" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}" title="{{ i.title }}">{{ i.title }}</a>{% if i.assignees %}<span class="right">{{ ui.avatars(i.assignees, 18, 2) }}</span>{% endif %}</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="g-right" data-gantt-right>
+    <div style="width: {{ g.width }}px; position: relative; min-height: 100%">
+      <div class="g-head">
+        <div class="g-months">{% for m in g.months %}<div class="g-month" style="left:{{ m.left }}px;width:{{ m.width }}px">{{ months[m.date.month - 1] }} {{ m.date.year }}</div>{% endfor %}</div>
+        <div class="g-days">
+          {% for d in g.days %}
+            {% if g.zoom != 'month' %}<div class="g-day {% if d.weekday() >= 5 %}we{% endif %}" style="left:{{ loop.index0 * g.day_w }}px;width:{{ g.day_w }}px">{{ d.day if g.zoom == 'day' or d.weekday() in (0, 3) else '' }}</div>
+            {% elif d.weekday() == 0 %}<div class="g-day" style="left:{{ loop.index0 * g.day_w }}px;width:{{ g.day_w * 7 }}px">{{ d.day }}</div>{% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="g-body">
+        {% if g.zoom != 'month' %}{% for d in g.days if d.weekday() >= 5 %}<div class="g-col-we" style="left:{{ (d - g.start).days * g.day_w }}px;width:{{ g.day_w }}px"></div>{% endfor %}{% endif %}
+        {% if g.today_left is not none %}<div class="g-today" style="left: {{ g.today_left + g.day_w // 2 }}px"></div>{% endif %}
+        {% for r in g.rows %}{% set i = r.issue %}
+        <div class="g-row">
+          {% if r.bar %}
+          {% set ms = i.start_date and i.target_date and i.start_date == i.target_date and ('Jalon' in i.labels|map(attribute='name')|list) %}
+          <div class="g-bar {% if i.is_closed %}done{% endif %} {% if i.is_overdue %}overdue{% endif %} {% if ms %}milestone{% endif %}" data-id="{{ i.id }}" data-start="{{ (i.start_date or i.target_date).isoformat() }}" data-end="{{ (i.target_date or i.start_date).isoformat() }}" {% if i.project_id|string in eds.split(',') %}data-editable="1"{% endif %} style="left:{{ r.bar.left }}px;width:{{ r.bar.width }}px;background:{{ i.state.color if i.state else 'var(--accent)' }}" title="{{ i.key }} · {{ i.title }} ({{ (i.start_date or i.target_date)|date }} → {{ (i.target_date or i.start_date)|date }})">
+            {% if not ms %}<span class="h l"></span><span class="ellipsis">{{ i.title }}</span><span class="h r"></span>{% endif %}
+          </div>
+          {% else %}<span class="g-nodate">Sans dates — ajoute un début et une échéance</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Dispatcher #}
+
+{% macro render(opts, projects, groups=None, issues=None, cal=None, gantt=None, quick={}, show_project=False) %}
+{% if opts.layout == 'board' %}{{ board_view(groups, opts, projects, quick, show_project) }}
+{% elif opts.layout == 'spreadsheet' %}{{ sheet_view(issues, opts, projects, show_project) }}
+{% elif opts.layout == 'calendar' %}{{ calendar_view(cal, opts, projects) }}
+{% elif opts.layout == 'gantt' %}{{ gantt_view(gantt, opts, projects) }}
+{% else %}{{ list_view(groups, opts, projects, quick, show_project) }}{% endif %}
+{% endmacro %}
+
+{% macro export_menu(project) %}
+<div class="dd">
+  <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Exporter">{{ icon('download', 15) }}</button>
+  <div class="menu" style="width:220px">
+    <div class="menu-h">Exporter (filtres actuels)</div>
+    <a class="menu-item" href="{{ url_for('issues.export', pid=project.id, fmt='xlsx') }}?{{ request.query_string.decode() }}">{{ icon('table') }} Excel (.xlsx)</a>
+    <a class="menu-item" href="{{ url_for('issues.export', pid=project.id, fmt='csv') }}?{{ request.query_string.decode() }}">{{ icon('page') }} CSV</a>
+    <a class="menu-item" href="{{ url_for('issues.export', pid=project.id, fmt='md') }}?{{ request.query_string.decode() }}">{{ icon('hash') }} Markdown</a>
+    <a class="menu-item" href="{{ url_for('issues.export', pid=project.id, fmt='json') }}?{{ request.query_string.decode() }}">{{ icon('code') }} JSON</a>
+    <div class="menu-sep"></div>
+    <a class="menu-item" href="{{ url_for('issues.ical', pid=project.id) }}">{{ icon('calendar') }} Calendrier (.ics)</a>
+    <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer</a>
+  </div>
+</div>
+{% endmacro %}

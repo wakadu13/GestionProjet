@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Raccourcis clavier{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('keyboard', 15) }} Raccourcis clavier</span></div></div>{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:720px;margin:0 auto">
+  {% for title, rows in [
+    ('Général', [('Ctrl + K', 'Palette de commandes et recherche'), ('/', 'Rechercher'), ('C', 'Créer un ticket'), ('?', 'Afficher cette page'), ('Maj + D', 'Basculer le thème clair / sombre'), ('[', 'Afficher / masquer la barre latérale (mobile)'), ('Échap', 'Fermer une fenêtre ou un menu')]),
+    ('Navigation (G puis…)', [('G puis H', 'Accueil'), ('G puis I', 'Mes tickets'), ('G puis P', 'Projets'), ('G puis N', 'Notifications'), ('G puis A', 'Analytique'), ('G puis T', 'Équipe')]),
+    ('Édition', [('Ctrl + Entrée', 'Envoyer un commentaire / formulaire'), ('Ctrl + S', 'Enregistrer une page'), ('Ctrl + B / Ctrl + I', 'Gras / italique dans une page'), ('@', 'Mentionner un membre'), ('Entrée', 'Valider un titre ou un ajout rapide'), ('↑ ↓ + Entrée', 'Choisir dans un sélecteur')]),
+  ] %}
+  <div class="section-title"><h2>{{ title }}</h2></div>
+  <div class="panel"><table class="table">{% for k, d in rows %}<tr><td style="width:220px">{% for part in k.split(' + ') %}<kbd>{{ part }}</kbd>{% if not loop.last %} + {% endif %}{% endfor %}</td><td>{{ d }}</td></tr>{% endfor %}</table></div>
+  {% endfor %}
+  <div class="section-title"><h2>Astuces</h2></div>
+  <div class="panel panel-b md">
+    <ul>
+      <li>Clique sur n’importe quelle propriété (état, priorité, assignés, dates…) dans une liste pour la modifier directement.</li>
+      <li>Glisse-dépose les tickets entre colonnes du tableau, sur le calendrier ou les barres du Gantt.</li>
+      <li>Dans le tableur, coche plusieurs tickets pour les modifier en masse.</li>
+      <li>Cite un ticket avec sa clé (ex. <code>EAE-12</code>) ou un membre avec <code>@identifiant</code> : un lien est créé automatiquement.</li>
+      <li>Enregistre tes filtres favoris comme « vues » pour les retrouver en un clic.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

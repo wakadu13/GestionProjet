@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}{{ page.title }} · {{ project.name }}{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% set is_owner = page.owner_id == current_user.id or can(current_user, 'admin', project) %}
+{% set toc = markdown_toc(page.content) %}
+
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <a href="{{ url_for('pages.index', pid=project.id) }}">{{ icon('page', 15) }} Pages</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    {% if page.parent %}<a href="{{ url_for('pages.view', pid=project.id, page_id=page.parent.id) }}">{{ page.parent.emoji }} {{ page.parent.title|truncate(30) }}</a><span class="sep">{{ icon('chevron-right', 14) }}</span>{% endif %}
+    <span class="current">{{ page.emoji }} {{ page.title|truncate(50) }}</span>
+    {{ ui.fav_button('page', page.id) }}
+  </div>
+  <div class="header-actions">
+    {% if page.archived_at %}<span class="badge badge-warning">{{ icon('archive', 12) }} Archivée</span>{% endif %}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('pages.versions', pid=project.id, page_id=page.id) }}" title="Historique des versions">{{ icon('history', 14) }} Historique</a>
+    <a class="btn btn-sm btn-ghost btn-icon" href="{{ url_for('pages.export_md', pid=project.id, page_id=page.id) }}" title="Exporter en markdown">{{ icon('download', 15) }}</a>
+    <button class="btn btn-sm btn-ghost btn-icon" type="button" data-copy="{{ request.url }}" title="Copier le lien">{{ icon('link', 15) }}</button>
+    {% if is_owner or can(current_user, 'edit', project) %}
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Plus d’actions">{{ icon('more', 16) }}</button>
+      <div class="menu" style="width:240px">
+        {% if is_owner %}
+        <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='lock') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('unlock' if page.is_locked else 'lock') }} {{ 'Déverrouiller' if page.is_locked else 'Verrouiller' }}</button></form>
+        <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='visibility') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('globe' if not page.is_public else 'lock') }} {{ 'Rendre publique' if not page.is_public else 'Rendre privée' }}</button></form>
+        {% endif %}
+        {% if can(current_user, 'edit', project) %}
+        <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='duplicate') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('copy') }} Dupliquer</button></form>
+        {% endif %}
+        {% if can_edit %}<button class="menu-item" type="button" data-open="move-page-modal">{{ icon('move') }} Déplacer sous une autre page…</button>{% endif %}
+        <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer / PDF</a>
+        {% if is_owner %}
+        <div class="menu-sep"></div>
+        <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='archive') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('refresh' if page.archived_at else 'archive') }} {{ 'Restaurer' if page.archived_at else 'Archiver' }}</button></form>
+        <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='delete') }}" data-confirm="Supprimer définitivement la page « {{ page.title }} » et son historique ?">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% if can_edit %}<a class="btn btn-sm btn-primary" href="{{ url_for('pages.edit', pid=project.id, page_id=page.id) }}">{{ icon('edit', 14) }} Modifier</a>
+    {% elif page.is_locked %}<span class="badge" title="Seul le propriétaire peut modifier cette page">{{ icon('lock', 12) }} Verrouillée</span>{% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="doc-layout" {% if not toc %}style="grid-template-columns: minmax(0, 1fr)"{% endif %}>
+  <article class="page-doc">
+    <div class="doc-emoji">{{ page.emoji or '📄' }}</div>
+    <h1 class="doc-title">{{ page.title }}</h1>
+    <div class="flex wrap gap muted small mb-lg">
+      <span class="flex gap-4" style="gap:6px">{{ ui.avatar(page.owner, 20) }} {{ page.owner.display_name if page.owner else '—' }}</span>
+      <span>·</span>
+      <span title="{{ page.updated_at|datetime }}">Modifiée {{ page.updated_at|ago }}{% if page.updated_by and page.updated_by != page.owner %} par {{ page.updated_by.display_name }}{% endif %}</span>
+      <span>·</span><span>{{ page.word_count }} mots</span>
+      {% if page.versions %}<span>·</span><a href="{{ url_for('pages.versions', pid=project.id, page_id=page.id) }}">{{ page.versions|length }} version(s)</a>{% endif %}
+      {% if page.is_locked %}<span class="badge">{{ icon('lock', 11) }} Verrouillée</span>{% endif %}
+      {% if not page.is_public %}<span class="badge">{{ icon('lock', 11) }} Privée</span>{% endif %}
+    </div>
+    {% if page.content and page.content.strip() %}
+    <div class="md">{{ page.content|md }}</div>
+    {% else %}
+    <div class="empty sm">
+      <p>Cette page est vide.</p>
+      {% if can_edit %}<a class="btn btn-sm btn-primary" href="{{ url_for('pages.edit', pid=project.id, page_id=page.id) }}">{{ icon('edit', 14) }} Commencer à écrire</a>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if children %}
+    <div class="section-title"><h2>Sous-pages</h2><span class="count">{{ children|length }}</span></div>
+    <div class="panel">
+      {% for c in children %}
+      <a class="page-row" href="{{ url_for('pages.view', pid=project.id, page_id=c.id) }}">
+        <span class="pe">{{ c.emoji or '📄' }}</span>
+        <div class="grow" style="min-width:0"><div class="bold ellipsis">{{ c.title }}</div><div class="muted small ellipsis">{{ c.content|excerpt(120) }}</div></div>
+        <span class="muted small nowrap">{{ c.updated_at|ago }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </article>
+  {% if toc %}
+  <nav class="doc-toc">
+    <div class="muted tiny bold" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Sommaire</div>
+    {% for level, title, anchor in toc %}<a class="l{{ level }}" href="#{{ anchor }}">{{ title }}</a>{% endfor %}
+  </nav>
+  {% endif %}
+</div>
+
+{% if can_edit %}
+<dialog class="modal sm" id="move-page-modal">
+  <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='move') }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Déplacer la page</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Page parente</label>
+        <select class="input" name="parent_id">
+          <option value="">Aucune (page racine)</option>
+          {% for p in project.pages|sort(attribute='title') if p.id != page.id and not p.archived_at and p.parent_id != page.id and (p.is_public or p.owner_id == current_user.id) %}
+          <option value="{{ p.id }}" {% if p.id == page.parent_id %}selected{% endif %}>{{ p.emoji }} {{ p.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Déplacer</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

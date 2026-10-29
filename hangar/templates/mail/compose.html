@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Écrire un e-mail{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">{% if issue %}<a href="{{ url_for('issues.detail', pid=issue.project_id, seq=issue.sequence_id) }}"><span class="mono">{{ issue.key }}</span></a><span class="sep">{{ icon('chevron-right', 14) }}</span>{% endif %}<span class="current">{{ icon('send', 15) }} Écrire un e-mail</span></div>
+  {% if current_user.is_admin %}<div class="header-actions"><a class="btn btn-sm btn-ghost" href="{{ url_for('mail.settings') }}">{{ icon('settings', 14) }} Réglages des e-mails</a></div>{% endif %}
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:900px;margin:0 auto">
+  {% if cfg.mode != 'smtp' %}
+  <div class="danger-zone" style="border-color:var(--accent);background:var(--accent-bg)">{{ icon('shield', 14) }} Mode « Boîte d’envoi locale » : le message sera enregistré en fichier .eml dans <code>data/outbox</code>, sans envoi réel.{% if current_user.is_admin %} <a href="{{ url_for('mail.settings') }}" style="color:var(--accent-text)">Configurer un serveur SMTP</a>{% endif %}</div>
+  {% endif %}
+  <form method="post" class="panel panel-b">
+    {{ ui.csrf() }}
+    {% if issue %}<input type="hidden" name="issue" value="{{ issue.id }}">{% endif %}
+    <div class="field"><label>Modèle</label>
+      <select class="input" data-mail-template style="max-width:320px"><option value="">— Message libre —</option>{% for k, t in templates.items() %}<option value="{{ k }}">{{ t.label }}</option>{% endfor %}</select>
+    </div>
+    <div class="field"><label>Destinataires (membres)</label>
+      {% if with_email %}
+      <div class="flex wrap gap-4">
+        <button type="button" class="btn btn-xs" data-select-members>Tout sélectionner</button>
+        {% for u in with_email %}<label class="checkbox tag" style="height:28px"><input type="checkbox" name="user_ids" value="{{ u.id }}" {% if issue and u in issue.assignees %}checked{% endif %}>{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>{% endfor %}
+      </div>
+      {% else %}<span class="help">Aucun membre n’a encore d’adresse e-mail{% if current_user.is_admin %} — <a href="{{ url_for('mail.settings') }}#members" style="color:var(--accent-text)">les renseigner</a>{% endif %}.</span>{% endif %}
+      {% set missing = members|rejectattr('contact_email')|list %}
+      {% if missing and with_email %}<span class="help">{{ missing|length }} membre(s) sans adresse : {{ missing|map(attribute='display_name')|join(', ') }}.</span>{% endif %}
+    </div>
+    <div class="field"><label>Autres destinataires</label><input class="input" name="others" placeholder="dpo@exemple.fr, secretariat@exemple.fr"><span class="help">Adresses séparées par des virgules (interlocuteurs extérieurs : DPO, services…).</span></div>
+    <div class="field"><label>Objet</label><input class="input" name="subject" value="{{ prefill_subject }}" required data-mail-subject></div>
+    <div class="field"><label>Message</label>{{ ui.md_editor('body', prefill_body, 'Ton message (markdown accepté)…', 12) }}</div>
+    <div class="field"><label>Lien vers un ticket (facultatif)</label><input class="input" name="issue_ref" value="{{ issue.key if issue else '' }}" placeholder="EAE-12" style="max-width:200px"><span class="help">Ajoute une fiche du ticket et un bouton « Voir le ticket » dans l’e-mail.</span></div>
+    <div class="form-actions"><a class="btn" href="{{ url_for('issues.detail', pid=issue.project_id, seq=issue.sequence_id) if issue else url_for('home.index') }}">Annuler</a><button class="btn btn-primary">{{ icon('send', 14) }} Envoyer</button></div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const T = {{ templates|tojson }};
+  const sel = document.querySelector('[data-mail-template]');
+  const subj = document.querySelector('[data-mail-subject]');
+  const body = document.querySelector('textarea[name=body]');
+  sel.addEventListener('change', () => {
+    const t = T[sel.value];
+    if (!t) return;
+    if (body.value.trim() && !confirm('Remplacer le message actuel par le modèle ?')) { sel.value = ''; return; }
+    if (!subj.value.trim() || confirm('Remplacer aussi l’objet ?')) subj.value = t.subject;
+    body.value = t.body;
+    subj.focus();
+  });
+  const all = document.querySelector('[data-select-members]');
+  if (all) all.addEventListener('click', () => {
+    const boxes = document.querySelectorAll('input[name=user_ids]');
+    const on = Array.from(boxes).some((b) => !b.checked);
+    boxes.forEach((b) => { b.checked = on; });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr" data-theme="{{ current_user.theme if current_user.is_authenticated else 'system' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Hangar{% endblock %} · {{ ws.name if ws else 'Hangar' }}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ version }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% import "macros.html" as ui with context %}
+{% if current_user.is_authenticated %}
+{% set sb = sidebar() %}
+{% set pid_ctx = request.view_args.get('pid') if request.view_args else None %}
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <div class="dd" style="width:100%">
+        <button class="sb-ws" data-menu type="button">
+          <span class="ws-logo">{{ ws.emoji }}</span>
+          <span class="grow ellipsis">{{ ws.name }}</span>
+          {{ icon('chevron-down', 14) }}
+        </button>
+        <div class="menu left" style="width:230px">
+          <div class="menu-h">@{{ current_user.username }}</div>
+          <a class="menu-item" href="{{ url_for('settings.profile') }}">{{ icon('user') }} Mon profil</a>
+          {% if current_user.is_admin %}
+          <a class="menu-item" href="{{ url_for('settings.workspace') }}">{{ icon('settings') }} Paramètres de l’espace</a>
+          <a class="menu-item" href="{{ url_for('settings.backup') }}">{{ icon('database') }} Sauvegardes</a>
+          <a class="menu-item" href="{{ url_for('mail.settings') }}">{{ icon('mail') }} E-mails automatiques</a>
+          {% endif %}
+          {% if not current_user.is_guest %}<a class="menu-item" href="{{ url_for('mail.compose') }}">{{ icon('send') }} Écrire un e-mail</a>{% endif %}
+          <a class="menu-item" href="{{ url_for('settings.tokens') }}">{{ icon('key') }} Jetons d’API</a>
+          <a class="menu-item" href="{{ url_for('settings.about') }}">{{ icon('help') }} À propos</a>
+          <div class="menu-sep"></div>
+          <form method="post" action="{{ url_for('auth.logout') }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="menu-item danger">{{ icon('logout') }} Se déconnecter</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="sb-actions">
+      <button class="btn btn-sm" type="button" data-create-issue {% if pid_ctx %}data-project="{{ pid_ctx }}"{% endif %}>{{ icon('edit', 14) }} Nouveau ticket</button>
+      <button class="btn btn-sm btn-icon" type="button" data-palette title="Rechercher (Ctrl+K)">{{ icon('search', 14) }}</button>
+    </div>
+    <nav class="sb-scroll">
+      {% set ep = request.endpoint or '' %}
+      <a class="sb-link {% if ep == 'home.index' %}active{% endif %}" href="{{ url_for('home.index') }}">{{ icon('home') }} Accueil</a>
+      <a class="sb-link {% if ep == 'home.notifications' %}active{% endif %}" href="{{ url_for('home.notifications') }}">{{ icon('bell') }} Notifications {% if sb.unread %}<span class="sb-badge" id="notif-badge">{{ sb.unread if sb.unread < 100 else '99+' }}</span>{% else %}<span class="sb-badge hide" id="notif-badge"></span>{% endif %}</a>
+      <a class="sb-link {% if ep == 'home.workspace_issues' %}active{% endif %}" href="{{ url_for('home.workspace_issues') }}">{{ icon('layers') }} Mes tickets</a>
+      <a class="sb-link {% if ep.startswith('saved_views.global') %}active{% endif %}" href="{{ url_for('saved_views.global_index') }}">{{ icon('eye') }} Vues</a>
+      <a class="sb-link {% if ep == 'planning.workspace' %}active{% endif %}" href="{{ url_for('planning.workspace') }}">{{ icon('gantt') }} Planning</a>
+      <a class="sb-link {% if ep == 'analytics.index' and not pid_ctx %}active{% endif %}" href="{{ url_for('analytics.index') }}">{{ icon('chart') }} Analytique</a>
+      <a class="sb-link {% if ep.startswith('bilan.') and not pid_ctx %}active{% endif %}" href="{{ url_for('bilan.index') }}">{{ icon('flag') }} Bilan</a>
+      <a class="sb-link {% if ep.startswith('team.') %}active{% endif %}" href="{{ url_for('team.index') }}">{{ icon('users') }} Équipe</a>
+      <a class="sb-link {% if ep == 'projects.index' %}active{% endif %}" href="{{ url_for('projects.index') }}">{{ icon('briefcase') }} Projets</a>
+
+      {% if sb.favorites %}
+      <div class="sb-section">
+        <div class="sb-section-h"><span>Favoris</span></div>
+        {% for f in sb.favorites %}
+        <a class="sb-link" href="{{ f.url }}">{% if f.emoji %}<span class="p-emoji">{{ f.emoji }}</span>{% else %}{{ icon(f.icon) }}{% endif %}<span class="ellipsis">{{ f.title }}</span></a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="sb-section">
+        <div class="sb-section-h"><span>Vos projets</span>{% if not current_user.is_guest %}<a href="{{ url_for('projects.new') }}" title="Nouveau projet">{{ icon('plus', 14) }}</a>{% endif %}</div>
+        {% for p in sb.projects %}
+        <details class="sb-project" {% if pid_ctx == p.id %}open{% endif %}>
+          <summary><span class="p-emoji" style="background: color-mix(in srgb, {{ p.color }} 16%, transparent)">{{ p.emoji }}</span><span class="ellipsis">{{ p.name }}</span>{{ icon('chevron-right', 14, 'chev') }}</summary>
+          <div class="sb-sub">
+            {% set here = pid_ctx == p.id %}
+            <a class="sb-link {% if here and ep.startswith('issues.') and ep != 'issues.archives' %}active{% endif %}" href="{{ url_for('issues.index', pid=p.id) }}">{{ icon('layers', 15) }} Tickets</a>
+            {% if p.cycles_enabled %}<a class="sb-link {% if here and ep.startswith('cycles.') %}active{% endif %}" href="{{ url_for('cycles.index', pid=p.id) }}">{{ icon('cycle', 15) }} Cycles</a>{% endif %}
+            {% if p.modules_enabled %}<a class="sb-link {% if here and ep.startswith('modules.') %}active{% endif %}" href="{{ url_for('modules.index', pid=p.id) }}">{{ icon('module', 15) }} Modules</a>{% endif %}
+            {% if p.views_enabled %}<a class="sb-link {% if here and ep.startswith('saved_views.') %}active{% endif %}" href="{{ url_for('saved_views.index', pid=p.id) }}">{{ icon('eye', 15) }} Vues</a>{% endif %}
+            {% if p.pages_enabled %}<a class="sb-link {% if here and ep.startswith('pages.') %}active{% endif %}" href="{{ url_for('pages.index', pid=p.id) }}">{{ icon('page', 15) }} Pages</a>{% endif %}
+            {% if p.intake_enabled %}<a class="sb-link {% if here and ep.startswith('intake.') %}active{% endif %}" href="{{ url_for('intake.index', pid=p.id) }}">{{ icon('inbox', 15) }} Intake</a>{% endif %}
+            <a class="sb-link {% if here and ep.startswith('planning.') %}active{% endif %}" href="{{ url_for('planning.index', pid=p.id) }}">{{ icon('gantt', 15) }} Planning</a>
+            <a class="sb-link {% if here and ep == 'analytics.index' %}active{% endif %}" href="{{ url_for('analytics.index', pid=p.id) }}">{{ icon('chart', 15) }} Analytique</a>
+            <a class="sb-link {% if here and ep.startswith('bilan.') %}active{% endif %}" href="{{ url_for('bilan.project', pid=p.id) }}">{{ icon('flag', 15) }} Bilan</a>
+            <a class="sb-link {% if here and ep == 'issues.archives' %}active{% endif %}" href="{{ url_for('issues.archives', pid=p.id) }}">{{ icon('archive', 15) }} Archives</a>
+            <a class="sb-link {% if here and ep == 'projects.settings' %}active{% endif %}" href="{{ url_for('projects.settings', pid=p.id) }}">{{ icon('settings', 15) }} Paramètres</a>
+          </div>
+        </details>
+        {% else %}
+        <div class="muted small" style="padding:6px 9px">Aucun projet rejoint. <a href="{{ url_for('projects.index') }}" style="color:var(--accent-text)">Parcourir</a></div>
+        {% endfor %}
+      </div>
+    </nav>
+    <div class="sb-foot">
+      <a class="sb-user" href="{{ url_for('team.profile', username=current_user.username) }}">{{ ui.avatar(current_user, 24) }}<span class="name">{{ current_user.display_name }}</span></a>
+      <button class="btn btn-ghost btn-icon btn-sm" type="button" data-theme-toggle title="Thème clair / sombre (Maj+D)">{{ icon('moon', 15) }}</button>
+      <a class="btn btn-ghost btn-icon btn-sm" href="{{ url_for('home.shortcuts') }}" data-shortcuts title="Raccourcis clavier (?)">{{ icon('keyboard', 15) }}</a>
+    </div>
+  </aside>
+  <main class="main">
+    {% block header %}{% endblock %}
+    <div class="content {% block content_class %}{% endblock %}">{% block content %}{% endblock %}</div>
+  </main>
+</div>
+{% include "partials/create_issue.html" %}
+{% include "partials/palette.html" %}
+{% else %}
+{% block auth %}{% endblock %}
+{% endif %}
+
+<div id="toasts">
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}
+  <div class="toast {{ cat if cat in ('success','error','info') else 'info' }}" data-flash>{{ icon('check-circle' if cat == 'success' else ('alert' if cat == 'error' else 'bell'), 16) }}<div>{{ msg }}</div></div>
+  {% endfor %}
+</div>
+<script>
+window.HANGAR = {
+  csrf: {{ csrf_token()|tojson }},
+  {% if current_user.is_authenticated %}
+  me: {{ {"id": current_user.id, "username": current_user.username, "name": current_user.display_name, "theme": current_user.theme}|tojson }},
+  projects: {{ picker_data()|tojson }},
+  contextProject: {{ (pid_ctx or none)|tojson }},
+  {% endif %}
+  urls: { search: "{{ url_for('api.search') }}", markdown: "{{ url_for('api.markdown_preview') }}", members: "{{ url_for('api.members') }}", lookup: "{{ url_for('api.lookup') }}", theme: "{{ url_for('api.theme') }}", notif: "{{ url_for('api.notifications_summary') }}", newProject: "{{ url_for('projects.new') }}", home: "{{ url_for('home.index') }}", myIssues: "{{ url_for('home.workspace_issues') }}", notifications: "{{ url_for('home.notifications') }}", analytics: "{{ url_for('analytics.index') }}", team: "{{ url_for('team.index') }}", projects: "{{ url_for('projects.index') }}", workload: "{{ url_for('team.workload') }}", profile: "{{ url_for('settings.profile') }}" }
+};
+</script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ version }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

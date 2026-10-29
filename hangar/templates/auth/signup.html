@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Inscription{% endblock %}
+{% block auth %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo"><span class="lg">{{ icon('plane', 20) }}</span> {{ ws.emoji }} {{ ws.name }}</div>
+    <h2 class="mb">Créer un compte</h2>
+    <form method="post">
+      {{ ui.csrf() }}
+      <div class="grid-2">
+        <div class="field"><label>Prénom</label><input class="input" name="first_name" value="{{ form.get('first_name', '') }}"></div>
+        <div class="field"><label>Nom</label><input class="input" name="last_name" value="{{ form.get('last_name', '') }}"></div>
+      </div>
+      <div class="field"><label>Identifiant</label><input class="input" name="username" value="{{ form.get('username', '') }}" required></div>
+      <div class="field"><label>Mot de passe</label><input class="input" type="password" name="password" required minlength="6"></div>
+      <button class="btn btn-primary w-full" style="height:38px">Créer mon compte</button>
+    </form>
+    <p class="small muted mt center-text"><a href="{{ url_for('auth.login') }}" style="color:var(--accent-text)">J’ai déjà un compte</a></p>
+  </div>
+</div>
+{% endblock %}

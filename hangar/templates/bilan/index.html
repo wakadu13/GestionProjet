@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "bilan/_sections.html" as B with context %}
+{% block title %}Bilan{% if project %} · {{ project.name }}{% endif %}{% endblock %}
+{% set qp = request.args.to_dict() %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {% if project %}{{ ui.project_crumb(project) }}{% endif %}
+    <span class="current">{{ icon('flag', 15) }} Bilan</span>
+  </div>
+  <div class="seg" style="margin-left:8px">
+    {% for k, lab in periods if k != 'custom' %}
+    <a class="{% if kind == k %}active{% endif %}" href="?{{ qs(period=k, start=None, end=None) }}">{{ lab }}</a>
+    {% endfor %}
+  </div>
+  <div class="header-actions">
+    <form method="get" class="flex gap-4">
+      {% if not project %}
+      <select class="input input-sm" name="project" data-autosubmit style="width:auto;max-width:200px">
+        <option value="">Tous les projets</option>
+        {% for p in all_projects %}<option value="{{ p.id }}" {% if sel == p.id|string %}selected{% endif %}>{{ p.emoji }} {{ p.name }}</option>{% endfor %}
+      </select>
+      {% endif %}
+      <input type="hidden" name="period" value="custom">
+      <input class="input input-sm" type="date" name="start" value="{{ start.isoformat() }}" style="width:auto" title="Début">
+      <input class="input input-sm" type="date" name="end" value="{{ end.isoformat() }}" style="width:auto" title="Fin">
+      <button class="btn btn-sm" title="Appliquer la période personnalisée">OK</button>
+    </form>
+    <div class="dd">
+      <button class="btn btn-sm" type="button" data-menu>{{ icon('download', 14) }} Exporter</button>
+      <div class="menu" style="width:220px">
+        <a class="menu-item" href="{{ url_for('bilan.export_live', fmt='docx', pid=project.id if project else None, **request.args.to_dict()) }}">{{ icon('page') }} Word (.docx)</a>
+        <a class="menu-item" href="{{ url_for('bilan.export_live', fmt='md', pid=project.id if project else None, **request.args.to_dict()) }}">{{ icon('hash') }} Markdown</a>
+        <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer / PDF</a>
+      </div>
+    </div>
+    {% if can_save %}<button class="btn btn-sm btn-primary" type="button" data-open="save-bilan">{{ icon('archive', 14) }} Enregistrer ce bilan</button>{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:1280px;margin:0 auto">
+  <div class="home-hero" style="margin-bottom:14px">
+    <div>
+      <h1>Bilan — {{ data.scope.label }}</h1>
+      <div class="muted" style="margin-top:4px">{{ data.period.label }} · {{ data.period.days }} jour(s) · {{ data.kpis.activity }} action(s) enregistrée(s) dans l’historique</div>
+    </div>
+  </div>
+  {{ B.health(data) }}
+  {{ B.kpis(data) }}
+  {{ B.body(data) }}
+
+  <div class="section-title"><h2>Bilans enregistrés</h2><span class="count">{{ reports|length }}</span></div>
+  {% if reports %}
+  <div class="panel">
+    {% for r in reports %}
+    <a class="cycle-row" href="{{ url_for('bilan.report', rid=r.id) }}">
+      <span class="muted">{{ icon('archive', 16) }}</span>
+      <div class="grow"><div class="name">{{ r.title }}</div><div class="muted small">{{ r.period_start|date(True) }} → {{ r.period_end|date(True) }} · par {{ r.created_by.display_name if r.created_by else '—' }} · {{ r.created_at|ago }}</div></div>
+      {% set d = r.data %}{% if d.health %}<span class="status-pill" style="color: {{ d.health.color }}; border-color: color-mix(in srgb, {{ d.health.color }} 40%, transparent)"><span class="dot" style="background: {{ d.health.color }}"></span>{{ d.health.label }}</span>{% endif %}
+      <b>{{ d.kpis.progress if d.kpis else 0 }} %</b>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted small">Enregistre un bilan (par exemple chaque vendredi) pour garder une trace datée de l’avancement, avec vos faits marquants, difficultés et décisions. Les chiffres sont figés au moment de l’enregistrement.</p>
+  {% endif %}
+</div>
+
+{% if can_save %}
+<dialog class="modal lg" id="save-bilan">
+  <form method="post" action="{{ url_for('bilan.save') }}">
+    {{ ui.csrf() }}
+    <input type="hidden" name="pid" value="{{ project.id if project else '' }}">
+    <input type="hidden" name="project" value="{{ sel }}">
+    <input type="hidden" name="period" value="{{ kind }}">
+    <input type="hidden" name="start" value="{{ start.isoformat() }}">
+    <input type="hidden" name="end" value="{{ end.isoformat() }}">
+    <div class="modal-h"><h2>Enregistrer le bilan</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Titre</label><input class="input" name="title" value="Bilan — {{ data.scope.label }} — {{ data.period.label }}"></div>
+      <p class="help mb">Les indicateurs et listes ci-dessus sont figés. Complète avec l’analyse de l’équipe (markdown, @mentions, clés de tickets) — tout est facultatif et modifiable ensuite.</p>
+      {% for key, lab in sections %}
+      <div class="field"><label>{{ lab }}</label>{{ ui.md_editor(key, '', {'highlights': 'Ce qui a marqué la période : livrables, rencontres, avancées…', 'difficulties': 'Blocages, risques, retards et leurs causes…', 'decisions': 'Décisions prises et par qui…', 'next_steps': 'Ce qui est prévu pour la suite…'}[key], 3) }}</div>
+      {% endfor %}
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Enregistrer</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

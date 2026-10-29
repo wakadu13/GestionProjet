@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Intake · {{ project.name }}{% endblock %}
+{% block content_class %}flush{% endblock %}
+
+{% macro status_badge(i) -%}
+{%- set cls = {'pending': 'badge-accent', 'snoozed': 'badge-warning', 'accepted': 'badge-success', 'declined': 'badge-danger', 'duplicate': ''}.get(i.intake_status, '') -%}
+<span class="badge {{ cls }}">{{ M.INTAKE_STATUSES.get(i.intake_status, i.intake_status) }}</span>
+{%- endmacro %}
+
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">{{ ui.project_crumb(project) }}<span class="current">{{ icon('inbox', 15) }} Intake</span></div>
+  <div class="header-actions">
+    <span class="muted small">Demandes à trier avant qu’elles ne deviennent des tickets</span>
+    {% if can_submit %}<button class="btn btn-sm btn-primary" type="button" data-create-issue data-project="{{ project.id }}" data-intake="1">{{ icon('plus', 14) }} Nouvelle demande</button>{% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="intake">
+  <div class="intake-list">
+    <div class="tabs" style="margin:0;padding:0 12px">
+      <a class="{% if tab == 'open' %}active{% endif %}" href="?tab=open">{{ icon('inbox', 14) }} En attente</a>
+      <a class="{% if tab == 'closed' %}active{% endif %}" href="?tab=closed">{{ icon('check-circle', 14) }} Traitées</a>
+    </div>
+    {% if not can_triage %}<p class="muted small" style="padding:8px 16px;margin:0;border-bottom:1px solid var(--border-2)">Tu vois uniquement tes propres demandes.</p>{% endif %}
+    {% for i in items %}
+    <a class="intake-item {% if selected and selected.id == i.id %}active{% endif %}" href="?issue={{ i.id }}&tab={{ tab }}">
+      <div class="bold ellipsis" style="margin-bottom:4px">{{ i.title }}</div>
+      <div class="flex gap small muted" style="gap:6px">
+        <span class="key">{{ i.key }}</span>
+        {{ ui.avatar(i.created_by, 16) }}
+        <span class="nowrap">{{ i.created_at|ago }}</span>
+        <span class="right">{{ status_badge(i) }}</span>
+      </div>
+      {% if i.intake_status == 'snoozed' and i.intake_snoozed_until %}<div class="tiny warning-text" style="margin-top:4px">{{ icon('clock', 11) }} Reportée jusqu’au {{ i.intake_snoozed_until|date(True) }}</div>{% endif %}
+    </a>
+    {% else %}
+    <div class="empty sm">
+      {{ icon('inbox', 32) }}
+      <p>{{ 'Aucune demande en attente.' if tab == 'open' else 'Aucune demande traitée.' }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="intake-detail">
+    {% if selected %}
+    {% set s = selected %}
+    <div class="flex gap mb" style="gap:8px">
+      <span class="key">{{ s.key }}</span>{{ status_badge(s) }}
+      {% if s.intake_source %}<span class="badge">{{ icon('mail', 11) }} {{ s.intake_source }}</span>{% endif %}
+      <a class="btn btn-sm btn-ghost right" href="{{ url_for('issues.detail', pid=project.id, seq=s.sequence_id) }}">{{ icon('external', 14) }} Fiche complète</a>
+    </div>
+    <h1 style="margin-bottom:6px">{{ s.title }}</h1>
+    <div class="flex wrap gap muted small mb-lg" style="gap:6px">
+      {{ ui.avatar(s.created_by, 18) }}<span>Soumise par {{ s.created_by.display_name if s.created_by else '—' }}</span>
+      <span>·</span><span title="{{ s.created_at|datetime }}">{{ s.created_at|ago }}</span>
+      {% if s.priority != 'none' %}<span>·</span><span class="flex gap-4">{{ priority_icon(s.priority) }} {{ M.PRIORITY_LABELS[s.priority] }}</span>{% endif %}
+      {% if s.target_date %}<span>·</span><span>échéance souhaitée {{ s.target_date|date(True) }}</span>{% endif %}
+      {% if s.comments %}<span>·</span><span>{{ s.comments|length }} commentaire(s)</span>{% endif %}
+    </div>
+
+    <div class="panel mb">
+      <div class="panel-b">
+        {% if s.description and s.description.strip() %}<div class="md">{{ s.description|md }}</div>{% else %}<p class="muted" style="margin:0">Pas de description.</p>{% endif %}
+      </div>
+    </div>
+
+    {% if s.intake_status == 'duplicate' and s.intake_duplicate_of %}
+    <p class="small">Doublon de <a class="bold" href="{{ url_for('issues.detail', pid=project.id, seq=s.intake_duplicate_of.sequence_id) }}">{{ s.intake_duplicate_of.key }} · {{ s.intake_duplicate_of.title }}</a></p>
+    {% endif %}
+    {% if s.intake_status == 'accepted' %}
+    <p class="small success-text">{{ icon('check-circle', 14) }} Demande acceptée : elle est devenue le ticket <a class="bold" href="{{ url_for('issues.detail', pid=project.id, seq=s.sequence_id) }}">{{ s.key }}</a>.</p>
+    {% endif %}
+
+    {% if can_triage %}
+      {% if s.intake_status in ('pending', 'snoozed') %}
+      <div class="panel">
+        <div class="panel-h"><h3>Trier la demande</h3></div>
+        <div class="panel-b col" style="gap:14px">
+          <div class="flex gap wrap">
+            <form method="post" action="{{ url_for('intake.triage', pid=project.id, iid=s.id, action='accept') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-primary">{{ icon('check', 14) }} Accepter</button></form>
+            <form method="post" action="{{ url_for('intake.triage', pid=project.id, iid=s.id, action='decline') }}" class="inline-form" data-confirm="Refuser cette demande ?">{{ ui.csrf() }}<button class="btn btn-danger-ghost">{{ icon('x', 14) }} Refuser</button></form>
+            <span class="help">Accepter crée un ticket visible dans le projet, avec l’état par défaut.</span>
+          </div>
+          <form method="post" action="{{ url_for('intake.triage', pid=project.id, iid=s.id, action='snooze') }}" class="flex gap wrap">
+            {{ ui.csrf() }}
+            <span class="label" style="width:110px">{{ icon('clock', 14) }} Reporter au</span>
+            <input class="input input-sm" type="date" name="until" min="{{ (today + M.timedelta(days=1)).isoformat() if M.timedelta is defined else today.isoformat() }}" required style="width:auto">
+            <button class="btn btn-sm">Reporter</button>
+          </form>
+          <form method="post" action="{{ url_for('intake.triage', pid=project.id, iid=s.id, action='duplicate') }}" class="flex gap wrap">
+            {{ ui.csrf() }}
+            <span class="label" style="width:110px">{{ icon('copy', 14) }} Doublon de</span>
+            <select class="input input-sm grow" name="duplicate_of" required style="max-width:420px">
+              <option value="">Choisir le ticket d’origine…</option>
+              {% for o in others if o.id != s.id %}<option value="{{ o.id }}">{{ o.key }} · {{ o.title|truncate(60) }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-sm">Marquer en doublon</button>
+          </form>
+        </div>
+      </div>
+      {% else %}
+      <form method="post" action="{{ url_for('intake.triage', pid=project.id, iid=s.id, action='reopen') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-sm">{{ icon('refresh', 14) }} Remettre en attente</button></form>
+      {% endif %}
+    {% endif %}
+
+    {% set acts = s.activities[-8:] %}
+    {% if acts %}
+    <div class="section-title"><h2>Historique</h2></div>
+    {% for a in acts|reverse %}
+    <div class="tl-act"><span class="tl-ic">{{ icon('activity', 13) }}</span><div class="tl-t"><b>{{ a.actor.display_name if a.actor else 'Hangar' }}</b> {{ activity_text(a) }} <span class="muted">· {{ a.created_at|ago }}</span></div></div>
+    {% endfor %}
+    {% endif %}
+    {% else %}
+    {{ ui.empty('inbox', 'Rien à trier', 'Les demandes soumises par l’équipe (ou par des invités) arrivent ici. Accepte-les pour en faire des tickets, refuse-les, reporte-les ou signale-les comme doublons.') }}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Charge de travail · Équipe{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    <a href="{{ url_for('team.index') }}">{{ icon('users', 15) }} Équipe</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current">{{ icon('calendar', 15) }} Charge de travail</span>
+  </div>
+  <div class="header-actions">
+    <form method="get" class="flex gap-4">
+      <select class="input input-sm" name="project" data-autosubmit style="width:auto;max-width:240px" title="Projet">
+        <option value="">Tous les projets</option>
+        {% for p in projects %}<option value="{{ p.id }}" {% if sel == p.id %}selected{% endif %}>{{ p.emoji }} {{ p.name }}</option>{% endfor %}
+      </select>
+      <select class="input input-sm" name="weeks" data-autosubmit style="width:auto" title="Horizon">
+        {% for n in [4, 6, 8, 12] %}<option value="{{ n }}" {% if weeks_n == n %}selected{% endif %}>{{ n }} semaines</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<p class="help mb">Pour chaque membre et chaque semaine : nombre de tickets ouverts dont l’échéance tombe dans la semaine ou dont la période (début → échéance) la chevauche, estimation cumulée et jours d’absence. Couleur : <span class="badge" style="background:color-mix(in srgb, var(--success) 14%, var(--bg))">1–2</span> <span class="badge" style="background:color-mix(in srgb, var(--warning) 18%, var(--bg))">3–4</span> <span class="badge" style="background:color-mix(in srgb, var(--danger) 18%, var(--bg))">5 et plus</span>.</p>
+
+<div class="panel" style="overflow-x:auto">
+  <table class="wl">
+    <thead><tr>
+      <th style="min-width:220px">Membre</th>
+      {% for w in weeks %}<th style="min-width:150px">Sem. du {{ w|date }}{% if loop.first %} <span class="badge badge-accent">actuelle</span>{% endif %}</th>{% endfor %}
+    </tr></thead>
+    <tbody>
+    {% for row in grid %}
+    <tr>
+      <td>
+        <a class="flex gap" href="{{ url_for('team.profile', username=row.user.username) }}">{{ ui.avatar(row.user, 26) }}<b class="ellipsis">{{ row.user.display_name }}</b></a>
+        <div class="flex wrap gap-4 mt-0" style="margin-top:6px;padding-left:34px">
+          <span class="badge">{{ row.open }} ouvert(s)</span>
+          {% if row.overdue %}<span class="badge badge-danger" title="{% for i in row.overdue %}{{ i.key }} {{ i.title }}&#10;{% endfor %}">{{ row.overdue|length }} en retard</span>{% endif %}
+          {% if row.undated %}<span class="badge badge-warning" title="Tickets ouverts sans échéance">{{ row.undated|length }} sans date</span>{% endif %}
+        </div>
+      </td>
+      {% for c in row.cells %}
+      {% set lvl = 0 if c.load == 0 else (1 if c.load <= 2 else (2 if c.load <= 4 else 3)) %}
+      <td>
+        <div class="cell l{{ lvl }}">
+          {% if c.load %}
+          <b>{{ c.load }} ticket{{ 's' if c.load > 1 }}</b>{% if c.points %}<span class="muted tiny">{{ c.points }} pt{{ 's' if c.points > 1 }} d’estimation</span>{% endif %}
+          {% if c.due %}
+          <span class="tiny">Échéance :
+            {% for i in c.due[:3] %}<a class="mono" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}" title="{{ i.title }}">{{ i.key }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% if c.due|length > 3 %} +{{ c.due|length - 3 }}{% endif %}
+          </span>
+          {% endif %}
+          {% else %}<span>—</span>{% endif %}
+          {% if c.away %}<span class="away">{{ icon('palm', 11) }} {{ c.away }} j d’absence</span>{% endif %}
+        </div>
+      </td>
+      {% endfor %}
+    </tr>
+    {% else %}
+    <tr><td colspan="{{ weeks|length + 1 }}">{{ ui.empty('users', 'Aucun membre', 'Ajoute des membres aux projets pour voir leur charge.') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="section-title"><h2>Tickets ouverts sans assigné</h2><span class="count">{{ unassigned|length }}</span></div>
+{% if unassigned %}
+<div class="panel">
+  {% for i in unassigned|selectattr('target_date')|sort(attribute='target_date') %}
+  <div class="mini-issue">
+    {{ state_icon(i.state_group, i.state.color if i.state else None) }}
+    <span class="key">{{ i.key }}</span>
+    <a class="t" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">{{ i.title }}</a>
+    {{ priority_icon(i.priority) }}
+    <span class="small nowrap {% if i.is_overdue %}danger-text{% else %}muted{% endif %}">{{ icon('flag', 12) }} {{ i.target_date|date }}</span>
+    <span title="{{ i.project.name }}">{{ i.project.emoji }}</span>
+  </div>
+  {% endfor %}
+  {% for i in unassigned if not i.target_date %}
+  <div class="mini-issue">
+    {{ state_icon(i.state_group, i.state.color if i.state else None) }}
+    <span class="key">{{ i.key }}</span>
+    <a class="t" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">{{ i.title }}</a>
+    {{ priority_icon(i.priority) }}
+    <span class="muted small nowrap">Sans échéance</span>
+    <span title="{{ i.project.name }}">{{ i.project.emoji }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="panel">{{ ui.empty('check-circle', 'Tout est assigné', 'Chaque ticket ouvert a au moins un responsable.') }}</div>
+{% endif %}
+{% endblock %}

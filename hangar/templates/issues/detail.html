@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "issues/_props.html" as P with context %}
+{% import "issues/_layouts.html" as L with context %}
+{% block title %}{{ issue.key }} {{ issue.title }}{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% set e = can_edit %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <a href="{{ url_for('issues.index', pid=project.id) }}">{{ icon('layers', 15) }} Tickets</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current mono">{{ issue.key }}</span>
+  </div>
+  <div class="header-actions">
+    {% if issue.archived_at %}<span class="badge badge-warning">{{ icon('archive', 12) }} Archivé</span>{% endif %}
+    {% if issue.intake_status and issue.intake_status != 'accepted' %}<a class="badge badge-accent" href="{{ url_for('intake.index', pid=project.id, issue=issue.id) }}">{{ icon('inbox', 12) }} Intake : {{ M.INTAKE_STATUSES[issue.intake_status] }}</a>{% endif %}
+    <button class="btn btn-sm {% if issue.is_subscribed(current_user) %}active{% endif %}" type="button" data-subscribe="{{ url_for('issues.subscribe', pid=project.id, seq=issue.sequence_id) }}">{{ icon('bell', 14) }} <span>{{ 'Suivi' if issue.is_subscribed(current_user) else 'Suivre' }}</span></button>
+    <button class="btn btn-sm btn-ghost btn-icon" type="button" data-copy="{{ request.host_url.rstrip('/') }}{{ url_for('issues.by_key', key=issue.key) }}" title="Copier le lien">{{ icon('link', 15) }}</button>
+    {% if e %}
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Plus d’actions">{{ icon('more', 16) }}</button>
+      <div class="menu" style="width:240px">
+        <button class="menu-item" type="button" data-create-issue data-project="{{ project.id }}" data-parent="{{ issue.id }}" data-cycle="{{ issue.cycle_id or '' }}">{{ icon('subissue') }} Créer un sous-ticket</button>
+        <form method="post" action="{{ url_for('issues.action', pid=project.id, seq=issue.sequence_id, action='duplicate') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('copy') }} Dupliquer</button></form>
+        {% if other_projects %}<button class="menu-item" type="button" data-open="move-modal">{{ icon('move') }} Déplacer vers un projet…</button>{% endif %}
+        {% if not current_user.is_guest %}<a class="menu-item" href="{{ url_for('mail.compose', issue=issue.id) }}">{{ icon('mail') }} Envoyer par e-mail…</a>{% endif %}
+        <div class="menu-sep"></div>
+        {% if issue.archived_at %}
+        <form method="post" action="{{ url_for('issues.action', pid=project.id, seq=issue.sequence_id, action='restore') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('refresh') }} Restaurer</button></form>
+        {% else %}
+        <form method="post" action="{{ url_for('issues.action', pid=project.id, seq=issue.sequence_id, action='archive') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('archive') }} Archiver</button></form>
+        {% endif %}
+        <form method="post" action="{{ url_for('issues.action', pid=project.id, seq=issue.sequence_id, action='delete') }}" data-confirm="Supprimer définitivement {{ issue.key }} ? Cette action est irréversible.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="issue-layout">
+  <div class="issue-main">
+    {% if issue.parent %}
+    <a class="parent-link" href="{{ url_for('issues.detail', pid=project.id, seq=issue.parent.sequence_id) }}">{{ icon('parent', 13) }} {{ issue.parent.key }} · {{ issue.parent.title|truncate(60) }}</a>
+    {% endif %}
+    <div class="flex gap start">
+      <textarea class="issue-title" rows="1" data-autoresize data-issue-title="{{ url_for('issues.edit', pid=project.id, seq=issue.sequence_id) }}" {% if not e %}disabled{% endif %}>{{ issue.title }}</textarea>
+    </div>
+    <div class="muted small mt-0" style="margin:4px 0 14px">Créé par {{ issue.created_by.display_name if issue.created_by else '—' }} {{ issue.created_at|ago }} · mis à jour {{ issue.updated_at|ago }}{% if issue.blockers %} · <span class="blocked">{{ icon('lock', 12) }} bloqué par {% for b in issue.blockers %}<a href="{{ url_for('issues.detail', pid=b.project_id, seq=b.sequence_id) }}">{{ b.key }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</div>
+
+    {# Description #}
+    <div class="desc-block" data-desc-block>
+      <div class="md desc-view" {% if e %}data-desc-view title="Cliquer pour modifier" style="cursor:text; min-height: 40px; padding: 6px; margin: -6px; border-radius: 6px"{% endif %}>
+        {% if issue.description %}{{ issue.description|md }}{% else %}<p class="muted">{{ 'Ajouter une description…' if e else 'Pas de description.' }}</p>{% endif %}
+      </div>
+      {% if e %}
+      <form method="post" action="{{ url_for('issues.edit', pid=project.id, seq=issue.sequence_id) }}" class="desc-edit hide" data-desc-form>
+        {{ ui.csrf() }}
+        {{ ui.md_editor('description', issue.description or '', 'Décris le ticket : contexte, attendus, critères de fin…', 10) }}
+        <div class="form-actions"><button type="button" class="btn btn-sm" data-desc-cancel>Annuler</button><button class="btn btn-sm btn-primary">Enregistrer</button></div>
+      </form>
+      {% endif %}
+    </div>
+
+    <div class="reactions" style="padding:12px 0 0">
+      {% for emoji, n, mine, names in group_reactions(issue.reactions, current_user) %}
+      <button type="button" class="reaction {% if mine %}mine{% endif %}" data-react="{{ emoji }}" data-issue-id="{{ issue.id }}" title="{{ names }}">{{ emoji }} {{ n }}</button>
+      {% endfor %}
+      {% if can_comment %}
+      <div class="dd"><button type="button" class="reaction reaction-add" data-menu title="Réagir">{{ icon('smile', 14) }}</button>
+        <div class="menu left emoji-picker">{% for em in ['👍','👎','🎉','❤️','🚀','👀','✅','🔥','😄','🤔','⚠️','🙏','💯','📌','⏳','❌'] %}<button type="button" data-react="{{ em }}" data-issue-id="{{ issue.id }}">{{ em }}</button>{% endfor %}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    {# Sous-tickets #}
+    <section class="issue-section" id="subissues">
+      <div class="sh">
+        <h3>Sous-tickets</h3>
+        {% set cp = issue.children_progress %}
+        {% if cp %}<span class="count-pill">{{ cp.done }}/{{ cp.total }}</span><div class="progress" style="width:120px"><span style="width:{{ cp.pct }}%"></span></div>{% endif %}
+        {% if e %}<button class="btn btn-xs btn-ghost right" type="button" data-toggle="#sub-form">{{ icon('plus', 13) }} Ajouter</button>{% endif %}
+      </div>
+      {% if issue.visible_children %}
+      <div class="sublist" data-issues-root>
+        {% set eds = L.edit_map([project]) %}
+        {% for c in issue.visible_children|sort(attribute='sequence_id') %}{{ L.list_row(c, {'group_by': 'none'}, eds, False, True) }}{% endfor %}
+      </div>
+      {% endif %}
+      {% if e %}
+      <form method="post" action="{{ url_for('issues.subissue_add', pid=project.id, seq=issue.sequence_id) }}" id="sub-form" class="flex gap mt {% if issue.visible_children %}hide{% endif %}">
+        {{ ui.csrf() }}
+        <input class="input input-sm grow" name="title" placeholder="Titre du nouveau sous-ticket">
+        <span class="muted small">ou</span>
+        <input class="input input-sm" style="width:150px" name="ref" list="issue-keys" placeholder="Existant (EAE-12)">
+        <button class="btn btn-sm">Ajouter</button>
+      </form>
+      {% endif %}
+    </section>
+
+    {# Relations #}
+    <section class="issue-section" id="relations">
+      <div class="sh"><h3>Relations</h3>{% if e %}<button class="btn btn-xs btn-ghost right" type="button" data-toggle="#rel-form">{{ icon('plus', 13) }} Ajouter</button>{% endif %}</div>
+      {% for label, other, rel in relations %}
+      <div class="rel-row">
+        <span class="badge {% if label in ('Bloqué par',) %}badge-danger{% elif label == 'Bloque' %}badge-warning{% endif %}">{{ label }}</span>
+        {{ state_icon(other.state_group, other.state.color if other.state else None) }}
+        <a class="key" href="{{ url_for('issues.detail', pid=other.project_id, seq=other.sequence_id) }}">{{ other.key }}</a>
+        <a class="ellipsis grow" href="{{ url_for('issues.detail', pid=other.project_id, seq=other.sequence_id) }}">{{ other.title }}</a>
+        {% if e %}<form method="post" action="{{ url_for('issues.relation_delete', rid=rel.id) }}" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ request.path }}#relations"><button class="btn btn-ghost btn-icon btn-xs" title="Supprimer la relation">{{ icon('x', 13) }}</button></form>{% endif %}
+      </div>
+      {% else %}<p class="muted small">Aucune relation.</p>{% endfor %}
+      {% if e %}
+      <form method="post" action="{{ url_for('issues.relation_add', pid=project.id, seq=issue.sequence_id) }}" id="rel-form" class="flex gap mt hide">
+        {{ ui.csrf() }}
+        <select class="input input-sm" name="relation_type" style="width:auto">
+          <option value="blocked_by">Est bloqué par</option><option value="blocks">Bloque</option>
+          <option value="relates_to">Est lié à</option><option value="duplicate_of">Est un doublon de</option>
+        </select>
+        <input class="input input-sm grow" name="ref" list="issue-keys" placeholder="Clé du ticket (ex. EAE-12)" required>
+        <button class="btn btn-sm">Ajouter</button>
+      </form>
+      {% endif %}
+    </section>
+
+    {# Liens #}
+    <section class="issue-section" id="links">
+      <div class="sh"><h3>Liens</h3>{% if e %}<button class="btn btn-xs btn-ghost right" type="button" data-toggle="#link-form">{{ icon('plus', 13) }} Ajouter</button>{% endif %}</div>
+      {% for l in issue.links %}
+      <div class="link-row">{{ icon('link', 14) }}<a class="u" href="{{ l.url }}" target="_blank" rel="noopener">{{ l.title }}</a><span class="muted small ellipsis" style="max-width:240px">{{ l.url }}</span>
+        {% if e %}<form method="post" action="{{ url_for('issues.link_delete', lid=l.id) }}" class="inline-form right">{{ ui.csrf() }}<button class="btn btn-ghost btn-icon btn-xs">{{ icon('x', 13) }}</button></form>{% endif %}
+      </div>
+      {% else %}<p class="muted small">Aucun lien. Ajoute un lien vers un document partagé, un SharePoint, une source…</p>{% endfor %}
+      {% if e %}
+      <form method="post" action="{{ url_for('issues.link_add', pid=project.id, seq=issue.sequence_id) }}" id="link-form" class="flex gap mt hide">
+        {{ ui.csrf() }}
+        <input class="input input-sm grow" name="url" placeholder="https://…" required>
+        <input class="input input-sm" name="title" placeholder="Titre (facultatif)">
+        <button class="btn btn-sm">Ajouter</button>
+      </form>
+      {% endif %}
+    </section>
+
+    {# Pièces jointes #}
+    <section class="issue-section" id="attachments">
+      <div class="sh"><h3>Pièces jointes</h3><span class="count-pill">{{ issue.attachments|length }}</span></div>
+      {% if issue.attachments %}
+      <div class="att-grid mb">
+        {% for a in issue.attachments %}
+        <div class="att">
+          <div class="thumb">{% if a.is_image %}<img src="{{ url_for('issues.attachment_get', aid=a.id, inline=1) }}" alt="">{% else %}{{ icon('paperclip', 16) }}{% endif %}</div>
+          <div class="meta"><a href="{{ url_for('issues.attachment_get', aid=a.id, inline=1 if a.is_image or a.mimetype == 'application/pdf' else 0) }}" target="_blank" title="{{ a.filename }}">{{ a.filename }}</a><span class="muted tiny">{{ a.size|filesize }} · {{ a.uploaded_by.display_name if a.uploaded_by else '' }} · {{ a.created_at|ago }}</span></div>
+          <a class="btn btn-ghost btn-icon btn-xs" href="{{ url_for('issues.attachment_get', aid=a.id) }}" title="Télécharger">{{ icon('download', 13) }}</a>
+          {% if can_comment %}<form method="post" action="{{ url_for('issues.attachment_delete', aid=a.id) }}" class="inline-form" data-confirm="Supprimer {{ a.filename }} ?">{{ ui.csrf() }}<button class="btn btn-ghost btn-icon btn-xs" title="Supprimer">{{ icon('trash', 13) }}</button></form>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if can_comment %}
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('issues.attachment_add', pid=project.id, seq=issue.sequence_id) }}" data-upload-form>
+        {{ ui.csrf() }}
+        <label class="dropzone" data-dropzone>{{ icon('upload', 16) }} Glisse des fichiers ici ou <u>parcours</u> (50 Mo max.)<input type="file" name="files" multiple hidden></label>
+      </form>
+      {% endif %}
+    </section>
+
+    {# Activité #}
+    <section class="issue-section" id="activity">
+      <div class="sh"><h3>Activité</h3>
+        <div class="seg right">
+          {% for k, lab in [('all', 'Tout'), ('comments', 'Commentaires'), ('activity', 'Historique'), ('worklogs', 'Temps passé')] %}
+          <a href="?tab={{ k }}#activity" class="{% if tab == k %}active{% endif %}">{{ lab }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="timeline">
+        {% for kind, when, obj in timeline %}
+          {% if kind == 'comment' %}
+          {% set c = obj %}
+          <div class="tl-comment" id="comment-{{ c.id }}">
+            {{ ui.avatar(c.author, 27) }}
+            <div class="comment-card" data-comment>
+              <div class="ch"><b>{{ c.author.display_name if c.author else 'Utilisateur supprimé' }}</b><span class="muted" title="{{ c.created_at|datetime }}">{{ c.created_at|ago }}</span>{% if c.updated_at %}<span class="muted tiny">(modifié)</span>{% endif %}
+                {% if c.author_id == current_user.id or can(current_user, 'admin', project) %}
+                <div class="dd right"><button type="button" class="btn btn-ghost btn-icon btn-xs" data-menu>{{ icon('more', 14) }}</button>
+                  <div class="menu" style="min-width:150px">
+                    <button type="button" class="menu-item" data-comment-edit>{{ icon('edit') }} Modifier</button>
+                    <form method="post" action="{{ url_for('issues.comment_delete', cid=c.id) }}" data-confirm="Supprimer ce commentaire ?">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+              <div class="cb md">{{ c.body|md }}</div>
+              <form method="post" action="{{ url_for('issues.comment_edit', cid=c.id) }}" class="edit-form">{{ ui.csrf() }}<textarea class="input" name="body" rows="4" data-mention>{{ c.body }}</textarea><div class="form-actions"><button type="button" class="btn btn-sm" data-comment-cancel>Annuler</button><button class="btn btn-sm btn-primary">Enregistrer</button></div></form>
+              <div class="reactions">
+                {% for emoji, n, mine, names in group_reactions(c.reactions, current_user) %}
+                <button type="button" class="reaction {% if mine %}mine{% endif %}" data-react="{{ emoji }}" data-comment-id="{{ c.id }}" title="{{ names }}">{{ emoji }} {{ n }}</button>
+                {% endfor %}
+                {% if can_comment %}
+                <div class="dd"><button type="button" class="reaction reaction-add" data-menu>{{ icon('smile', 13) }}</button>
+                  <div class="menu left emoji-picker">{% for em in ['👍','👎','🎉','❤️','🚀','👀','✅','🔥','😄','🤔','⚠️','🙏','💯','📌','⏳','❌'] %}<button type="button" data-react="{{ em }}" data-comment-id="{{ c.id }}">{{ em }}</button>{% endfor %}</div>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% elif kind == 'worklog' %}
+          {% set w = obj %}
+          <div class="tl-act"><span class="tl-ic">{{ icon('timer', 13) }}</span><div class="tl-t"><b>{{ w.user.display_name }}</b> a travaillé <b>{{ w.minutes|minutes }}</b> le {{ w.date|date(True) }}{% if w.description %} — {{ w.description }}{% endif %}
+            {% if w.user_id == current_user.id or can(current_user, 'admin', project) %}<form method="post" action="{{ url_for('issues.worklog_delete', wid=w.id) }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-ghost btn-xs" title="Supprimer">{{ icon('x', 12) }}</button></form>{% endif %}</div></div>
+          {% else %}
+          {% set a = obj %}
+          <div class="tl-act">
+            <span class="tl-ic">{{ icon({'created': 'plus', 'state': 'check-circle', 'priority': 'flag', 'assignees': 'user', 'labels': 'tag', 'cycle': 'cycle', 'modules': 'module', 'target_date': 'calendar', 'start_date': 'calendar', 'attachment_added': 'paperclip', 'link_added': 'link', 'relation_added': 'link', 'archived': 'archive', 'worklog': 'timer', 'description': 'edit', 'title': 'edit'}.get(a.field or a.verb, 'activity'), 13) }}</span>
+            <div class="tl-t"><b>{{ a.actor.display_name if a.actor else 'Hangar' }}</b> {{ activity_text(a) }} <span class="muted" title="{{ a.created_at|datetime }}">· {{ a.created_at|ago }}</span></div>
+          </div>
+          {% endif %}
+        {% else %}
+          <p class="muted small">Rien à afficher.</p>
+        {% endfor %}
+      </div>
+      <span id="bottom"></span>
+      {% if can_comment and tab != 'worklogs' %}
+      <form method="post" action="{{ url_for('issues.comment_add', pid=project.id, seq=issue.sequence_id) }}" class="comment-box" data-ctrl-enter>
+        {{ ui.csrf() }}
+        {{ ui.avatar(current_user, 27) }}
+        <div class="grow">{{ ui.md_editor('body', '', 'Ajouter un commentaire… (@ pour mentionner)', 3, False, 'Commenter') }}</div>
+      </form>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ------------------------------------------------ Panneau latéral #}
+  <aside class="issue-side" data-issues-root>
+    <div class="side-h" style="margin-top:0">Propriétés</div>
+    <div class="prop-row"><span class="k">{{ icon('check-circle', 14) }} État</span><div>{{ P.prop(i=issue, kind='state', editable=e) }}</div></div>
+    <div class="prop-row"><span class="k">{{ icon('flag', 14) }} Priorité</span><div>{{ P.prop(issue, 'priority', e) }}</div></div>
+    <div class="prop-row"><span class="k">{{ icon('users', 14) }} Assignés</span><div>{{ P.prop(issue, 'assignees', e) }}</div></div>
+    <div class="prop-row"><span class="k">{{ icon('tag', 14) }} Étiquettes</span><div>{{ P.prop(issue, 'labels', e) }}</div></div>
+    <div class="prop-row"><span class="k">{{ icon('calendar', 14) }} Début</span><div>{{ P.date_prop(issue, 'start_date', e) }}</div></div>
+    <div class="prop-row"><span class="k">{{ icon('flag', 14) }} Échéance</span><div>{{ P.date_prop(issue, 'target_date', e) }}{% if issue.target_date and not issue.is_closed %}<span class="small {% if issue.is_overdue %}danger-text{% else %}muted{% endif %}" style="margin-left:6px">{{ issue.target_date|due }}</span>{% endif %}</div></div>
+    {% if project.estimate_type != 'none' %}<div class="prop-row"><span class="k">{{ icon('estimate', 14) }} Estimation</span><div>{{ P.prop(issue, 'estimate', e) }}</div></div>{% endif %}
+    {% if project.cycles_enabled %}<div class="prop-row"><span class="k">{{ icon('cycle', 14) }} Cycle</span><div>{{ P.prop(issue, 'cycle', e) }}</div></div>{% endif %}
+    {% if project.modules_enabled %}<div class="prop-row"><span class="k">{{ icon('module', 14) }} Modules</span><div>{{ P.prop(issue, 'modules', e) }}</div></div>{% endif %}
+    <div class="prop-row"><span class="k">{{ icon('parent', 14) }} Parent</span>
+      <div>{% if e %}
+        <select class="input input-sm" data-set-parent="{{ issue.id }}" style="max-width:100%">
+          <option value="">Aucun</option>
+          {% for o in project.issues|sort(attribute='sequence_id') if o.id != issue.id and not o.archived_at and o.intake_status in (none, 'accepted') and o.parent_id != issue.id %}<option value="{{ o.id }}" {% if o.id == issue.parent_id %}selected{% endif %}>{{ o.key }} · {{ o.title|truncate(40) }}</option>{% endfor %}
+        </select>
+      {% elif issue.parent %}<a href="{{ url_for('issues.detail', pid=project.id, seq=issue.parent.sequence_id) }}">{{ issue.parent.key }}</a>{% else %}<span class="muted">Aucun</span>{% endif %}</div>
+    </div>
+
+    {% if project.time_tracking_enabled %}
+    <div class="side-h" id="worklogs">Temps passé <span class="bold" style="color:var(--text)">{{ issue.time_spent_minutes|minutes }}</span></div>
+    {% for u, mins in worklog_by_user %}<div class="flex gap small" style="padding:3px 0">{{ ui.avatar(u, 18) }}<span class="grow">{{ u.display_name }}</span><span class="muted">{{ mins|minutes }}</span></div>{% endfor %}
+    {% if issue.estimate and project.estimate_type in ('hours', 'days') %}
+      {% set planned = issue.estimate * (60 if project.estimate_type == 'hours' else 420) %}
+      <div class="progress accent mt" title="Temps passé / estimation"><span style="width: {{ [100, (100 * issue.time_spent_minutes / planned)|round|int]|min }}%"></span></div>
+      <div class="muted tiny">{{ (100 * issue.time_spent_minutes / planned)|round|int }} % de l’estimation ({{ planned|minutes }})</div>
+    {% endif %}
+    {% if e %}
+    <form method="post" action="{{ url_for('issues.worklog_add', pid=project.id, seq=issue.sequence_id) }}" class="col gap mt" style="gap:6px">
+      {{ ui.csrf() }}
+      <div class="flex gap-4"><input class="input input-sm" name="duration" placeholder="1h30, 45m, 2…" required style="width:110px"><input class="input input-sm grow" type="date" name="date" value="{{ today.isoformat() }}"></div>
+      <div class="flex gap-4"><input class="input input-sm grow" name="description" placeholder="Note (facultatif)"><button class="btn btn-sm">{{ icon('timer', 14) }}</button></div>
+    </form>
+    {% endif %}
+    {% endif %}
+
+    <div class="side-h">Abonnés · {{ issue.subscribers|length }}</div>
+    <div class="flex wrap gap-4">{% for u in issue.subscribers %}{{ ui.avatar(u, 24) }}{% endfor %}</div>
+
+    <div class="side-h">Informations</div>
+    <div class="small col" style="gap:4px">
+      <span class="muted">Créé le {{ issue.created_at|datetime }}</span>
+      <span class="muted">Mis à jour le {{ issue.updated_at|datetime }}</span>
+      {% if issue.completed_at %}<span class="muted">Terminé le {{ issue.completed_at|datetime }}</span>{% endif %}
+      {% if issue.external_id %}<span class="muted">Référence d’origine : <span class="mono">{{ issue.external_id }}</span></span>{% endif %}
+    </div>
+  </aside>
+</div>
+
+<datalist id="issue-keys">
+  {% for o in project.issues|sort(attribute='sequence_id') if o.id != issue.id and not o.archived_at %}<option value="{{ o.key }}">{{ o.title|truncate(60) }}</option>{% endfor %}
+</datalist>
+
+{% if other_projects %}
+<dialog class="modal sm" id="move-modal">
+  <form method="post" action="{{ url_for('issues.action', pid=project.id, seq=issue.sequence_id, action='move') }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Déplacer {{ issue.key }}</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Projet de destination</label><select class="input" name="project_id">{% for p in other_projects %}<option value="{{ p.id }}">{{ p.emoji }} {{ p.name }}</option>{% endfor %}</select></div>
+      <p class="help">L’état est conservé par groupe, les étiquettes de même nom sont reprises. Le cycle, les modules, le parent et les relations sont retirés.</p>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Déplacer</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

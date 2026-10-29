@@ -1,0 +1,26 @@
+[project]
+name = "hangar"
+version = "1.0.0"
+description = "Hangar : gestion de projet et d'équipe 100 % locale, inspirée de Plane"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0",
+    "flask-sqlalchemy>=3.1",
+    "flask-login>=0.6.3",
+    "markdown>=3.6",
+    "nh3>=0.2.17",
+    "openpyxl>=3.1",
+    "waitress>=3.0",
+    "python-docx>=1.2.0",
+]
+
+[project.scripts]
+hangar = "hangar.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hangar"]

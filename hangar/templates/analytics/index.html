@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Analytique{% if project %} · {{ project.name }}{% endif %}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {% if project %}{{ ui.project_crumb(project) }}{% endif %}
+    <span class="current">{{ icon('chart', 15) }} Analytique</span>
+  </div>
+  <div class="tabs in-header" style="margin-left:12px">
+    {% for k, lab in [('overview', 'Vue d’ensemble'), ('trends', 'Tendances'), ('custom', 'Personnalisée'), ('team', 'Équipe')] %}
+    <a class="{% if tab == k %}active{% endif %}" href="?{{ qs(tab=k, format=None) }}">{{ lab }}</a>
+    {% endfor %}
+  </div>
+  <div class="header-actions">
+    <form method="get" class="flex gap-4">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      {% for k in ['x', 'segment', 'metric'] %}{% if request.args.get(k) %}<input type="hidden" name="{{ k }}" value="{{ request.args.get(k) }}">{% endif %}{% endfor %}
+      {% if not project %}
+      <select class="input input-sm" name="project" data-autosubmit style="width:auto;max-width:220px" title="Projet">
+        <option value="">Tous les projets</option>
+        {% for p in projects %}<option value="{{ p.id }}" {% if sel == p.id|string %}selected{% endif %}>{{ p.emoji }} {{ p.name }}</option>{% endfor %}
+      </select>
+      {% endif %}
+      <select class="input input-sm" name="period" data-autosubmit style="width:auto" title="Période">
+        {% for d, lab in [(7, '7 derniers jours'), (30, '30 derniers jours'), (90, '3 derniers mois'), (180, '6 derniers mois'), (365, '12 derniers mois')] %}
+        <option value="{{ d }}" {% if period == d %}selected{% endif %}>{{ lab }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+{% set grid2 = "display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-top:14px" %}
+
+{% if tab == 'overview' %}
+<div class="stats">
+  <div class="stat"><div class="v">{{ kpis.total }}</div><div class="l">{{ icon('layers', 13) }} Tickets au total</div></div>
+  <div class="stat accent"><div class="v">{{ kpis.open }}</div><div class="l">{{ icon('activity', 13) }} Ouverts</div></div>
+  <div class="stat success"><div class="v">{{ kpis.done }}</div><div class="l">{{ icon('check-circle', 13) }} Terminés · {{ kpis.rate }} %</div></div>
+  <div class="stat {% if kpis.overdue %}danger{% endif %}"><div class="v">{{ kpis.overdue }}</div><div class="l">{{ icon('alert', 13) }} En retard</div></div>
+  <div class="stat"><div class="v">{{ (kpis.lead|string).replace('.', ',') ~ ' j' if kpis.lead is not none else '—' }}</div><div class="l">{{ icon('clock', 13) }} Délai moyen de réalisation</div></div>
+  <div class="stat"><div class="v">{{ kpis.created_period }}</div><div class="l">{{ icon('plus', 13) }} Créés sur {{ period }} j</div></div>
+  <div class="stat"><div class="v">{{ kpis.done_period }}</div><div class="l">{{ icon('check', 13) }} Terminés sur {{ period }} j</div></div>
+</div>
+
+<div style="{{ grid2 }}">
+  <div class="panel">
+    <div class="panel-h"><h3>Répartition par état</h3></div>
+    <div class="panel-b chart-box">
+      {{ donut }}
+      <div class="col" style="gap:8px;min-width:180px">
+        {% for g, lab, col in M.STATE_GROUPS %}
+        <div class="flex gap">{{ state_icon(g) }}<span class="grow">{{ lab }}</span><b>{{ counts[g] }}</b><span class="muted small" style="width:38px;text-align:right">{{ counts[g]|pct(kpis.total) }} %</span></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>Tickets créés et terminés (cumul)</h3>
+      <div class="legend right"><span><i style="background:#3f76ff"></i>Créés</span><span><i style="background:#16a34a"></i>Terminés</span></div>
+    </div>
+    <div class="panel-b">{{ trend }}</div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>Tickets ouverts par priorité</h3></div>
+    <div class="panel-b">{{ prio_chart }}</div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>Tickets terminés par semaine</h3><span class="muted small right">12 dernières semaines</span></div>
+    <div class="panel-b">{{ weekly }}</div>
+  </div>
+</div>
+
+<div style="{{ grid2 }}">
+  <div class="panel">
+    <div class="panel-h"><h3>{{ 'Avancement des modules' if project else 'Avancement des projets' }}</h3></div>
+    {% if breakdown %}
+    <table class="table">
+      <thead><tr><th>{{ 'Module' if project else 'Projet' }}</th><th class="num">Tickets</th><th class="num">Terminés</th><th style="width:160px">Progression</th></tr></thead>
+      <tbody>
+      {% for b in breakdown %}
+      <tr>
+        <td><div class="flex gap"><span class="dot" style="background:{{ b.color }}"></span><span class="ellipsis">{{ b.name }}</span>{% if b.sub %}<span class="muted small nowrap">{{ b.sub }}</span>{% endif %}</div></td>
+        <td class="num">{{ b.total }}</td>
+        <td class="num">{{ b.done }}</td>
+        <td><div class="flex gap">{{ ui.progress(b.pct) }}<span class="muted small" style="width:38px;text-align:right">{{ b.pct }} %</span></div></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}{{ ui.empty('module', 'Rien à afficher', 'Aucun module ou projet avec des tickets.') }}{% endif %}
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>Étiquettes</h3><span class="muted small right">12 plus utilisées</span></div>
+    {% if labels %}
+    <table class="table">
+      <thead><tr><th>Étiquette</th><th class="num">Tickets</th><th class="num">Ouverts</th><th style="width:160px">Terminés</th></tr></thead>
+      <tbody>
+      {% for name, d in labels %}
+      {% set pct = (d.total - d.open)|pct(d.total) %}
+      <tr>
+        <td><div class="flex gap"><span class="dot" style="background:{{ d.color }}"></span><span class="ellipsis">{{ name }}</span></div></td>
+        <td class="num">{{ d.total }}</td>
+        <td class="num">{{ d.open }}</td>
+        <td><div class="flex gap">{{ ui.progress(pct) }}<span class="muted small" style="width:38px;text-align:right">{{ pct }} %</span></div></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}{{ ui.empty('tag', 'Aucune étiquette', 'Les tickets n’ont pas encore d’étiquette.') }}{% endif %}
+  </div>
+</div>
+
+{% elif tab == 'custom' %}
+<div class="panel">
+  <div class="panel-b">
+    <form method="get" class="flex wrap gap-12 start">
+      <input type="hidden" name="tab" value="custom">
+      <input type="hidden" name="period" value="{{ period }}">
+      {% if not project and sel %}<input type="hidden" name="project" value="{{ sel }}">{% endif %}
+      <div class="field" style="margin:0;min-width:200px"><label>Axe horizontal</label>
+        <select class="input input-sm" name="x" data-autosubmit>
+          {% for k, lab in DIMENSIONS.items() %}<option value="{{ k }}" {% if x == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field" style="margin:0;min-width:200px"><label>Segmenter par</label>
+        <select class="input input-sm" name="segment" data-autosubmit>
+          <option value="none" {% if segment == 'none' %}selected{% endif %}>Aucun</option>
+          {% for k, lab in DIMENSIONS.items() %}<option value="{{ k }}" {% if segment == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field" style="margin:0;min-width:200px"><label>Mesure</label>
+        <select class="input input-sm" name="metric" data-autosubmit>
+          {% for k, lab in METRICS.items() %}<option value="{{ k }}" {% if metric == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select>
+      </div>
+      <a class="btn btn-sm right" style="align-self:flex-end" href="?{{ qs(tab='custom', format='csv') }}">{{ icon('download', 14) }} Exporter en CSV</a>
+    </form>
+  </div>
+</div>
+
+<div class="panel mt">
+  <div class="panel-h"><h3>{{ METRICS[metric] }} par {{ DIMENSIONS[x]|lower }}{% if segment != 'none' %} · segmenté par {{ DIMENSIONS[segment]|lower }}{% endif %}</h3></div>
+  <div class="panel-b">
+    {% if chart %}
+    <div class="legend mb">{% for name, color, values in series %}<span><i style="background:{{ color }}"></i>{{ name }}</span>{% endfor %}</div>
+    <div style="overflow-x:auto">{{ chart }}</div>
+    {% else %}{{ ui.empty('chart', 'Aucune donnée', 'Aucun ticket ne correspond à cette analyse.') }}{% endif %}
+  </div>
+</div>
+
+{% if table %}
+<div class="panel mt" style="overflow-x:auto">
+  <table class="table">
+    <thead><tr>
+      <th>{{ DIMENSIONS[x] }}</th>
+      {% for lab, col in seg_labels %}<th class="num"><span class="flex gap-4" style="justify-content:flex-end">{% if col %}<span class="dot" style="background:{{ col }}"></span>{% endif %}{{ lab }}</span></th>{% endfor %}
+      <th class="num">Total</th>
+    </tr></thead>
+    <tbody>
+      {% for row in table %}
+      <tr>
+        <td>{{ row.label }}</td>
+        {% for v in row['values'] %}<td class="num {% if not v %}muted{% endif %}">{{ '%g'|format(v) }}</td>{% endfor %}
+        <td class="num bold">{{ '%g'|format(row.total) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+<p class="help mt">Un ticket ayant plusieurs assignés, étiquettes ou modules est compté dans chacun d’eux.</p>
+
+{% elif tab == 'trends' %}
+{% set k = trend_kpis %}
+<div class="stats">
+  <div class="stat"><div class="v">{{ k.wip }}</div><div class="l">{{ state_icon('started', None, 13) }} En cours aujourd’hui</div></div>
+  <div class="stat success"><div class="v">{{ k.done_period }}</div><div class="l">{{ icon('check-circle', 13) }} Terminés sur {{ k.days }} j</div></div>
+  <div class="stat"><div class="v">{{ k.throughput }}</div><div class="l">{{ icon('trending', 13) }} Tickets terminés / semaine</div></div>
+  <div class="stat"><div class="v">{{ k.median_lead if k.median_lead is not none else '–' }}{% if k.median_lead is not none %} j{% endif %}</div><div class="l">{{ icon('clock', 13) }} Délai médian de réalisation</div></div>
+  <div class="stat"><div class="v">{{ k.avg_velocity if k.avg_velocity is not none else '–' }}</div><div class="l">{{ icon('cycle', 13) }} Vélocité moyenne / cycle</div></div>
+  <div class="stat {% if k.forecast is none %}danger{% else %}accent{% endif %}"><div class="v" style="font-size:18px">{{ k.forecast or 'indéterminée' }}</div><div class="l">{{ icon('flag', 13) }} Fin estimée ({{ k.remaining }} restants, {{ k.rate }}/sem.)</div></div>
+</div>
+
+<div class="panel mt">
+  <div class="panel-h"><h3>Flux cumulé (CFD)</h3>
+    <div class="legend right">{% for g in trend_order|reverse %}<span><i style="background:{{ M.STATE_GROUP_COLORS[g] }}"></i>{{ M.STATE_GROUP_LABELS[g] }}</span>{% endfor %}</div>
+  </div>
+  <div class="panel-b">{{ cfd }}<p class="help mt">Nombre de tickets dans chaque groupe d’état, jour par jour (reconstruit à partir de l’historique). Une bande « En cours » qui s’élargit signale un goulot d’étranglement ; les tickets annulés sont exclus.</p></div>
+</div>
+
+<div style="{{ grid2 }}">
+  <div class="panel">
+    <div class="panel-h"><h3>Burn-up</h3><div class="legend right"><span><i style="background:#3f76ff"></i>Périmètre</span><span><i style="background:#16a34a"></i>Terminés</span></div></div>
+    <div class="panel-b">{{ burnup }}<p class="help mt">L’écart entre les deux courbes est le travail restant ; une courbe de périmètre qui monte indique un ajout de tickets.</p></div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>Vélocité par cycle</h3><div class="legend right"><span><i style="background:{{ M.STATE_GROUP_COLORS['completed'] }}"></i>Terminés</span><span><i style="background:#a3a3a3"></i>Non terminés</span></div></div>
+    <div class="panel-b" style="overflow-x:auto">{% if velocity %}{{ velocity }}{% else %}{{ ui.empty('cycle', 'Aucun cycle commencé', 'Crée des cycles (sprints) pour suivre la vélocité de l’équipe.') }}{% endif %}</div>
+  </div>
+  {% if points_chart %}
+  <div class="panel">
+    <div class="panel-h"><h3>Estimation terminée par cycle</h3></div>
+    <div class="panel-b" style="overflow-x:auto">{{ points_chart }}</div>
+  </div>
+  {% endif %}
+  <div class="panel">
+    <div class="panel-h"><h3>Délai de réalisation</h3><span class="muted small right">de la création à la clôture</span></div>
+    <div class="panel-b">{% if lead_chart %}{{ lead_chart }}{% else %}{{ ui.empty('clock', 'Aucun ticket terminé') }}{% endif %}</div>
+  </div>
+  <div class="panel">
+    <div class="panel-h"><h3>Âge des tickets ouverts</h3>{% if k.oldest_open is not none %}<span class="muted small right">le plus ancien : {{ k.oldest_open }} j</span>{% endif %}</div>
+    <div class="panel-b">{% if age_chart %}{{ age_chart }}{% else %}{{ ui.empty('check-circle', 'Aucun ticket ouvert') }}{% endif %}</div>
+  </div>
+</div>
+
+{% elif tab == 'team' %}
+<div class="panel">
+  <div class="panel-h"><h3>Tickets par membre et par état</h3>
+    <div class="legend right">{% for g, lab, col in M.STATE_GROUPS %}<span><i style="background:{{ col }}"></i>{{ lab }}</span>{% endfor %}</div>
+  </div>
+  <div class="panel-b" style="overflow-x:auto">
+    {% if team_chart %}{{ team_chart }}{% else %}{{ ui.empty('users', 'Aucun membre', 'Ajoute des membres aux projets pour suivre leur charge.') }}{% endif %}
+  </div>
+</div>
+
+<div class="panel mt">
+  <div class="panel-h"><h3>Charge et contribution</h3>
+    <span class="muted small">{{ unassigned }} ticket(s) ouvert(s) sans assigné</span>
+    <a class="btn btn-sm right" href="{{ url_for('team.workload', project=project.id if project else (sel or None)) }}">{{ icon('calendar', 14) }} Planning de charge</a>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead><tr>
+      <th>Membre</th><th style="width:200px">Ouverts</th><th class="num">En cours</th><th class="num">En retard</th>
+      <th class="num">Terminés ({{ period }} j)</th><th class="num">Estimation ouverte</th><th class="num">Temps saisi ({{ period }} j)</th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+      <td><a class="flex gap" href="{{ url_for('team.profile', username=r.user.username) }}">{{ ui.avatar(r.user, 24) }}<span>{{ r.user.display_name }}</span></a></td>
+      <td><div class="flex gap"><b style="width:24px">{{ r.open }}</b><div class="progress accent grow"><span style="width:{{ r.open|pct(max_open) }}%"></span></div></div></td>
+      <td class="num">{{ r.started }}</td>
+      <td class="num {% if r.overdue %}danger-text bold{% else %}muted{% endif %}">{{ r.overdue }}</td>
+      <td class="num {% if r.done %}success-text{% else %}muted{% endif %}">{{ r.done }}</td>
+      <td class="num">{{ r.points or '–' }}</td>
+      <td class="num">{{ fmt_minutes(r.minutes) if r.minutes else '–' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">{{ ui.empty('users', 'Aucun membre') }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

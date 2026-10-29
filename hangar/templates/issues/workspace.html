@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "issues/_layouts.html" as L with context %}
+{% block title %}Mes tickets{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('layers', 15) }} Tickets de l’espace</span></div>
+  <div class="tabs in-header" style="margin-left:12px">
+    {% for k, lab in [('assigned', 'Assignés'), ('created', 'Créés'), ('subscribed', 'Suivis'), ('all', 'Tous')] %}
+    <a class="{% if scope == k %}active{% endif %}" href="?{{ qs(scope=k) }}">{{ lab }}</a>
+    {% endfor %}
+  </div>
+  <div class="header-actions">
+    {{ L.layout_switch(opts) }}
+    {{ L.filter_menu(filters, projects, opts) }}
+    {{ L.display_menu(opts, multi=True) }}
+    {% if not current_user.is_guest %}{{ L.save_view_button(None) }}{% endif %}
+    <button class="btn btn-sm btn-primary" type="button" data-create-issue>{{ icon('plus', 14) }} Nouveau ticket</button>
+  </div>
+</div>
+{{ L.chips_bar(chips) }}
+{% endblock %}
+{% block content %}
+{{ L.render(opts, scope_projects, groups=groups, issues=issues, cal=cal, gantt=gantt, show_project=True) }}
+{% endblock %}

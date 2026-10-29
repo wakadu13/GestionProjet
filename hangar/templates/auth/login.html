@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Connexion{% endblock %}
+{% block auth %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo"><span class="lg">{{ icon('plane', 20) }}</span> Hangar <span class="muted" style="font-weight:500;font-size:14px">· {{ ws.emoji }} {{ ws.name }}</span></div>
+    <h2>Connexion</h2>
+    <p class="muted mb">Gestion de projet et d’équipe, 100 % locale.</p>
+    {% if accounts %}
+    <div class="label mb" style="margin-bottom:8px">Qui es-tu ?</div>
+    <div class="flex wrap gap-4 mb" data-accounts>
+      {% for u in accounts %}
+      <button type="button" class="tag" style="cursor:pointer;height:28px" data-account="{{ u.username }}" title="@{{ u.username }}">{{ ui.avatar(u, 18) }} {{ u.display_name }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form method="post">
+      {{ ui.csrf() }}
+      <div class="field"><label>Identifiant</label><input class="input" name="login" autofocus required autocomplete="username"></div>
+      <div class="field"><label>Mot de passe</label><input class="input" type="password" name="password" required autocomplete="current-password"></div>
+      <label class="checkbox mb"><input type="checkbox" name="remember" value="1" checked> Rester connecté</label>
+      <button class="btn btn-primary w-full" style="height:38px">Se connecter</button>
+    </form>
+    {% if ws.allow_signup %}<p class="small muted mt center-text">Pas encore de compte ? <a href="{{ url_for('auth.signup') }}" style="color:var(--accent-text)">Créer un compte</a></p>{% endif %}
+    <p class="tiny muted mt center-text">Mot de passe oublié ? Un administrateur peut le réinitialiser depuis la page Équipe.</p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-account]').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-account]').forEach((x) => x.classList.toggle('active', x === b));
+  document.querySelector('[name=login]').value = b.dataset.account;
+  document.querySelector('[name=password]').focus();
+}));
+</script>
+<style>[data-account].active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-text); }</style>
+{% endblock %}

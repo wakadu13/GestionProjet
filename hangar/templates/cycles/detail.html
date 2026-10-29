@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "issues/_layouts.html" as L with context %}
+{% block title %}{{ cycle.name }} · {{ project.name }}{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% set colors = {'current': '#f59e0b', 'upcoming': '#3f76ff', 'completed': '#16a34a', 'draft': '#a3a3a3'} %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <a href="{{ url_for('cycles.index', pid=project.id) }}">{{ icon('cycle', 15) }} Cycles</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current">{{ cycle.name }}</span>
+    {{ ui.status_pill(cycle.status_label, colors[cycle.status]) }}
+    {{ ui.fav_button('cycle', cycle.id) }}
+  </div>
+  <div class="header-actions">
+    {{ L.layout_switch(opts, ['list', 'board', 'spreadsheet']) }}
+    {{ L.filter_menu(filters, [project], opts, hide=('cycle',)) }}
+    {{ L.display_menu(opts) }}
+    {% if can_edit %}
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Actions du cycle">{{ icon('more', 16) }}</button>
+      <div class="menu" style="width:240px">
+        <button class="menu-item" type="button" data-open="edit-cycle-modal">{{ icon('edit') }} Modifier le cycle</button>
+        <button class="menu-item" type="button" data-open="add-issues-modal">{{ icon('plus') }} Ajouter des tickets existants</button>
+        <div class="menu-sep"></div>
+        <form method="post" action="{{ url_for('cycles.action', pid=project.id, cid=cycle.id, action='archive') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('refresh' if cycle.archived_at else 'archive') }} {{ 'Restaurer' if cycle.archived_at else 'Archiver' }}</button></form>
+        <form method="post" action="{{ url_for('cycles.action', pid=project.id, cid=cycle.id, action='delete') }}" data-confirm="Supprimer le cycle « {{ cycle.name }} » ? Les tickets sont conservés.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+      </div>
+    </div>
+    <button class="btn btn-sm btn-primary" type="button" data-create-issue data-project="{{ project.id }}" data-cycle="{{ cycle.id }}">{{ icon('plus', 14) }} Nouveau ticket</button>
+    {% endif %}
+  </div>
+</div>
+{{ L.chips_bar(chips) }}
+{% endblock %}
+
+{% block content %}
+{% set pr = stats.progress %}
+<div class="split">
+  <div class="main-col">
+    {{ L.render(opts, [project], groups=groups, issues=issues, cal=cal, gantt=gantt, quick={'cycle': cycle.id}) }}
+  </div>
+  <aside class="side-col">
+    <h4>Cycle</h4>
+    <div class="col gap" style="gap:6px">
+      {{ ui.date_range(cycle.start_date, cycle.end_date) }}
+      {% if cycle.status == 'current' and cycle.days_left is not none %}
+        <span class="small {% if cycle.days_left <= 2 %}warning-text{% else %}muted{% endif %}">{{ icon('clock', 13) }} {% if cycle.days_left == 0 %}Dernier jour du cycle{% else %}{{ cycle.days_left }} jour{{ 's' if cycle.days_left > 1 }} restant{{ 's' if cycle.days_left > 1 }}{% endif %}</span>
+      {% elif cycle.status == 'upcoming' %}
+        <span class="small muted">Commence {{ cycle.start_date|due }}</span>
+      {% endif %}
+      {% if cycle.owner %}<span class="small flex gap" style="gap:6px">{{ ui.avatar(cycle.owner, 18) }} {{ cycle.owner.display_name }}</span>{% endif %}
+      {% if cycle.description %}<div class="md small text-2">{{ cycle.description|md }}</div>{% endif %}
+    </div>
+
+    <h4>Avancement</h4>
+    <div class="chart-box">
+      {{ stats.donut }}
+      <div class="col" style="gap:4px">
+        {% for g, lab, col in M.STATE_GROUPS %}
+        <span class="small flex gap" style="gap:6px">{{ state_icon(g) }} {{ lab }} <b>{{ pr.counts[g] }}</b></span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="mt small muted">{{ pr.done }} ticket(s) terminé(s) sur {{ pr.total }}{% if stats.points_total %} · {{ stats.points_done }}/{{ stats.points_total }} {{ 'points' if project.estimate_type not in ('hours', 'days') else ('heures' if project.estimate_type == 'hours' else 'jours') }}{% endif %}</div>
+    {{ ui.progress(pr.pct) }}
+
+    {% if stats.burndown %}
+    <h4>Burndown</h4>
+    <div class="legend mb"><span><i style="background:#3f76ff"></i>Restant</span><span><i style="background:#a3a3a3"></i>Idéal</span></div>
+    {{ stats.burndown }}
+    {% endif %}
+
+    {% if stats.by_assignee %}
+    <h4>Par assigné</h4>
+    {% for d in stats.by_assignee %}
+    <div class="bar-row">
+      <span class="flex gap ellipsis" style="gap:6px">{{ ui.avatar(d.user, 18) }}<span class="ellipsis">{{ d.user.display_name if d.user else 'Non assigné' }}</span></span>
+      {{ ui.progress((100 * d.done / d.total)|round|int if d.total else 0) }}
+      <span class="n">{{ d.done }}/{{ d.total }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if stats.by_label %}
+    <h4>Par étiquette</h4>
+    {% for d in stats.by_label %}
+    <div class="bar-row">
+      <span class="flex gap ellipsis" style="gap:6px"><span class="dot" style="background:{{ d.label.color }}"></span><span class="ellipsis">{{ d.label.name }}</span></span>
+      {{ ui.progress((100 * d.done / d.total)|round|int if d.total else 0) }}
+      <span class="n">{{ d.done }}/{{ d.total }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if can_edit %}
+    <h4>Transférer</h4>
+    {% if other_cycles %}
+    <form method="post" action="{{ url_for('cycles.action', pid=project.id, cid=cycle.id, action='transfer') }}" class="col" style="gap:6px" data-confirm="Transférer tous les tickets non terminés vers le cycle choisi ?">
+      {{ ui.csrf() }}
+      <select class="input input-sm" name="target_id" required>
+        <option value="">Cycle de destination…</option>
+        {% for c in other_cycles %}<option value="{{ c.id }}">{{ c.name }} ({{ c.status_label|lower }})</option>{% endfor %}
+      </select>
+      <button class="btn btn-sm">{{ icon('arrow-right', 14) }} Transférer les tickets non terminés</button>
+    </form>
+    {% else %}
+    <p class="small muted">Crée un autre cycle (en cours, à venir ou brouillon) pour y transférer les tickets non terminés.</p>
+    {% endif %}
+    <button class="btn btn-sm btn-ghost mt" type="button" data-open="add-issues-modal">{{ icon('plus', 14) }} Ajouter des tickets existants</button>
+    {% endif %}
+  </aside>
+</div>
+
+{% if can_edit %}
+<dialog class="modal sm" id="edit-cycle-modal">
+  <form method="post" action="{{ url_for('cycles.edit', pid=project.id, cid=cycle.id) }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Modifier le cycle</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Nom</label><input class="input" name="name" value="{{ cycle.name }}" required></div>
+      <div class="field"><label>Description</label><textarea class="input" name="description" rows="3">{{ cycle.description or '' }}</textarea></div>
+      <div class="grid-2">
+        <div class="field"><label>Début</label><input class="input" type="date" name="start_date" value="{{ cycle.start_date.isoformat() if cycle.start_date else '' }}"></div>
+        <div class="field"><label>Fin</label><input class="input" type="date" name="end_date" value="{{ cycle.end_date.isoformat() if cycle.end_date else '' }}"></div>
+      </div>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Enregistrer</button></div></div>
+  </form>
+</dialog>
+
+<dialog class="modal" id="add-issues-modal">
+  <form method="post" action="{{ url_for('cycles.action', pid=project.id, cid=cycle.id, action='add-issues') }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Ajouter des tickets au cycle</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b panel-menu" style="width:auto;max-height:60vh">
+      {% if candidates %}
+      <div class="pm-search"><input class="input input-sm" type="search" placeholder="Filtrer les tickets…" data-opt-filter></div>
+      <div class="pm-section">
+        {% for i in candidates %}
+        <label class="opt" data-opt-text="{{ (i.key ~ ' ' ~ i.title)|lower }}"><input type="checkbox" name="issue_ids" value="{{ i.id }}">{{ state_icon(i.state_group, i.state.color if i.state else None) }}<span class="key">{{ i.key }}</span><span class="ellipsis">{{ i.title }}</span>{% if i.target_date %}<span class="muted tiny right nowrap">{{ i.target_date|date }}</span>{% endif %}</label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">Tous les tickets ouverts sont déjà rattachés à un cycle.</p>
+      {% endif %}
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary" {% if not candidates %}disabled{% endif %}>Ajouter la sélection</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

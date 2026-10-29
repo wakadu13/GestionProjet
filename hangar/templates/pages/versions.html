@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Historique · {{ page.title }}{% endblock %}
+
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <a href="{{ url_for('pages.index', pid=project.id) }}">{{ icon('page', 15) }} Pages</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <a href="{{ url_for('pages.view', pid=project.id, page_id=page.id) }}">{{ page.emoji }} {{ page.title|truncate(40) }}</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current">{{ icon('history', 14) }} Historique</span>
+  </div>
+  <div class="header-actions">
+    <a class="btn btn-sm" href="{{ url_for('pages.view', pid=project.id, page_id=page.id) }}">{{ icon('arrow-left', 14) }} Retour à la page</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="inner" style="display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start">
+  <div class="panel">
+    <div class="panel-h"><h3>Versions</h3><span class="count-pill">{{ page.versions|length }}</span></div>
+    <div class="panel-b tight">
+      <div class="mini-issue" style="border-radius:6px">
+        {{ icon('check-circle', 14) }}
+        <div class="grow" style="min-width:0"><div class="t">Version actuelle</div><div class="muted tiny">{{ page.updated_at|datetime }}{% if page.updated_by %} · {{ page.updated_by.display_name }}{% endif %}</div></div>
+      </div>
+      {% for v in page.versions %}
+      <a class="mini-issue" href="?v={{ v.id }}" style="border-radius:6px;{% if current and current.id == v.id %}background:var(--active){% endif %}">
+        {{ ui.avatar(v.author, 20) }}
+        <div class="grow" style="min-width:0"><div class="t">{{ v.created_at|datetime }}</div><div class="muted tiny ellipsis">{{ v.author.display_name if v.author else '—' }} · {{ v.title }}</div></div>
+      </a>
+      {% else %}
+      <p class="muted small" style="padding:10px">Aucune version antérieure. Une version est créée à chaque enregistrement explicite et au plus toutes les 5 minutes pendant l’édition.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div>
+    {% if current %}
+    <div class="panel mb">
+      <div class="panel-h">
+        {{ ui.avatar(current.author, 22) }}
+        <div class="grow"><h3>Version du {{ current.created_at|datetime }}</h3><div class="muted small">{{ current.author.display_name if current.author else '—' }} · titre : « {{ current.title }} »</div></div>
+        {% if can_edit %}
+        <form method="post" action="{{ url_for('pages.restore_version', pid=project.id, page_id=page.id, vid=current.id) }}" data-confirm="Restaurer cette version ? Le contenu actuel sera conservé dans l’historique.">
+          {{ ui.csrf() }}<button class="btn btn-sm btn-primary">{{ icon('refresh', 14) }} Restaurer cette version</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="panel-b">
+        {% if current.content and current.content.strip() %}<div class="md">{{ current.content|md }}</div>{% else %}<p class="muted">Contenu vide.</p>{% endif %}
+      </div>
+    </div>
+    <div class="section-title mt-0"><h2>Différences avec la version actuelle</h2></div>
+    <p class="help mb"><span class="danger-text">− lignes de cette version</span> · <span class="success-text">+ lignes de la version actuelle</span></p>
+    {% if diff and diff|length > 2 %}
+    <div class="diff">{% for l in diff %}{% if l.startswith('+++') or l.startswith('---') %}{% elif l.startswith('@@') %}<span class="hunk">{{ l }}</span>{% elif l.startswith('+') %}<span class="add">{{ l }}</span>{% elif l.startswith('-') %}<span class="del">{{ l }}</span>{% else %}<span style="display:block">{{ l }}</span>{% endif %}{% endfor %}</div>
+    {% else %}
+    <p class="muted">Le contenu de cette version est identique à la version actuelle.</p>
+    {% endif %}
+    {% else %}
+    <div class="panel">{{ ui.empty('history', 'Sélectionne une version', 'Choisis une version dans la liste pour la consulter, voir les différences et la restaurer si besoin.') }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Projets{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('briefcase', 15) }} Projets</span></div>
+  <div class="tabs in-header" style="margin-left:12px">
+    {% for k, lab in [('all', 'Tous'), ('mine', 'Mes projets'), ('archived', 'Archivés')] %}<a class="{% if tab == k %}active{% endif %}" href="?tab={{ k }}&sort={{ sort }}">{{ lab }}</a>{% endfor %}
+  </div>
+  <form class="header-actions" method="get">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <input class="input input-sm" name="q" value="{{ q }}" placeholder="Filtrer…" style="width:180px">
+    <select class="input input-sm" name="sort" data-autosubmit style="width:auto">
+      {% for k, lab in [('name', 'Nom'), ('recent', 'Plus récents'), ('members', 'Nombre de membres')] %}<option value="{{ k }}" {% if sort == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+    </select>
+    {% if not current_user.is_guest %}<a class="btn btn-sm btn-primary" href="{{ url_for('projects.new') }}">{{ icon('plus', 14) }} Nouveau projet</a>{% endif %}
+  </form>
+</div>
+{% endblock %}
+{% block content %}
+{% if projects %}
+<div class="grid-cards">
+  {% for p in projects %}{% set st = p.stats() %}{% set role = project_role(current_user, p) %}
+  <div class="pcard">
+    <div class="pcard-cover" style="background: linear-gradient(135deg, {{ p.color }}, color-mix(in srgb, {{ p.color }} 45%, #0b1220))">
+      <span class="pcard-emoji">{{ p.emoji }}</span>
+      <div style="position:absolute;right:10px;top:10px" class="flex gap-4">
+        <span class="badge" style="background:rgba(255,255,255,.2);color:#fff">{{ icon('globe' if p.network == 'public' else 'lock', 11) }} {{ 'Public' if p.network == 'public' else 'Privé' }}</span>
+      </div>
+    </div>
+    <div class="pcard-b">
+      <div class="flex gap"><h3 class="grow ellipsis"><a href="{{ url_for('issues.index', pid=p.id) }}">{{ p.name }}</a></h3><span class="key">{{ p.identifier }}</span>{{ ui.fav_button('project', p.id) }}</div>
+      <p class="muted small" style="min-height:36px;margin:0">{{ p.description|excerpt(130) or 'Pas de description.' }}</p>
+      {{ ui.segbar(st.counts) }}
+      <div class="flex gap small muted"><span>{{ st.open }} ouverts</span><span>· {{ st.done }} terminés</span><span class="right bold" style="color:var(--text)">{{ st.progress }} %</span></div>
+      {% if p.start_date or p.target_date %}{{ ui.date_range(p.start_date, p.target_date) }}{% endif %}
+    </div>
+    <div class="pcard-f">
+      {{ ui.avatars(p.member_users, 24, 5) }}
+      {% if p.lead %}<span class="muted tiny">Resp. : {{ p.lead.display_name }}</span>{% endif %}
+      <span class="right flex gap-4">
+        {% if p.archived_at %}
+          {% if role == 'admin' %}<form method="post" action="{{ url_for('projects.settings', pid=p.id, section='danger') }}">{{ ui.csrf() }}<input type="hidden" name="action" value="restore"><button class="btn btn-xs">{{ icon('refresh', 13) }} Restaurer</button></form>{% endif %}
+        {% elif role == 'viewer' %}
+          <form method="post" action="{{ url_for('projects.join', pid=p.id) }}">{{ ui.csrf() }}<button class="btn btn-xs btn-primary">Rejoindre</button></form>
+        {% else %}
+          <a class="btn btn-xs btn-ghost btn-icon" href="{{ url_for('projects.settings', pid=p.id) }}" title="Paramètres">{{ icon('settings', 14) }}</a>
+          <a class="btn btn-xs" href="{{ url_for('issues.index', pid=p.id) }}">Ouvrir</a>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+{{ ui.empty('briefcase', 'Aucun projet', 'Crée un projet pour commencer à organiser le travail de l’équipe.', '<a class="btn btn-primary" href="' ~ url_for('projects.new') ~ '">Nouveau projet</a>' if not current_user.is_guest else '') }}
+{% endif %}
+{% endblock %}

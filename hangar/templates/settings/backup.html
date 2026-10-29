@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Sauvegardes{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('database', 15) }} Sauvegardes</span></div></div>{% endblock %}
+{% block content %}
+<div class="settings">
+  {% include "settings/_nav.html" %}
+  <div class="settings-body">
+    <h2>Sauvegardes</h2><p class="help">Copies complètes de la base (projets, tickets, pages, comptes). Les pièces jointes sont dans le dossier <code>data/uploads</code>.</p>
+    <div class="flex wrap gap mb">
+      <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="create"><button class="btn btn-primary">{{ icon('database', 14) }} Créer une sauvegarde</button></form>
+      <a class="btn" href="{{ url_for('settings.backup_download') }}">{{ icon('download', 14) }} Télécharger la base actuelle</a>
+      <a class="btn" href="{{ url_for('settings.export_json') }}">{{ icon('code', 14) }} Export JSON lisible</a>
+    </div>
+    <div class="panel">
+      <table class="table">
+        <thead><tr><th>Fichier</th><th>Date</th><th>Taille</th><th></th></tr></thead>
+        <tbody>
+        {% for f in files %}
+        <tr><td class="mono">{{ f.name }}</td><td class="muted">{{ f.date|datetime }}</td><td class="muted">{{ f.size }}</td>
+          <td class="right nowrap">
+            <a class="btn btn-xs" href="{{ url_for('settings.backup_download', name=f.name) }}">{{ icon('download', 13) }}</a>
+            {{ ui.confirm_button(url_for('settings.backup'), 'Restaurer', 'Remplacer toutes les données actuelles par cette sauvegarde ? (une sauvegarde de l’état actuel sera créée)', 'btn btn-xs', 'refresh', {'action': 'restore', 'name': f.name}) }}
+            {{ ui.confirm_button(url_for('settings.backup'), '', 'Supprimer cette sauvegarde ?', 'btn btn-xs btn-danger-ghost', 'trash', {'action': 'delete', 'name': f.name}) }}
+          </td></tr>
+        {% else %}<tr><td colspan="4" class="muted">Aucune sauvegarde pour l’instant.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="help mt">En ligne de commande : <code>uv run hangar backup</code> (pratique dans une tâche planifiée).</p>
+  </div>
+</div>
+{% endblock %}

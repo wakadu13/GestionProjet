@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}{{ u.display_name }} · Équipe{% endblock %}
+{% set is_me = u.id == current_user.id %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    <a href="{{ url_for('team.index') }}">{{ icon('users', 15) }} Équipe</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current">{{ u.display_name }}</span>
+  </div>
+  <div class="header-actions">
+    {% if is_me %}<a class="btn btn-sm" href="{{ url_for('settings.profile') }}">{{ icon('edit', 14) }} Modifier mon profil</a>{% endif %}
+    <a class="btn btn-sm" href="{{ url_for('home.workspace_issues', scope='all', assignee=u.id) }}">{{ icon('layers', 14) }} Voir ses tickets</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="inner" style="max-width:1180px;margin:0 auto">
+  <div class="flex gap-16 start mb-lg wrap">
+    {{ ui.avatar(u, 64, 'lg') }}
+    <div class="grow" style="min-width:240px">
+      <div class="flex gap wrap">
+        <h1>{{ u.display_name }}</h1>
+        <span class="badge {% if u.role == 'admin' %}badge-accent{% endif %}">{{ ROLES.get(u.role, u.role) }}</span>
+        {% if not u.active %}<span class="badge badge-danger">Compte désactivé</span>{% endif %}
+      </div>
+      <div class="muted flex wrap gap-12" style="margin-top:4px">
+        <span>@{{ u.username }}</span>
+        {% if u.job_title %}<span class="flex gap-4">{{ icon('briefcase', 13) }} {{ u.job_title }}</span>{% endif %}
+        <span class="flex gap-4">{{ icon('clock', 13) }} {{ u.capacity_hours }} h / semaine</span>
+        {% if u.last_login_at %}<span>Dernière connexion {{ u.last_login_at|ago }}</span>{% endif %}
+      </div>
+      {% if u.bio %}<div class="md text-2" style="margin-top:8px;max-width:720px">{{ u.bio|md }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="tabs">
+    {% for k, lab, n in [('overview', 'Aperçu', None), ('assigned', 'Assignés', assigned|rejectattr('is_closed')|list|length), ('created', 'Créés', created|length), ('subscribed', 'Suivis', subscribed|length), ('activity', 'Activité', None), ('time', 'Temps', None)] %}
+    <a class="{% if tab == k %}active{% endif %}" href="?tab={{ k }}">{{ lab }}{% if n is not none %} <span class="count-pill">{{ n }}</span>{% endif %}</a>
+    {% endfor %}
+  </div>
+
+  {% if tab == 'overview' %}
+  {% set open_n = assigned|rejectattr('is_closed')|list|length %}
+  {% set done_n = assigned|selectattr('state_group', 'equalto', 'completed')|list|length %}
+  {% set late_n = assigned|selectattr('is_overdue')|list|length %}
+  {% set cap_pct = (100 * week_minutes / (u.capacity_hours * 60))|round|int if u.capacity_hours else 0 %}
+  <div class="stats">
+    <a class="stat accent" href="?tab=assigned"><div class="v">{{ open_n }}</div><div class="l">{{ icon('layers', 13) }} Tickets ouverts assignés</div></a>
+    <div class="stat success"><div class="v">{{ done_n }}</div><div class="l">{{ icon('check-circle', 13) }} Terminés</div></div>
+    <div class="stat {% if late_n %}danger{% endif %}"><div class="v">{{ late_n }}</div><div class="l">{{ icon('alert', 13) }} En retard</div></div>
+    <div class="stat"><div class="v">{{ week_minutes|minutes }}</div>
+      <div class="l">{{ icon('timer', 13) }} Cette semaine · {{ cap_pct }} % de {{ u.capacity_hours }} h</div>
+      <div class="cap-bar" style="margin-top:6px;width:100%"><span class="{% if cap_pct > 100 %}over{% endif %}" style="width:{{ [cap_pct, 100]|min }}%"></span></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;margin-top:14px">
+    <div class="panel">
+      <div class="panel-h"><h3>Tickets assignés par état</h3></div>
+      <div class="panel-b chart-box">
+        {{ donut }}
+        <div class="col" style="gap:8px;min-width:160px">
+          {% for g, lab, col in M.STATE_GROUPS %}<div class="flex gap">{{ state_icon(g) }}<span class="grow">{{ lab }}</span><b>{{ groups[g] }}</b></div>{% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h3>Tickets ouverts par priorité</h3></div>
+      <div class="panel-b">{{ prio_chart }}</div>
+    </div>
+  </div>
+
+  <div class="panel mt">
+    <div class="panel-h"><h3>Contributions</h3><span class="muted small">16 dernières semaines · actions dans les projets</span>
+      <span class="legend right"><span>Moins</span>{% for l in ['', 'l1', 'l2', 'l3', 'l4'] %}<span class="heat"><span class="d {{ l }}"></span></span>{% endfor %}<span>Plus</span></span>
+    </div>
+    <div class="panel-b" style="overflow-x:auto">
+      <div class="heat">
+        {% for col in heat %}
+        <div class="w">
+          {% for d in col %}
+          {% set lvl = '' if d.n == 0 else ('l1' if d.n <= 2 else ('l2' if d.n <= 5 else ('l3' if d.n <= 9 else 'l4'))) %}
+          <span class="d {{ lvl }} {% if d.future %}f{% endif %}" title="{{ d.date|date_long }} : {{ d.n }} action{{ 's' if d.n > 1 }}"></span>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;margin-top:14px">
+    <div class="panel">
+      <div class="panel-h"><h3>Projets</h3><span class="count-pill">{{ memberships|length }}</span></div>
+      {% for m in memberships %}
+      <a class="mini-issue" href="{{ url_for('issues.index', pid=m.project_id) }}">
+        <span>{{ m.project.emoji }}</span><span class="t">{{ m.project.name }}</span>
+        <span class="badge {% if m.role == 'admin' %}badge-accent{% endif %}">{{ ROLES.get(m.role, m.role) }}</span>
+      </a>
+      {% else %}{{ ui.empty('briefcase', 'Aucun projet') }}{% endfor %}
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h3>Absences</h3><span class="count-pill">{{ absences|length }}</span></div>
+      {% for a in absences %}
+      <div class="mini-issue">
+        {{ icon('palm', 14) }}
+        <span class="t">{{ a.kind }} · du {{ a.start_date|date(True) }} au {{ a.end_date|date(True) }}{% if a.note %} <span class="muted">— {{ a.note }}</span>{% endif %}</span>
+        {% if a.end_date < today %}<span class="badge">Passée</span>{% elif a.start_date <= today %}<span class="badge badge-warning">En cours</span>{% else %}<span class="badge badge-accent">À venir</span>{% endif %}
+        {% if is_me or current_user.is_admin %}
+        <form method="post" action="{{ url_for('team.absence_delete', aid=a.id) }}" class="inline-form" data-confirm="Supprimer cette absence ?">{{ ui.csrf() }}<button class="btn btn-ghost btn-icon btn-xs" title="Supprimer">{{ icon('x', 13) }}</button></form>
+        {% endif %}
+      </div>
+      {% else %}<p class="muted small" style="padding:12px 14px;margin:0">Aucune absence enregistrée.</p>{% endfor %}
+      {% if is_me or current_user.is_admin %}
+      <form method="post" action="{{ url_for('team.absence_add') }}" class="panel-b flex wrap gap-4" style="border-top:1px solid var(--border-2)">
+        {{ ui.csrf() }}<input type="hidden" name="user_id" value="{{ u.id }}">
+        <input class="input input-sm" type="date" name="start_date" required style="width:auto" title="Début">
+        <input class="input input-sm" type="date" name="end_date" required style="width:auto" title="Fin">
+        <select class="input input-sm" name="kind" style="width:auto">{% for k in ['Congés', 'Formation', 'Maladie', 'Mission', 'Autre'] %}<option>{{ k }}</option>{% endfor %}</select>
+        <input class="input input-sm grow" name="note" placeholder="Note (facultatif)" style="min-width:120px">
+        <button class="btn btn-sm">{{ icon('plus', 13) }} Ajouter</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% elif tab in ('assigned', 'created', 'subscribed') %}
+  <div class="panel">
+    {% for i in shown %}
+    <div class="mini-issue">
+      {{ state_icon(i.state_group, i.state.color if i.state else None) }}
+      <span class="key">{{ i.key }}</span>
+      <a class="t" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}" title="{{ i.title }}">{{ i.title }}</a>
+      <span title="Priorité : {{ M.PRIORITY_LABELS.get(i.priority) }}">{{ priority_icon(i.priority) }}</span>
+      {% if i.target_date %}<span class="small nowrap {% if i.is_overdue %}danger-text{% else %}muted{% endif %}" title="Échéance">{{ icon('flag', 12) }} {{ i.target_date|date }}</span>{% endif %}
+      <span title="{{ i.project.name }}">{{ i.project.emoji }}</span>
+    </div>
+    {% else %}
+    {{ ui.empty('layers', 'Aucun ticket', 'Rien à afficher dans cette catégorie.') }}
+    {% endfor %}
+  </div>
+
+  {% elif tab == 'activity' %}
+  <div class="panel">
+    {% for a in activity %}
+    <div class="act-item">
+      {{ ui.avatar(a.actor, 22) }}
+      <div class="grow">
+        <b>{{ a.actor.display_name if a.actor else u.display_name }}</b> {{ activity_text(a) }}
+        {% if a.issue %} · <a href="{{ url_for('issues.detail', pid=a.issue.project_id, seq=a.issue.sequence_id) }}"><span class="key">{{ a.issue.key }}</span> {{ a.issue.title|truncate(70) }}</a>
+        {% elif a.project %} · <a href="{{ url_for('issues.index', pid=a.project_id) }}">{{ a.project.emoji }} {{ a.project.name }}</a>{% endif %}
+        <div class="muted tiny" title="{{ a.created_at|datetime }}">{{ a.created_at|ago }}</div>
+      </div>
+    </div>
+    {% else %}
+    {{ ui.empty('activity', 'Aucune activité', 'Aucune action récente dans tes projets.') }}
+    {% endfor %}
+  </div>
+
+  {% elif tab == 'time' %}
+  {% set total = logs|sum(attribute='minutes') %}
+  <div class="stats mb">
+    <div class="stat accent"><div class="v">{{ week_minutes|minutes }}</div><div class="l">{{ icon('timer', 13) }} Cette semaine (capacité {{ u.capacity_hours }} h)</div></div>
+    <div class="stat"><div class="v">{{ total|minutes }}</div><div class="l">{{ icon('clock', 13) }} Total des {{ logs|length }} dernières saisies</div></div>
+  </div>
+  <div class="panel">
+    {% if logs %}
+    <table class="table">
+      <thead><tr><th>Date</th><th>Ticket</th><th class="num">Durée</th><th>Note</th></tr></thead>
+      <tbody>
+      {% for w in logs %}
+      <tr>
+        <td class="nowrap">{{ w.date|date(True) }}</td>
+        <td><a href="{{ url_for('issues.detail', pid=w.issue.project_id, seq=w.issue.sequence_id) }}"><span class="key">{{ w.issue.key }}</span> {{ w.issue.title|truncate(70) }}</a></td>
+        <td class="num bold">{{ w.minutes|minutes }}</td>
+        <td class="muted">{{ w.description or '—' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ ui.empty('timer', 'Aucun temps saisi', 'Le temps passé s’enregistre depuis le panneau latéral d’un ticket.') }}
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

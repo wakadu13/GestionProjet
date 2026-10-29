@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Pages · {{ project.name }}{% endblock %}
+
+{% macro page_row(p, depth, all_pages, ids) %}
+<div class="page-row" style="padding-left: {{ 16 + depth * 26 }}px">
+  {% if depth %}<span class="muted">{{ icon('chevron-right', 13) }}</span>{% endif %}
+  <span class="pe">{{ p.emoji or '📄' }}</span>
+  <div class="grow" style="min-width:0">
+    <div class="flex gap-4" style="gap:6px">
+      <a class="bold ellipsis" href="{{ url_for('pages.view', pid=p.project_id, page_id=p.id) }}">{{ p.title }}</a>
+      {% if p.is_locked %}<span class="muted" title="Verrouillée">{{ icon('lock', 13) }}</span>{% endif %}
+      {% if not p.is_public %}<span class="badge">{{ icon('lock', 11) }} Privée</span>{% endif %}
+      {% if p.archived_at %}<span class="badge badge-warning">Archivée</span>{% endif %}
+    </div>
+    {% set ex = p.content|excerpt(140) %}
+    {% if ex %}<div class="muted small ellipsis">{{ ex }}</div>{% endif %}
+  </div>
+  <span class="muted small nowrap" title="Nombre de mots">{{ p.word_count }} mots</span>
+  <span class="flex gap-4 small nowrap" title="Propriétaire">{{ ui.avatar(p.owner, 20) }}</span>
+  <span class="muted small nowrap" title="Modifiée le {{ p.updated_at|datetime }}">{{ p.updated_at|ago }}</span>
+  {{ ui.fav_button('page', p.id) }}
+</div>
+{% for c in all_pages if c.parent_id == p.id %}{{ page_row(c, depth + 1, all_pages, ids) }}{% endfor %}
+{% endmacro %}
+
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">{{ ui.project_crumb(project) }}<span class="current">{{ icon('page', 15) }} Pages</span></div>
+  <div class="header-actions">
+    <form method="get" class="flex gap-4">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <input class="input input-sm" type="search" name="q" value="{{ q }}" placeholder="Rechercher une page…" style="width:200px">
+      <select class="input input-sm" name="sort" data-autosubmit style="width:auto">
+        <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Dernière modification</option>
+        <option value="title" {% if sort == 'title' %}selected{% endif %}>Titre (A → Z)</option>
+      </select>
+    </form>
+    {% if can_edit %}
+    <button class="btn btn-sm" type="button" data-open="import-page-modal">{{ icon('upload', 14) }} Importer</button>
+    <button class="btn btn-sm btn-primary" type="button" data-open="new-page-modal">{{ icon('plus', 14) }} Nouvelle page</button>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="inner">
+  <div class="tabs">
+    {% for k, lab, ic in [('public', 'Publiques', 'globe'), ('private', 'Privées', 'lock'), ('mine', 'Mes pages', 'user'), ('archived', 'Archivées', 'archive')] %}
+    <a class="{% if tab == k %}active{% endif %}" href="?tab={{ k }}{% if q %}&q={{ q|urlencode }}{% endif %}&sort={{ sort }}">{{ icon(ic, 14) }} {{ lab }}</a>
+    {% endfor %}
+  </div>
+
+  {% if pages %}
+  {% set ids = pages|map(attribute='id')|list %}
+  <div class="panel">
+    {% if q or sort == 'title' %}
+      {% for p in pages %}{{ page_row(p, 0, [], ids) }}{% endfor %}
+    {% else %}
+      {% for p in pages if not p.parent_id or p.parent_id not in ids %}{{ page_row(p, 0, pages, ids) }}{% endfor %}
+    {% endif %}
+  </div>
+  <p class="muted small mt">{{ pages|length }} page(s)</p>
+  {% elif q %}
+  {{ ui.empty('search', 'Aucune page trouvée', 'Aucune page ne correspond à « ' ~ q ~ ' ».') }}
+  {% elif tab == 'archived' %}
+  {{ ui.empty('archive', 'Aucune page archivée') }}
+  {% else %}
+  {{ ui.empty('page', 'Aucune page pour le moment', 'Documente le projet : comptes rendus de réunion, fiches d’entretien, notes de décision, spécifications…') }}
+  {% endif %}
+</div>
+
+{% if can_edit %}
+<dialog class="modal" id="new-page-modal">
+  <form method="post" action="{{ url_for('pages.create', pid=project.id) }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Nouvelle page</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label>Titre</label><input class="input" name="title" placeholder="Laisser vide pour utiliser le nom du modèle" autocomplete="off"></div>
+      <div class="field">
+        <label>Modèle</label>
+        <div class="tpl-grid">
+          {% for key, (tname, temoji, tcontent) in templates.items() %}
+          <label><input type="radio" name="template" value="{{ key }}" {% if loop.first %}checked{% endif %}><span class="e">{{ temoji }}</span><b>{{ tname }}</b><span class="muted tiny">{{ tcontent|excerpt(60) if tcontent else 'Partir d’une page blanche' }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Visibilité</label>
+          <select class="input" name="is_public"><option value="1">Publique (toute l’équipe du projet)</option><option value="0">Privée (moi uniquement)</option></select>
+        </div>
+        <div class="field"><label>Page parente</label>
+          <select class="input" name="parent_id"><option value="">Aucune</option>
+            {% for p in project.pages|sort(attribute='title') if not p.archived_at and (p.is_public or p.owner_id == current_user.id) %}<option value="{{ p.id }}">{{ p.emoji }} {{ p.title }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Créer la page</button></div></div>
+  </form>
+</dialog>
+
+<dialog class="modal sm" id="import-page-modal">
+  <form method="post" action="{{ url_for('pages.import_doc', pid=project.id) }}" enctype="multipart/form-data">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Importer un document</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <p class="help">Un document Word (.docx) est converti en markdown : titres, listes, tableaux, gras et italique sont conservés. Les fichiers .md et .txt sont importés tels quels.</p>
+      <div class="field"><label>Fichier</label><input class="input" type="file" name="file" accept=".docx,.md,.markdown,.txt" required style="padding-top:5px"></div>
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">{{ icon('upload', 14) }} Importer</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "issues/_layouts.html" as L with context %}
+{% block title %}Tickets · {{ project.name }}{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    {{ ui.project_crumb(project) }}
+    <span class="current">{{ icon('layers', 15) }} Tickets</span>
+    {% if view %}<span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">{{ icon('eye', 15) }} {{ view.name }}</span>{% endif %}
+    {{ ui.fav_button('project', project.id) }}
+  </div>
+  <div class="header-actions">
+    {{ L.layout_switch(opts) }}
+    {{ L.filter_menu(filters, [project], opts) }}
+    {{ L.display_menu(opts) }}
+    {% if project.views_enabled and can(current_user, 'edit', project) %}{{ L.save_view_button(project) }}{% endif %}
+    {{ L.export_menu(project) }}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('planning.index', pid=project.id) }}" title="Feuille de route (Gantt par module, jalons, dépendances)">{{ icon('gantt', 15) }} Planning</a>
+    <a class="btn btn-sm btn-ghost btn-icon" href="{{ url_for('analytics.index', pid=project.id) }}" title="Analytique">{{ icon('chart', 15) }}</a>
+    {% if project_role(current_user, project) == 'viewer' %}
+      <form method="post" action="{{ url_for('projects.join', pid=project.id) }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-sm btn-primary">Rejoindre le projet</button></form>
+    {% elif can(current_user, 'edit', project) %}
+      <button class="btn btn-sm btn-primary" type="button" data-create-issue data-project="{{ project.id }}">{{ icon('plus', 14) }} Nouveau ticket</button>
+    {% endif %}
+  </div>
+</div>
+{% if view %}<div class="view-banner">{{ icon('eye', 14) }} Vue enregistrée « {{ view.name }} »{% if view.description %} — {{ view.description }}{% endif %}<a class="right" href="{{ url_for('issues.index', pid=project.id) }}">Quitter la vue</a></div>{% endif %}
+{{ L.chips_bar(chips) }}
+{% endblock %}
+{% block content %}
+{{ L.render(opts, [project], groups=groups, issues=issues, cal=cal, gantt=gantt) }}
+{% endblock %}
