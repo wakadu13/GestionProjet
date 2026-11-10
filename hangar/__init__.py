@@ -140,7 +140,10 @@ def _register_hooks(app: Flask) -> None:
                     return redirect(url_for("auth.setup"))
             else:
                 app.config["_HAS_USERS"] = True
-        if request.method in ("POST", "PUT", "PATCH", "DELETE") and not request.path.startswith("/api/v1/"):
+        # `g.csrf_exempt` : posé par un crochet de blueprint qui passe avant celui-ci, seulement pour une
+        # requête authentifiée sans cookie (jeton d'appareil vérifié, connexion de l'appli Android).
+        if (request.method in ("POST", "PUT", "PATCH", "DELETE") and not request.path.startswith("/api/v1/")
+                and not g.get("csrf_exempt")):
             sent = request.form.get("_csrf") or request.headers.get("X-CSRF-Token")
             token = session.get("_csrf")
             if not token or not sent or not secrets.compare_digest(token, sent):

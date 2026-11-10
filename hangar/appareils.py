@@ -113,17 +113,10 @@ def jetons_de(user) -> list:
 # Avant / après chaque requête
 # ---------------------------------------------------------------------------
 def _exempter_csrf():
-    """Requête sans cookie (jeton d'appareil, connexion de l'appli) : rien à usurper, la vérification
-    CSRF de Hangar (`_setup_and_csrf`, qui passe après ce crochet) est satisfaite d'office."""
-    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
-        return
-    jeton = session.get("_csrf")
-    if not jeton:
-        g._session_vide = not session
-        jeton = secrets.token_hex(20)
-        session["_csrf"] = jeton
-        g._csrf_appareil = True  # retiré après la requête : pas de cookie de session pour rien
-    request.environ["HTTP_X_CSRF_TOKEN"] = jeton
+    """Requête sans cookie de navigateur à usurper (jeton d'appareil déjà vérifié, connexion de l'appli) :
+    la vérification CSRF de Hangar (`_setup_and_csrf`, qui passe après ce crochet) est levée pour elle."""
+    g.csrf_exempt = True
+    g._session_vide = not session
 
 
 @bp.before_app_request
@@ -162,12 +155,9 @@ def _avant():
 
 @bp.after_app_request
 def _apres(response):
-    if g.pop("_csrf_appareil", False):
-        session.pop("_csrf", None)
-        if g.pop("_session_vide", False) and not g.get("_ouverture_appareil"):
-            session.clear()  # rien d'autre que ce qu'y a mis Flask-Login (« _fresh ») : pas de cookie
-        if not session:
-            session.modified = False
+    if g.get("csrf_exempt") and g.pop("_session_vide", False) and not g.get("_ouverture_appareil"):
+        session.clear()  # requête de l'appli sans cookie : n'en crée pas (Flask-Login peut y avoir écrit)
+        session.modified = False
     if g.pop("jeton_appareil", None) is not None and not g.pop("_ouverture_appareil", False):
         g.pop("_login_user", None)  # compte de cette requête seulement
     if dans_appli() and 300 <= response.status_code < 400 and response.location:
