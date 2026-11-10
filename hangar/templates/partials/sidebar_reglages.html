@@ -1,0 +1,18 @@
+{# Menu de la section Réglages #}
+<div class="sb-title"><span>Réglages</span><button class="btn btn-ghost btn-icon btn-xs" type="button" data-sidebar-collapse title="Masquer le menu">{{ icon('sidebar', 15) }}</button></div>
+<nav class="sb-scroll">
+  <div class="sb-section-h"><span>Mon compte</span></div>
+  <a class="sb-link {% if ep == 'settings.profile' %}active{% endif %}" href="{{ url_for('settings.profile') }}">{{ icon('user') }} Profil</a>
+  <a class="sb-link {% if ep == 'agenda.settings' %}active{% endif %}" href="{{ url_for('agenda.settings') }}">{{ icon('mail') }} Rappels et e-mails</a>
+  <a class="sb-link {% if ep == 'settings.tokens' %}active{% endif %}" href="{{ url_for('settings.tokens') }}">{{ icon('key') }} Jetons d’API</a>
+  <div class="sb-section">
+    <div class="sb-section-h"><span>Espace</span></div>
+    <a class="sb-link {% if ep == 'ai.reglages' %}active{% endif %}" href="{{ url_for('ai.reglages') }}">{{ icon('sparkle') }} Fournisseurs d’IA</a>
+    {% if current_user.is_admin %}
+    <a class="sb-link {% if ep == 'settings.workspace' %}active{% endif %}" href="{{ url_for('settings.workspace') }}">{{ icon('settings') }} Paramètres de l’espace</a>
+    <a class="sb-link {% if ep == 'mail.settings' %}active{% endif %}" href="{{ url_for('mail.settings') }}">{{ icon('send') }} Envoi des e-mails</a>
+    <a class="sb-link {% if ep == 'settings.backup' %}active{% endif %}" href="{{ url_for('settings.backup') }}">{{ icon('database') }} Sauvegardes</a>
+    {% endif %}
+    <a class="sb-link {% if ep == 'settings.about' %}active{% endif %}" href="{{ url_for('settings.about') }}">{{ icon('help') }} À propos</a>
+  </div>
+</nav>

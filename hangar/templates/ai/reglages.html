@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% set FEATURES = {'chat': 'Assistant (panneau)', 'cli': 'Ligne de commande', 'tuteur': 'Tuteur', 'expliquer': 'Explications de QCM', 'qrc': 'Correction de réponses', 'qcm': 'QCM générés', 'copie': 'Copies corrigées', 'wiki': 'Demander au wiki', 'transformation': 'Transformations de cours', 'ameliorer': 'Améliorer la rédaction'} %}
+{% block title %}Réglages de l’IA{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('ai.index') }}">{{ icon('sparkle', 15) }} Assistant IA</a><span class="sep">/</span><span class="current">Fournisseurs et usage</span></div></div>{% endblock %}
+{% block content %}
+<div class="inner ai-settings" data-ai-settings data-try-url="{{ url_for('ai.provider_try') }}">
+
+  <section class="mb-lg">
+    <div class="ai-sec-h"><h2>{{ icon('zap', 17) }} Fournisseurs d’IA</h2>
+      {% if current_user.is_admin %}<span class="help">Le premier fournisseur activé (par priorité) qui déclare un rôle le prend en charge.</span>{% endif %}</div>
+    {% if not providers %}
+    <div class="panel panel-b ai-none">
+      {{ icon('sparkle', 18) }}
+      <div><b>Aucun fournisseur configuré.</b> {% if current_user.is_admin %}Choisis un préréglage ci-dessous : Claude (meilleure qualité, payant à l’usage) ou un modèle open source local avec Ollama (gratuit, tout reste sur ton ordinateur).{% else %}Demande à un administrateur d’en ajouter un.{% endif %}</div>
+    </div>
+    {% endif %}
+    <div class="ai-provs">
+      {% for p in providers if current_user.is_admin or p.enabled %}
+      <div class="panel ai-prov {% if not p.enabled %}off{% endif %}" id="fournisseur-{{ p.id }}">
+        <div class="ai-prov-h">
+          <span class="ai-prov-ic">{{ icon('sparkle' if p.kind == 'anthropic' else ('database' if p.is_local else 'globe'), 16) }}</span>
+          <div class="grow">
+            <div class="ai-prov-name">{{ p.name }} {% if not p.enabled %}<span class="badge">Désactivé</span>{% elif p.usable %}<span class="badge badge-success">Activé</span>{% else %}<span class="badge badge-warning">Incomplet</span>{% endif %}</div>
+            <div class="help">{{ p.preset_label }}{% if p.base_url %} · <span class="mono">{{ p.base_url }}</span>{% endif %}{% if current_user.is_admin %} · priorité {{ p.priority }}{% endif %}</div>
+          </div>
+          {% if current_user.is_admin %}
+          <div class="ai-prov-actions">
+            <button class="btn btn-sm" type="button" data-ai-test="{{ url_for('ai.provider_test', pid=p.id) }}">{{ icon('refresh', 13) }} Tester</button>
+            <button class="btn btn-sm" type="button" data-ai-edit="{{ p.id }}">{{ icon('edit', 13) }} Modifier</button>
+            <div class="dd">
+              <button class="btn btn-ghost btn-icon btn-sm" type="button" data-menu title="Plus">{{ icon('more', 15) }}</button>
+              <div class="menu">
+                <form method="post" action="{{ url_for('ai.provider_toggle', pid=p.id) }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('pause' if p.enabled else 'play') }} {{ 'Désactiver' if p.enabled else 'Activer' }}</button></form>
+                <form method="post" action="{{ url_for('ai.provider_delete', pid=p.id) }}" data-confirm="Supprimer le fournisseur « {{ p.name }} » ?">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        <div class="ai-prov-b">
+          <div class="ai-kv"><span>Modèle</span><b class="mono">{{ p.model or '—' }}</b></div>
+          {% if p.model_fast %}<div class="ai-kv"><span>Rapide</span><b class="mono">{{ p.model_fast }}</b></div>{% endif %}
+          {% if p.model_vision %}<div class="ai-kv"><span>Vision</span><b class="mono">{{ p.model_vision }}</b></div>{% endif %}
+          <div class="ai-kv"><span>Rôles</span><b>{% for r in p.role_list %}<span class="badge">{{ dict(roles)[r] }}</span> {% endfor %}</b></div>
+          {% if current_user.is_admin %}
+          <div class="ai-kv"><span>Clé</span><b>{% if p.key_source == 'base' %}<span class="mono">{{ p.masked_key }}</span> <span class="help">(enregistrée)</span>{% elif p.key_source == 'env' %}<span class="mono">{{ p.masked_key }}</span> <span class="help">(variable {{ p.env_name() }})</span>{% elif p.needs_key %}<span class="danger-text">aucune</span>{% else %}<span class="help">pas nécessaire</span>{% endif %}</b></div>
+          {% if p.monthly_cap %}<div class="ai-kv"><span>Plafond</span><b>{{ '%.2f'|format(p.monthly_cap) }} $ / mois</b></div>{% endif %}
+          {% endif %}
+          <div class="ai-test-res {% if p.last_test_ok %}ok{% elif p.last_test_ok == false %}ko{% endif %}" data-ai-test-res>{% if p.last_test_at %}{{ icon('check-circle' if p.last_test_ok else 'alert', 13) }} {{ p.last_test_message }} <span class="help">({{ p.last_test_at|ago }})</span>{% endif %}</div>
+        </div>
+        {% if current_user.is_admin %}
+        <script type="application/json" data-ai-prov="{{ p.id }}">{{ {"id": p.id, "preset": p.preset, "name": p.name, "base_url": p.base_url, "api_key_env": p.api_key_env, "masked_key": p.masked_key, "key_saved": p.key_source == 'base', "model": p.model, "model_fast": p.model_fast, "model_vision": p.model_vision, "roles": p.role_list, "priority": p.priority, "monthly_cap": p.monthly_cap, "tools_mode": p.tools_mode, "effort": p.effort, "price_input": p.price_input, "price_output": p.price_output, "enabled": p.enabled, "action": url_for('ai.provider_update', pid=p.id)}|tojson }}</script>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if current_user.is_admin %}
+    <h3 class="ai-sub">Ajouter un fournisseur</h3>
+    <div class="ai-presets">
+      {% for pr in presets %}
+      <button type="button" class="ai-preset" data-ai-preset="{{ pr.key }}">
+        <span class="ai-preset-ic {% if pr.kind == 'anthropic' %}claude{% elif pr.local %}local{% endif %}">{{ icon(pr.icon, 16) }}</span>
+        <span class="grow"><b>{{ pr.label }}</b><span class="help">{{ 'Local, gratuit' if pr.local else ('Clé d’API' if pr.needs_key else 'Adresse compatible OpenAI') }}</span></span>
+        {{ icon('plus', 14) }}
+      </button>
+      {% endfor %}
+    </div>
+    <script type="application/json" id="ai-presets">{{ presets|tojson }}</script>
+    {% endif %}
+  </section>
+
+  {% if current_user.is_admin %}
+  <section class="mb-lg">
+    <div class="ai-sec-h"><h2>{{ icon('sliders', 17) }} Plafond et consignes</h2></div>
+    <form method="post" class="panel panel-b">
+      {{ ui.csrf() }}
+      <div class="grid-2">
+        <div class="field"><label for="ai-cap">Plafond mensuel de dépense (dollars, tous fournisseurs)</label>
+          <input class="input" id="ai-cap" name="monthly_cap" inputmode="decimal" value="{{ '%g'|format(s.monthly_cap or 0) }}">
+          <span class="help">0 = pas de plafond. Une fois atteint, l’IA est suspendue jusqu’au mois suivant. Les modèles locaux ne coûtent rien.</span>
+        </div>
+        <div class="field"><label>Dépense de l’espace ce mois-ci</label>
+          <div class="ai-cap-box"><b>{{ '%.2f'|format(usage.total) }} $</b>{% if s.monthly_cap %} sur {{ '%.2f'|format(s.monthly_cap) }} ${% set pct = [100, (100 * usage.total / s.monthly_cap)|round|int]|min %}{{ ui.progress(pct, 'accent') }}{% endif %}</div>
+        </div>
+      </div>
+      <div class="field"><label for="ai-instr">Consignes ajoutées à l’assistant <span class="muted">(facultatif)</span></label>
+        <textarea class="input" id="ai-instr" name="instructions" rows="3" placeholder="Ex. : Réponds toujours avec des exemples tirés de l’aéronautique.">{{ s.instructions or '' }}</textarea>
+      </div>
+      <button class="btn btn-primary btn-sm">{{ icon('check', 14) }} Enregistrer</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="mb-lg">
+    <div class="ai-sec-h"><h2>{{ icon('chart', 17) }} Usage</h2><span class="help">Coût estimé d’après les tarifs publics ; les modèles locaux sont gratuits.</span></div>
+    <div class="stats mb">
+      <div class="stat"><div class="v">{{ '%.2f'|format(usage.mine) }} $</div><div class="l">{{ icon('user', 12) }} Ton usage ce mois-ci</div></div>
+      <div class="stat"><div class="v">{{ usage.mine_calls }}</div><div class="l">{{ icon('message', 12) }} Tes appels ce mois-ci</div></div>
+      {% if current_user.is_admin %}<div class="stat"><div class="v">{{ '%.2f'|format(usage.total) }} $</div><div class="l">{{ icon('users', 12) }} Tout l’espace</div></div>{% endif %}
+    </div>
+    <div class="ai-usage-grid">
+      <div class="panel">
+        <div class="panel-h"><h3>Par mois</h3></div>
+        <table class="table"><thead><tr><th>Mois</th><th class="num">Appels</th><th class="num">Jetons</th><th class="num">Coût</th></tr></thead><tbody>
+          {% for m in usage.by_month %}<tr><td>{{ ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][m.month.month - 1] }} {{ m.month.year }}</td><td class="num">{{ m.calls }}</td><td class="num">{{ '{:,}'.format(m.tokens).replace(',', ' ') }}</td><td class="num">{{ '%.2f'|format(m.cost) }} $</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h3>Ce mois-ci, par fonction</h3></div>
+        {% if usage.by_feature %}<table class="table"><thead><tr><th>Fonction</th><th class="num">Appels</th><th class="num">Coût</th></tr></thead><tbody>
+          {% for key, n, tin, tout, cost in usage.by_feature %}<tr><td>{{ FEATURES.get(key, key) }}</td><td class="num">{{ n }}</td><td class="num">{{ '%.2f'|format(cost) }} $</td></tr>{% endfor %}
+        </tbody></table>{% else %}<div class="empty sm">Aucun appel ce mois-ci.</div>{% endif %}
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h3>Ce mois-ci, par modèle</h3></div>
+        {% if usage.by_model %}<table class="table"><thead><tr><th>Modèle</th><th class="num">Jetons (entrée + sortie)</th><th class="num">Coût</th></tr></thead><tbody>
+          {% for key, n, tin, tout, cost in usage.by_model %}<tr><td class="mono">{{ model_label(key) }}</td><td class="num">{{ '{:,}'.format(tin).replace(',', ' ') }} + {{ '{:,}'.format(tout).replace(',', ' ') }}</td><td class="num">{{ '%.2f'|format(cost) }} $</td></tr>{% endfor %}
+        </tbody></table>{% else %}<div class="empty sm">Aucun appel ce mois-ci.</div>{% endif %}
+      </div>
+      {% if current_user.is_admin and usage.by_user %}
+      <div class="panel">
+        <div class="panel-h"><h3>Ce mois-ci, par personne</h3></div>
+        <table class="table"><thead><tr><th>Compte</th><th class="num">Appels</th><th class="num">Coût</th></tr></thead><tbody>
+          {% for name, n, tin, tout, cost in usage.by_user %}<tr><td>{{ name }}</td><td class="num">{{ n }}</td><td class="num">{{ '%.2f'|format(cost) }} $</td></tr>{% endfor %}
+        </tbody></table>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="mb-lg ai-help">
+    <div class="ai-sec-h"><h2>{{ icon('help', 17) }} Installer un fournisseur</h2></div>
+    <div class="ai-usage-grid">
+      <div class="panel panel-b">
+        <h3>{{ icon('database', 15) }} Un modèle open source sur ton ordinateur (Ollama)</h3>
+        <ol>
+          <li>Installe Ollama depuis <b>ollama.com</b> (Windows, macOS, Linux) et lance-le.</li>
+          <li>Dans un terminal, télécharge un modèle : <code>ollama pull llama3.2</code> (léger, 2 Go) ou <code>ollama pull qwen2.5</code> (meilleur pour les outils et le français).</li>
+          <li>Ici, ajoute le préréglage <b>Ollama (local)</b> : adresse <code>http://localhost:11434/v1</code>, modèle <code>llama3.2</code> ou <code>qwen2.5</code>, puis « Tester la connexion ».</li>
+        </ol>
+        <p class="help">Gratuit et hors ligne ; plus lent et moins précis que Claude. Pour lire des photos, choisis un modèle « vision » (ex. <code>llava</code>, <code>qwen2.5vl</code>) dans le rôle Vision. Pour de longues pages, donne plus de mémoire au modèle : lance Ollama avec <code>OLLAMA_CONTEXT_LENGTH=16384 ollama serve</code>. Si le modèle s’embrouille avec les outils, règle « Appel d’outils » sur « Jamais ». LM Studio, vLLM et llama.cpp fonctionnent de la même façon avec leur propre adresse.</p>
+      </div>
+      <div class="panel panel-b">
+        <h3>{{ icon('sparkle', 15) }} Claude (Anthropic)</h3>
+        <ol>
+          <li>Crée un compte sur <b>console.anthropic.com</b> et ajoute des crédits (paiement à l’usage).</li>
+          <li>Dans <b>Settings → API Keys</b>, crée une clé : elle commence par <code>sk-ant-</code>.</li>
+          <li>Ici, ajoute le préréglage <b>Claude (Anthropic)</b> et colle la clé (ou mets-la dans la variable d’environnement <code>ANTHROPIC_API_KEY</code>), puis « Tester la connexion ».</li>
+        </ol>
+        <p class="help">Modèle par défaut : Claude Opus 5.5 (4 $ / 20 $ par million de jetons ; une question au panneau coûte en général moins d’un centime). La clé reste dans la base de Hangar et n’est jamais affichée en entier.</p>
+      </div>
+    </div>
+  </section>
+
+  {% if current_user.is_admin %}
+  {% if jobs %}
+  <section class="mb-lg">
+    <div class="ai-sec-h"><h2>{{ icon('timer', 17) }} Travaux en arrière-plan</h2></div>
+    <div class="panel"><table class="table"><thead><tr><th>Travail</th><th>État</th><th>Message</th><th>Créé</th></tr></thead><tbody>
+      {% for j in jobs %}<tr><td>{{ j.title or j.kind }}</td><td><span class="badge {% if j.status == 'done' %}badge-success{% elif j.status == 'error' %}badge-danger{% elif j.status == 'batch' %}badge-accent{% endif %}">{{ {'pending': 'En attente', 'running': 'En cours', 'batch': 'Dans un lot', 'done': 'Terminé', 'error': 'Erreur'}.get(j.status, j.status) }}</span></td><td class="help">{{ j.message }}</td><td class="help nowrap">{{ j.created_at|ago }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endif %}
+  <section class="mb-lg" id="erreurs">
+    <div class="ai-sec-h"><h2>{{ icon('alert', 17) }} Journal des erreurs</h2>
+      {% if errors %}<form method="post" action="{{ url_for('ai.errors_clear') }}" class="right">{{ ui.csrf() }}<button class="btn btn-ghost btn-sm">{{ icon('trash', 13) }} Vider</button></form>{% endif %}</div>
+    {% if errors %}
+    <div class="panel"><table class="table ai-errors"><thead><tr><th>Quand</th><th>Fournisseur</th><th>Erreur</th></tr></thead><tbody>
+      {% for e in errors %}<tr><td class="help nowrap">{{ e.created_at|ago }}</td><td>{{ e.provider_name or '—' }}<div class="help mono">{{ e.model }}</div></td><td>{{ e.message }}{% if e.detail %}<details><summary class="help">Détail technique</summary><pre class="mono">{{ e.detail }}</pre></details>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="panel panel-b help">Aucune erreur récente.</div>{% endif %}
+  </section>
+
+  <dialog class="modal" id="ai-prov-modal" aria-labelledby="ai-pm-h">
+    <form method="post" action="{{ url_for('ai.provider_create') }}" data-ai-prov-form>
+      {{ ui.csrf() }}
+      <input type="hidden" name="preset" value="custom">
+      <input type="hidden" name="id" value="">
+      <input type="hidden" name="roles_present" value="1">
+      <div class="modal-h"><span class="ai-prov-ic">{{ icon('sparkle', 16) }}</span><h2 id="ai-pm-h" data-ai-pm-title>Ajouter un fournisseur</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close title="Fermer">{{ icon('x', 16) }}</button></div>
+      <div class="modal-b">
+        <p class="ai-pm-help help" data-ai-pm-help></p>
+        <div class="grid-2">
+          <div class="field"><label for="pm-name">Nom</label><input class="input" id="pm-name" name="name" maxlength="120" required></div>
+          <div class="field" data-ai-only="openai_compatible"><label for="pm-url">Adresse (compatible OpenAI)</label><input class="input mono" id="pm-url" name="base_url" placeholder="http://localhost:11434/v1"></div>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label for="pm-key">Clé d’API <span class="muted" data-ai-key-opt>(facultative)</span></label>
+            <input class="input mono" id="pm-key" name="api_key" type="password" autocomplete="new-password" placeholder="sk-ant-…">
+            <label class="checkbox help" data-ai-clear-key hidden><input type="checkbox" name="clear_key" value="1"> Effacer la clé enregistrée</label>
+          </div>
+          <div class="field"><label for="pm-env">ou variable d’environnement</label><input class="input mono" id="pm-env" name="api_key_env" placeholder="ANTHROPIC_API_KEY"></div>
+        </div>
+        <div class="field"><label for="pm-model">Modèle (conversation)</label>
+          <div class="flex gap"><input class="input mono grow" id="pm-model" name="model" list="pm-models" required placeholder="claude-opus-5-5"><button class="btn btn-sm" type="button" data-ai-load-models>{{ icon('download', 13) }} Modèles disponibles</button></div>
+          <datalist id="pm-models"></datalist>
+          <span class="help" data-ai-models-note></span>
+        </div>
+        <div class="grid-2">
+          <div class="field"><label for="pm-fast">Modèle « rapide » <span class="muted">(facultatif)</span></label><input class="input mono" id="pm-fast" name="model_fast" list="pm-models" placeholder="claude-haiku-5-5"><span class="help">Explications courtes, corrections : moins cher et plus rapide.</span></div>
+          <div class="field"><label for="pm-vision">Modèle « vision » <span class="muted">(facultatif)</span></label><input class="input mono" id="pm-vision" name="model_vision" list="pm-models" placeholder="(le modèle principal)"><span class="help">Photos de copies manuscrites, images.</span></div>
+        </div>
+        <div class="field"><span class="label">Rôles pris en charge</span>
+          <div class="flex wrap gap-12">{% for r, lab in roles %}<label class="checkbox"><input type="checkbox" name="role_{{ r }}" value="1" checked> {{ lab }}</label>{% endfor %}</div>
+        </div>
+        <details class="ai-adv">
+          <summary>Réglages avancés</summary>
+          <div class="grid-2 mt">
+            <div class="field"><label for="pm-prio">Priorité</label><input class="input" id="pm-prio" name="priority" type="number" min="0" max="999"><span class="help">Le plus petit nombre est essayé en premier.</span></div>
+            <div class="field"><label for="pm-cap">Plafond propre (dollars / mois)</label><input class="input" id="pm-cap" name="monthly_cap" inputmode="decimal" placeholder="0 = aucun"></div>
+            <div class="field" data-ai-only="anthropic"><label for="pm-effort">Effort de réflexion</label>
+              <select class="input" id="pm-effort" name="effort"><option value="">Selon l’usage (recommandé)</option>{% for e, lab in [('low', 'Bas (rapide, économique)'), ('medium', 'Moyen'), ('high', 'Élevé'), ('xhigh', 'Très élevé'), ('max', 'Maximal')] %}<option value="{{ e }}">{{ lab }}</option>{% endfor %}</select></div>
+            <div class="field" data-ai-only="openai_compatible"><label for="pm-tools">Appel d’outils</label>
+              <select class="input" id="pm-tools" name="tools_mode"><option value="auto">Automatique (essayé, puis désactivé si refusé)</option><option value="on">Toujours</option><option value="off">Jamais</option></select></div>
+            <div class="field" data-ai-only="openai_compatible"><label for="pm-pin">Prix entrée ($ / million de jetons)</label><input class="input" id="pm-pin" name="price_input" inputmode="decimal" placeholder="0"></div>
+            <div class="field" data-ai-only="openai_compatible"><label for="pm-pout">Prix sortie ($ / million de jetons)</label><input class="input" id="pm-pout" name="price_output" inputmode="decimal" placeholder="0"></div>
+          </div>
+          <input type="hidden" name="enabled" value="0"><label class="checkbox"><input type="checkbox" name="enabled" value="1" checked> Activé</label>
+        </details>
+        <div class="ai-test-res" data-ai-pm-res></div>
+      </div>
+      <div class="modal-f">
+        <button class="btn btn-sm" type="button" data-ai-pm-test>{{ icon('refresh', 13) }} Tester la connexion</button>
+        <div class="right"><button class="btn btn-sm" type="button" data-close>Annuler</button><button class="btn btn-primary btn-sm">{{ icon('check', 14) }} Enregistrer</button></div>
+      </div>
+    </form>
+  </dialog>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ai/reglages.js') }}?v={{ version }}"></script>{% endblock %}

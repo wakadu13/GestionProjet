@@ -28,7 +28,7 @@
       <div class="muted small mt-0 flex gap" style="margin-top:3px">
         <span>{{ n.created_at|ago }}</span>
         {% if n.project %}<span>· {{ n.project.emoji }} {{ n.project.name }}</span>{% endif %}
-        <span class="badge {% if n.kind == 'mention' %}badge-accent{% elif n.kind == 'assigned' %}badge-success{% endif %}">{{ {'assigned': 'Assignation', 'mention': 'Mention', 'comment': 'Commentaire', 'intake': 'Intake', 'update': 'Mise à jour'}.get(n.kind, n.kind) }}</span>
+        <span class="badge {% if n.kind == 'mention' %}badge-accent{% elif n.kind == 'assigned' %}badge-success{% elif n.kind == 'reminder' %}badge-warning{% endif %}">{{ {'assigned': 'Assignation', 'mention': 'Mention', 'comment': 'Commentaire', 'intake': 'Intake', 'update': 'Mise à jour', 'reminder': 'Rappel'}.get(n.kind, n.kind) }}</span>
       </div>
     </div>
     <div class="n-actions">

@@ -68,7 +68,7 @@ def password():
         u.must_change_password = False
         db.session.commit()
         flash("Mot de passe modifié.", "success")
-        return redirect(url_for("home.index"))
+        return redirect(url_for("agenda.dashboard"))
     return redirect(url_for("settings.profile", must_change=1 if u.must_change_password else None))
 
 

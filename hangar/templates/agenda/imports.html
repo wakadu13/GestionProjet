@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Emploi du temps{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('upload', 15) }} Emploi du temps</span></div>
+  <div class="header-actions"><a class="btn btn-sm" href="{{ url_for('agenda.calendar') }}">{{ icon('calendar', 14) }} Voir le calendrier</a></div></div>{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:980px;margin:0 auto">
+  <div class="imp-top">
+    <form method="post" action="{{ url_for('agenda.import_upload') }}" enctype="multipart/form-data" class="panel panel-b imp-upload">
+      {{ ui.csrf() }}
+      <h2>Importer le planning de la semaine</h2>
+      <p class="help" style="margin-top:4px">Dépose le fichier <b>.ics</b> exporté de ton emploi du temps. <b>Le dernier fichier importé fait foi</b> : les séances modifiées sont mises à jour, celles qui ont disparu du fichier sont retirées, et tes notes et rappels sont conservés.</p>
+      <label class="dropzone imp-drop" data-dropzone>
+        {{ icon('upload', 26) }}
+        <b>Glisse le fichier ici</b>
+        <span class="small muted">ou clique pour le choisir (.ics)</span>
+        <input type="file" name="file" accept=".ics,text/calendar" hidden>
+      </label>
+      <details class="imp-mode">
+        <summary class="small text-2">{{ icon('sliders', 13) }} Ce que le fichier remplace</summary>
+        <div class="col start" style="gap:6px;margin-top:8px">
+          {% for k, lab in modes.items() %}
+          <label class="checkbox small"><input type="radio" name="mode" value="{{ k }}" {% if k == 'weeks' %}checked{% endif %}> {{ lab }}</label>
+          {% endfor %}
+          <p class="help">Par défaut, seules les semaines présentes dans le fichier sont remplacées, à partir d’aujourd’hui : les semaines passées sont gardées telles quelles.</p>
+        </div>
+      </details>
+    </form>
+    <div class="panel panel-b imp-state">
+      <h3>{{ icon('database', 15) }} Planning actuel</h3>
+      {% if stats.events %}
+      <div class="imp-big">{{ stats.events }}</div><div class="muted small">séances enregistrées</div>
+      <div class="small text-2" style="margin-top:8px">du {{ A.day_short(stats.first.date()) }} {{ stats.first.year }} au {{ A.day_short(stats.last.date()) }} {{ stats.last.year }}</div>
+      {% if latest %}<div class="small text-2" style="margin-top:4px">Dernier import {{ latest.created_at|ago }} · <a href="{{ url_for('agenda.import_detail', iid=latest.id) }}" style="color:var(--accent-text)">détail</a></div>{% endif %}
+      {% else %}
+      <p class="muted small">Aucun cours importé pour l’instant.</p>
+      {% endif %}
+      <div class="sep-line"></div>
+      <a class="small" href="{{ url_for('agenda.export', what='events') }}" style="color:var(--accent-text)">{{ icon('download', 13) }} Exporter vers Google Agenda / Outlook (.ics)</a>
+    </div>
+  </div>
+
+  <div class="section-title"><h2>Historique des imports</h2><span class="count">{{ rows|length }}</span></div>
+  {% if rows %}
+  <div class="panel" style="overflow-x:auto">
+    <table class="table">
+      <thead><tr><th>Date</th><th>Fichier</th><th>Période couverte</th><th class="num">Séances</th><th>Changements</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr {% if r.undone_at %}class="muted"{% endif %}>
+        <td class="nowrap">{{ r.created_at|datetime }}</td>
+        <td class="ellipsis" style="max-width:220px" title="{{ r.filename }}">{{ r.filename }}</td>
+        <td class="nowrap small">{% if r.range_start %}{{ A.day_short(r.range_start) }} → {{ A.day_short(r.range_end) }}{% endif %}</td>
+        <td class="num">{{ r.total }}</td>
+        <td class="small">
+          {% if r.undone_at %}<span class="badge">annulé</span>
+          {% else %}
+          {% if r.added %}<span class="badge badge-accent">+{{ r.added }}</span>{% endif %}
+          {% if r.modified %}<span class="badge badge-warning">{{ r.modified }} modif.</span>{% endif %}
+          {% if r.removed %}<span class="badge badge-danger">−{{ r.removed }}</span>{% endif %}
+          {% if r.restored %}<span class="badge badge-accent">{{ r.restored }} rétablie(s)</span>{% endif %}
+          {% if not r.changed %}<span class="muted">aucun</span>{% endif %}
+          {% endif %}
+        </td>
+        <td class="nowrap" style="text-align:right"><a class="btn btn-xs" href="{{ url_for('agenda.import_detail', iid=r.id) }}">Détail</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  {{ ui.empty('upload', 'Aucun import', 'Chaque semaine, importe le fichier .ics reçu : l’agenda se met à jour et te montre ce qui a changé.') }}
+  {% endif %}
+
+  <div class="section-title"><h2>Comment ça marche ?</h2></div>
+  <div class="panel panel-b md small">
+    <ul>
+      <li>Chaque séance est reconnue grâce à son identifiant dans le fichier (UID) : si l’horaire, la salle ou l’intervenant changent, la séance est <b>mise à jour</b> et marquée « modifiée ».</li>
+      <li>Une séance qui n’apparaît plus dans le nouveau fichier est <b>retirée</b> (barrée dans le calendrier), seulement pour les semaines couvertes par le fichier et à partir d’aujourd’hui.</li>
+      <li>Tes <b>notes</b>, <b>rappels</b> et <b>tâches liées</b> restent attachés à la séance d’un import à l’autre.</li>
+      <li>Une erreur de fichier ? Le <b>dernier import peut être annulé</b> depuis sa page de détail.</li>
+      <li>Les intitulés du type « Réseaux avancés 3 CM » sont découpés en matière, numéro de séance et type (CM, TD/TP, contrôle écrit…). « (PREVISION) » marque une séance prévisionnelle.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

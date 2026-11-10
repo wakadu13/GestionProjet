@@ -873,9 +873,15 @@
   /* ------------------------------------------------------------------ Palette de commandes */
   const pal = $('#palette');
   const ACTIONS = [
+    { title: 'Nouvelle tâche', icon: ICON.plus, kbd: 'T', run: () => openTask({}) },
+    { title: 'Tableau de bord (agenda)', icon: ICON.home, url: H.urls && H.urls.home },
+    { title: 'Calendrier', icon: ICON.calendar, url: H.urls && H.urls.calendar },
+    { title: 'Mes tâches', icon: ICON.check, url: H.urls && H.urls.tasks },
+    { title: 'Importer l’emploi du temps (.ics)', icon: ICON.arrow, url: H.urls && H.urls.imports },
+    { title: 'Rappels et e-mails', icon: ICON.bell, url: H.agenda && H.agenda.settingsUrl },
     { title: 'Créer un ticket', icon: ICON.plus, kbd: 'C', run: () => openCreate() },
     { title: 'Créer un projet', icon: ICON.briefcase, url: H.urls && H.urls.newProject },
-    { title: 'Accueil', icon: ICON.home, url: H.urls && H.urls.home },
+    { title: 'Accueil des projets', icon: ICON.briefcase, url: H.urls && H.urls.projectsHome },
     { title: 'Mes tickets', icon: ICON.layers, url: H.urls && H.urls.myIssues },
     { title: 'Notifications', icon: ICON.bell, url: H.urls && H.urls.notifications },
     { title: 'Analytique', icon: ICON.chart, url: H.urls && H.urls.analytics },
@@ -983,12 +989,13 @@
     const k = e.key;
     if (gPrefix && Date.now() - gPrefix < 1200) {
       gPrefix = 0;
-      const map = { h: H.urls.home, i: H.urls.myIssues, p: H.urls.projects, n: H.urls.notifications, a: H.urls.analytics, t: H.urls.team };
+      const map = { h: H.urls.home, i: H.urls.myIssues, p: H.urls.projects, n: H.urls.notifications, a: H.urls.analytics, t: H.urls.team, c: H.urls.calendar, l: H.urls.tasks, e: H.urls.imports };
       if (map[k]) { e.preventDefault(); location.href = map[k]; }
       return;
     }
     if (k === 'g') { gPrefix = Date.now(); return; }
     if (k === 'c' && ciModal) { e.preventDefault(); openCreate(); }
+    else if (k === 't' && $('#task-modal')) { e.preventDefault(); openTask({}); }
     else if (k === '/') { e.preventDefault(); openPalette(); }
     else if (k === '?') { e.preventDefault(); const a = $('[data-shortcuts]'); if (a) location.href = a.href; }
     else if (k === 'D' && e.shiftKey) { e.preventDefault(); toggleTheme(); }
@@ -1192,9 +1199,35 @@
   }
 
   /* ------------------------------------------------------------------ Barre latérale mobile */
+  const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
+  function setCollapsed(on) {
+    document.documentElement.classList.toggle('sb-collapsed', on);
+    try { localStorage.setItem('hangar.sbCollapsed', on ? '1' : '0'); } catch (e) { /* ignore */ }
+  }
   document.addEventListener('click', (e) => {
-    if (e.target.closest('[data-sidebar-toggle]')) { document.body.classList.toggle('sb-open'); return; }
+    if (e.target.closest('[data-sidebar-toggle]')) {
+      if (isMobile()) document.body.classList.toggle('sb-open');
+      else setCollapsed(!document.documentElement.classList.contains('sb-collapsed'));
+      return;
+    }
+    if (e.target.closest('[data-sidebar-collapse]')) {
+      if (isMobile()) document.body.classList.remove('sb-open'); else setCollapsed(true);
+      return;
+    }
     if (document.body.classList.contains('sb-open') && !e.target.closest('#sidebar')) document.body.classList.remove('sb-open');
+  });
+
+  /* ------------------------------------------------------------------ Panneau de l'assistant IA */
+  function toggleAI(force) {
+    const on = force === undefined ? !document.documentElement.classList.contains('ai-open') : force;
+    document.documentElement.classList.toggle('ai-open', on);
+    try { localStorage.setItem('hangar.ai', on ? '1' : '0'); } catch (e) { /* ignore */ }
+    document.dispatchEvent(new CustomEvent('hangar:ai-toggle', { detail: { open: on } }));
+  }
+  H.toggleAI = toggleAI;
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-ai-toggle]')) { e.preventDefault(); toggleAI(); } });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') { e.preventDefault(); toggleAI(); }
   });
 
   /* ------------------------------------------------------------------ Notifications (sondage léger) */
@@ -1221,4 +1254,262 @@
     e.preventDefault();
     try { await postForm(b.dataset.notifAction); softReload(); } catch (err) { toast(err.message, 'error'); }
   });
+  /* ------------------------------------------------------------------ Agenda : tâches, séances, semaine */
+  const AG = () => window.AGENDA || { events: {}, tasks: {} };
+  const tmModal = $('#task-modal');
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const isoDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  async function loadDayEvents(form, date, selected) {
+    const sel = $('[data-tm-events]', form);
+    if (!sel || !H.agenda) return;
+    sel.innerHTML = '<option value="">Aucune</option>';
+    if (!date) { sel.disabled = true; return; }
+    sel.disabled = false;
+    try {
+      const r = await api(`${H.agenda.dayUrl}?date=${encodeURIComponent(date)}`);
+      r.events.forEach((ev) => { const o = document.createElement('option'); o.value = ev.id; o.textContent = ev.label; o.dataset.start = ev.multi ? '' : ev.start; o.dataset.end = ev.multi ? '' : ev.end; sel.appendChild(o); });
+    } catch (e) { /* hors ligne */ }
+    if (selected && !$(`option[value="${selected}"]`, sel)) { const o = document.createElement('option'); o.value = selected; o.textContent = 'Séance liée (autre jour)'; sel.appendChild(o); }
+    sel.value = selected ? String(selected) : '';
+  }
+  function chipFor(form, offset, label) {
+    let cb = $(`.tm-offsets input[value="${offset}"]`, form);
+    if (!cb) {
+      const lab = document.createElement('label');
+      lab.className = 'tm-chip'; lab.dataset.extra = '1';
+      lab.innerHTML = `<input type="checkbox" name="reminders" value="${offset}"><span>${esc(label || `${offset} min avant`)}</span>`;
+      $('.tm-offsets', form).appendChild(lab);
+      cb = $('input', lab);
+    }
+    return cb;
+  }
+  function syncTaskForm(form) {
+    const hasDate = !!form.date.value;
+    const hasTime = !!form.start.value;
+    form.start.disabled = !hasDate; form.end.disabled = !hasDate || !hasTime;
+    const until = $('[data-tm-until]', form);
+    if (until) until.style.visibility = form.recurrence.value ? 'visible' : 'hidden';
+    form.recurrence.disabled = !hasDate;
+    const help = $('[data-tm-help-allday]', form);
+    if (help) help.hidden = !hasDate || hasTime;
+  }
+  function openTask(d = {}) {
+    if (!tmModal) return;
+    const form = $('[data-task-form]', tmModal);
+    const edit = !!d.id;
+    form.reset();
+    $$('[data-extra]', form).forEach((x) => x.remove());
+    form.action = edit ? d.urls.save : H.agenda.createUrl;
+    form.next.value = location.pathname + location.search;
+    $('[data-tm-heading]', form).textContent = edit ? 'Modifier la tâche' : 'Nouvelle tâche';
+    $('[data-tm-submit]', form).textContent = edit ? 'Enregistrer' : 'Créer la tâche';
+    form.elements.title.value = d.title || '';
+    form.date.value = d.date || '';
+    form.start.value = d.start || '';
+    form.end.value = d.end || '';
+    form.notes.value = d.notes || '';
+    form.priority.value = d.priority || 'none';
+    form.category.value = d.category || '';
+    const col = $(`input[name=color][value="${d.color || ''}"]`, form); if (col) col.checked = true;
+    form.recurrence.value = d.recurrence || '';
+    form.until.value = d.until || '';
+    form.reminder_channel.value = d.channel || (H.agenda && H.agenda.channel) || 'email';
+    const fixed = $('[data-tm-fixed]', form);
+    fixed.innerHTML = '';
+    if (edit) {
+      (d.reminders || []).forEach((r) => {
+        if (r.offset === null || r.offset === undefined) {
+          fixed.insertAdjacentHTML('beforeend', `<label class="checkbox"><input type="checkbox" name="remove_reminder" value="${r.id}"> Supprimer le rappel du ${esc(r.when)} <span class="muted">(${esc(r.statusLabel)})</span></label>`);
+        } else {
+          chipFor(form, r.offset, r.label).checked = true;
+        }
+      });
+    } else if (H.agenda && H.agenda.defaultReminder >= 0 && d.date) {
+      chipFor(form, H.agenda.defaultReminder).checked = true;
+    }
+    const del = $('[data-tm-delete]', form);
+    del.classList.toggle('hide', !edit);
+    del.dataset.url = edit ? d.urls.delete : '';
+    const doneWrap = $('[data-tm-done-wrap]', form);
+    doneWrap.classList.toggle('hide', !edit);
+    $('[data-tm-done]', form).checked = !!d.done;
+    $('[data-tm-done]', form).dataset.url = edit ? d.urls.toggle : '';
+    syncTaskForm(form);
+    loadDayEvents(form, form.date.value, d.event);
+    $$('.dd.open').forEach((x) => x.classList.remove('open'));
+    const em = $('#event-modal'); if (em && em.open) em.close();
+    tmModal.showModal();
+    setTimeout(() => form.elements.title.focus(), 30);
+  }
+  H.openTask = openTask;
+  if (tmModal) {
+    const form = $('[data-task-form]', tmModal);
+    form.date.addEventListener('change', () => { syncTaskForm(form); loadDayEvents(form, form.date.value, form.event_id.value); });
+    form.start.addEventListener('change', () => {
+      syncTaskForm(form);
+      if (form.start.value && !form.end.value) {
+        const [h, m] = form.start.value.split(':').map(Number);
+        const t = Math.min(h * 60 + m + 60, 23 * 60 + 55);
+        form.end.value = `${pad2(Math.floor(t / 60))}:${pad2(t % 60)}`;
+      }
+    });
+    form.recurrence.addEventListener('change', () => syncTaskForm(form));
+    form.event_id.addEventListener('change', () => {
+      const o = form.event_id.selectedOptions[0];
+      if (o && o.dataset.start && !form.start.value) { form.start.value = o.dataset.start; form.end.value = o.dataset.end || ''; syncTaskForm(form); }
+    });
+    $('[data-tm-delete]', form).addEventListener('click', async (e) => {
+      const url = e.currentTarget.dataset.url;
+      if (!url || !confirm('Supprimer cette tâche ?')) return;
+      try { await postForm(url); tmModal.close(); toast('Tâche supprimée', 'success', 2000); softReload(300); } catch (err) { toast(err.message, 'error'); }
+    });
+    $('[data-tm-done]', form).addEventListener('change', async (e) => {
+      try { const r = await postForm(e.target.dataset.url); toast(r.message || 'Enregistré', 'success', 2500); tmModal.close(); softReload(400); } catch (err) { toast(err.message, 'error'); }
+    });
+  }
+  document.addEventListener('click', (e) => {
+    const nt = e.target.closest('[data-new-task]');
+    if (nt) { e.preventDefault(); openTask({ date: nt.dataset.date || '', start: nt.dataset.start || '', event: nt.dataset.event || '' }); return; }
+    const et = e.target.closest('[data-edit-task]');
+    if (et) {
+      e.preventDefault();
+      const t = AG().tasks[et.dataset.editTask];
+      if (t) openTask(t); else if (H.urls.tasks) location.href = `${H.urls.tasks}?focus=${et.dataset.editTask}`;
+    }
+  });
+  // Cocher une tâche
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-task-toggle]');
+    if (!b || b.disabled) return;
+    e.preventDefault();
+    b.disabled = true;
+    try {
+      const r = await postForm(b.dataset.taskToggle);
+      b.classList.toggle('on', !!r.done); b.classList.add('pulse');
+      const row = b.closest('.tk-row, .wk-task, .ag-line, .ag-chip, .wk-bar');
+      if (row) row.classList.toggle('done', !!r.done);
+      toast(r.message || 'Enregistré', 'success', r.next ? 4000 : 2200);
+      softReload(r.next ? 900 : 700);
+    } catch (err) { toast(err.message, 'error'); b.disabled = false; }
+  });
+
+  // Fenêtre de détail d'une séance
+  const emModal = $('#event-modal');
+  function openEvent(id) {
+    const ev = AG().events[id];
+    if (!ev || !emModal) return;
+    const set = (sel, txt) => { const el = $(sel, emModal); if (el) el.textContent = txt || ''; };
+    $('[data-em-color]', emModal).style.background = ev.color;
+    set('[data-em-title]', ev.title);
+    const badges = [];
+    if (ev.kind) badges.push(`<span class="badge" style="background:color-mix(in srgb, ${ev.color} 16%, transparent);color:var(--text)">${esc(ev.kind)}${ev.session ? ` · séance ${esc(ev.session)}` : ''}</span>`);
+    if (ev.exam) badges.push('<span class="badge badge-danger">Contrôle</span>');
+    if (ev.tentative) badges.push('<span class="badge badge-warning">Prévisionnel</span>');
+    if (ev.cancelled) badges.push('<span class="badge badge-danger">Annulé</span>');
+    if (ev.removed) badges.push('<span class="badge badge-danger">Retiré du planning</span>');
+    if (ev.badge && !ev.removed) badges.push(`<span class="badge badge-${esc(ev.badgeClass)}">${esc(ev.badge)} au dernier import</span>`);
+    $('[data-em-badges]', emModal).innerHTML = badges.join('');
+    set('[data-em-when]', ev.when);
+    ['location', 'teachers', 'groups'].forEach((k) => { $(`[data-em-row="${k}"]`, emModal).hidden = !ev[k]; set(`[data-em-${k}]`, ev[k]); });
+    set('[data-em-description]', ev.description);
+    $('[data-em-changes]', emModal).innerHTML = ev.changes.length ? `<b>Changements :</b><br>${ev.changes.map(esc).join('<br>')}` : '';
+    const nf = $('[data-em-note-form]', emModal);
+    nf.action = ev.urls.note; nf.note.value = ev.note; nf.next.value = location.pathname + location.search;
+    const rf = $('[data-em-reminder-form]', emModal);
+    rf.action = ev.urls.reminder; rf.next.value = location.pathname + location.search;
+    if (H.agenda) rf.channel.value = H.agenda.channel || 'email';
+    $('[data-em-reminders]', emModal).innerHTML = ev.reminders.map((r) => `<div class="em-rem">${ICON.bell}<span class="grow">${esc(r.label)}${r.auto ? ' <span class="muted">(automatique)</span>' : ''} <span class="muted">· ${esc(r.when)} · ${r.channel === 'email' ? 'e-mail' : 'appli'}</span></span><span class="badge ${r.status === 'pending' ? 'badge-accent' : ''}">${esc(r.statusLabel)}</span><button type="button" class="btn btn-ghost btn-icon btn-xs" data-rem-del="${r.id}" title="Supprimer">${ICON.x}</button></div>`).join('');
+    $('[data-em-tasks]', emModal).innerHTML = ev.tasks.map((t) => `<button type="button" class="em-rem" data-edit-task="${t.id}" style="border:0;font:inherit;color:inherit;cursor:pointer;text-align:left">${t.done ? ICON.check : ICON.calendar}<span class="grow ${t.done ? 'muted' : ''}" style="${t.done ? 'text-decoration:line-through' : ''}">${esc(t.title)}</span><span class="muted small">${esc(t.date)}</span></button>`).join('');
+    $('[data-em-add-task]', emModal).onclick = () => { emModal.close(); openTask({ date: ev.date, event: ev.id, start: '', title: '' }); };
+    renderEventLinks(ev);
+    emModal.showModal();
+  }
+  H.openEvent = openEvent;
+  // Liens de la matière : collection du wiki et catégorie de QCM (+ date d'examen pour un contrôle)
+  function renderEventLinks(ev) {
+    const sec = $('[data-em-links-section]', emModal);
+    const box = $('[data-em-links]', emModal);
+    const L = ev.links || {};
+    const hasWiki = L.wiki || (L.wikiAll || []).length;
+    const hasQcm = L.qcm || (L.qcmAll || []).length;
+    sec.hidden = !(hasWiki || hasQcm);
+    if (sec.hidden) { box.innerHTML = ''; return; }
+    const next = esc(location.pathname + location.search);
+    const form = (field, value, label, cls = 'btn btn-xs') => `<form method="post" action="${esc(ev.urls.link)}" class="inline-form"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><input type="hidden" name="${field}" value="${esc(value)}"><button class="${cls}">${label}</button></form>`;
+    const picker = (field, all, placeholder) => `<form method="post" action="${esc(ev.urls.link)}" class="em-link-pick"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><select class="input input-sm" name="${field}" aria-label="${esc(placeholder)}"><option value="">${esc(placeholder)}</option>${all.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select><button class="btn btn-xs">Relier</button></form>`;
+    let html = '';
+    if (L.wiki) {
+      html += `<div class="em-link"><span class="em-link-k">Cours</span><a class="em-link-v" href="${esc(L.wiki.url)}">${esc(L.wiki.label)}</a>${form('wiki_path', '', 'Délier', 'btn btn-ghost btn-xs')}</div>`;
+    } else if (hasWiki) {
+      html += `<div class="em-link"><span class="em-link-k">Cours</span><span class="em-link-sug">${(L.wikiSuggest || []).map((p) => form('wiki_path', p, `${esc(p.split('/').pop())} ?`, 'btn btn-xs em-sug')).join('')}${picker('wiki_path', L.wikiAll || [], 'Choisir une collection du wiki…')}</span></div>`;
+    }
+    if (L.qcm) {
+      html += `<div class="em-link"><span class="em-link-k">QCM</span><a class="em-link-v" href="${esc(L.qcm.url)}">${esc(L.qcm.label)}</a>${L.qcm.due ? `<span class="badge badge-accent">${L.qcm.due} à revoir</span>` : ''}${form('qcm_category', '', 'Délier', 'btn btn-ghost btn-xs')}</div>`;
+      if (ev.exam && !ev.removed) html += `<form method="post" action="${esc(ev.urls.exam)}" class="em-link-exam"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><button class="btn btn-sm btn-primary">Préparer ce contrôle : date d’examen des QCM au ${esc(ev.date.split('-').reverse().join('/'))}</button></form>`;
+    } else if (hasQcm) {
+      html += `<div class="em-link"><span class="em-link-k">QCM</span><span class="em-link-sug">${(L.qcmSuggest || []).map((c) => form('qcm_category', c, `${esc(c)} ?`, 'btn btn-xs em-sug')).join('')}${picker('qcm_category', L.qcmAll || [], 'Choisir une catégorie de QCM…')}</span></div>`;
+    }
+    box.innerHTML = html;
+  }
+  document.addEventListener('click', async (e) => {
+    const ev = e.target.closest('[data-ev]');
+    if (ev && !e.target.closest('[data-task-toggle]')) { e.preventDefault(); openEvent(ev.dataset.ev); return; }
+    const rd = e.target.closest('[data-rem-del]');
+    if (rd && H.agenda) {
+      if (!confirm('Supprimer ce rappel ?')) return;
+      try { await postForm(H.agenda.reminderDelete.replace('/0/', `/${rd.dataset.remDel}/`)); rd.closest('.em-rem').remove(); toast('Rappel supprimé', 'success', 1800); softReload(600); } catch (err) { toast(err.message, 'error'); }
+    }
+  });
+
+  // Clic sur un créneau libre de la semaine / un jour du mois : nouvelle tâche à cette date (et heure)
+  document.addEventListener('click', (e) => {
+    const col = e.target.closest('[data-slot-date]');
+    if (col && e.target === col) {
+      const wk = col.closest('[data-week]');
+      const h0 = +wk.dataset.h0;
+      const hourH = parseFloat(getComputedStyle(wk).getPropertyValue('--hour-h')) || 48;
+      const y = e.clientY - col.getBoundingClientRect().top;
+      let mins = h0 * 60 + Math.round((y / hourH) * 60 / 15) * 15;
+      mins = Math.max(0, Math.min(mins, 23 * 60));
+      const end = Math.min(mins + 60, 23 * 60 + 55);
+      openTask({ date: col.dataset.slotDate, start: `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`, end: `${pad2(Math.floor(end / 60))}:${pad2(end % 60)}` });
+      return;
+    }
+    const day = e.target.closest('[data-month-day]');
+    if (day && (e.target === day || e.target.closest('.num') && !e.target.closest('button'))) openTask({ date: day.dataset.monthDay });
+  });
+
+  // Ligne « maintenant » et compte à rebours
+  function tickNow() {
+    const now = new Date();
+    $$('[data-week]').forEach((wk) => {
+      const line = $('[data-now-line]', wk);
+      if (!line) return;
+      const col = line.closest('[data-slot-date]');
+      if (col.dataset.slotDate !== isoDate(now)) { line.remove(); return; }
+      const t = (now.getHours() - +wk.dataset.h0) * 60 + now.getMinutes();
+      if (t < 0 || now.getHours() >= +wk.dataset.h1) line.hidden = true; else { line.hidden = false; line.style.setProperty('--t', t); }
+    });
+    $$('[data-countdown]').forEach((el) => {
+      const diff = Math.round((new Date(el.dataset.countdown) - now) / 60000);
+      if (diff <= 0) { el.textContent = 'commence maintenant'; return; }
+      const d = Math.floor(diff / 1440); const h = Math.floor((diff % 1440) / 60); const m = diff % 60;
+      el.textContent = 'dans ' + (d ? `${d} j ${h} h` : (h ? `${h} h ${pad2(m)}` : `${m} min`));
+    });
+  }
+  tickNow();
+  setInterval(tickNow, 30000);
+  // Fait défiler la grande grille de la semaine jusqu'à l'heure courante
+  const bigWeek = $('.ag-week-full');
+  if (bigWeek) { const line = $('[data-now-line]', bigWeek); if (line) bigWeek.scrollTop = Math.max(0, line.offsetTop - 160); }
+
+  // Import : envoi dès que le fichier est choisi
+  document.addEventListener('change', (e) => { if (e.target.matches('[data-autoupload]') && e.target.files.length) e.target.form.submit(); });
+  // Mise en avant d'une tâche (lien depuis un e-mail ou une autre page)
+  if (window.AGENDA_FOCUS) {
+    const row = document.getElementById(`task-${window.AGENDA_FOCUS}`);
+    if (row) { row.classList.add('focus'); row.scrollIntoView({ block: 'center' }); }
+    const t = AG().tasks[window.AGENDA_FOCUS];
+    if (t) openTask(t);
+  }
 })();

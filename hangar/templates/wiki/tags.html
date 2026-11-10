@@ -1,0 +1,18 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Tags · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Tags') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow">
+  <h1 class="wiki-doc-title">Tags</h1>
+  {% if tags %}
+  <p class="muted">{{ tags|length }} tag{{ 's' if tags|length > 1 }} : ajoute <code>#tag</code> dans le texte d’une page, ou <code>tags: [cours]</code> dans ses propriétés.</p>
+  <div class="wiki-tag-cloud">
+    {% for t, count in tags %}<a class="tag" href="{{ url_for('wiki.tag', tag=t) }}">#{{ t }} <span class="wiki-tag-n">{{ count }}</span></a>{% endfor %}
+  </div>
+  {% else %}
+  {{ ui.empty('hash', 'Aucun tag pour l’instant', 'Ajoute #tag dans le texte d’une page pour la classer.') }}
+  {% endif %}
+</div>
+{% endblock %}

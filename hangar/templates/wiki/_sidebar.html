@@ -1,0 +1,49 @@
+{# Menu de la section Wiki (façon Plane Wiki) : nouvelle page, accueil, collections, favoris, récents, outils #}
+{% import "wiki/_macros.html" as wk with context %}
+{% set sb = wiki_sidebar() %}
+<div class="sb-title"><span>Wiki</span><button class="btn btn-ghost btn-icon btn-xs" type="button" data-sidebar-collapse title="Masquer le menu">{{ icon('sidebar', 15) }}</button></div>
+<div class="sb-actions">
+  {% if sb.can_edit %}<a class="btn btn-sm" href="{{ url_for('wiki.new') }}" title="Créer une page">{{ icon('plus', 14) }} Nouvelle page</a>{% endif %}
+  <a class="btn btn-sm btn-icon" href="{{ url_for('wiki.search') }}" title="Rechercher dans le wiki">{{ icon('search', 14) }}</a>
+</div>
+<nav class="sb-scroll wiki-sb">
+  <a class="sb-link {% if ep == 'wiki.home' %}active{% endif %}" href="{{ url_for('wiki.home') }}">{{ icon('home') }} Accueil</a>
+  <a class="sb-link {% if ep == 'wiki.search' %}active{% endif %}" href="{{ url_for('wiki.search') }}">{{ icon('search') }} Recherche</a>
+  <a class="sb-link {% if ep == 'wiki.sommaire' %}active{% endif %}" href="{{ url_for('wiki.sommaire') }}">{{ icon('wiki-list-tree') }} Sommaire <span class="wiki-count">{{ sb.total }}</span></a>
+
+  <div class="sb-section">
+    <div class="sb-section-h"><span>Collections</span>{% if sb.can_edit %}<a href="{{ url_for('wiki.new') }}" title="Nouvelle page">{{ icon('plus', 13) }}</a>{% endif %}</div>
+    {{ wk.tree({"folders": sb.collections, "notes": sb.racine, "files": sb.racine_pdf}, sb) }}
+    {% if not sb.collections and not sb.racine and not sb.racine_pdf %}<div class="wiki-sb-empty">Aucune page pour l’instant.</div>{% endif %}
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-section-h"><span>Favoris</span></div>
+    {% for n in sb.favoris %}
+    <a class="sb-link wiki-tree-note {% if sb.note is not none and n.key == sb.note.key %}active{% endif %}" href="{{ n.url }}" title="{{ n.key }}">{{ wk.page_icon(n, 14) }}<span class="ellipsis">{{ n.title }}</span></a>
+    {% else %}
+    <div class="wiki-sb-empty">{{ icon('star', 13) }} L’étoile d’une page l’ajoute ici.</div>
+    {% endfor %}
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-section-h"><span>Récents</span></div>
+    {% for n in sb.recents %}
+    <a class="sb-link wiki-tree-note" href="{{ n.url }}" title="{{ n.key }}">{{ wk.page_icon(n, 14) }}<span class="ellipsis">{{ n.title }}</span></a>
+    {% else %}
+    <div class="wiki-sb-empty">Les pages que tu ouvres apparaîtront ici.</div>
+    {% endfor %}
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-section-h"><span>Outils</span></div>
+    <a class="sb-link {% if ep in ('wiki.tags', 'wiki.tag') %}active{% endif %}" href="{{ url_for('wiki.tags') }}">{{ icon('hash') }} Tags</a>
+    <a class="sb-link {% if ep == 'wiki.graphe' %}active{% endif %}" href="{{ url_for('wiki.graphe') }}">{{ icon('wiki-graph') }} Graphe</a>
+    <a class="sb-link {% if ep in ('wiki.historique_global', 'wiki.historique') %}active{% endif %}" href="{{ url_for('wiki.historique_global') }}">{{ icon('history') }} Historique</a>
+    {% if sb.can_edit %}
+    <a class="sb-link {% if ep == 'wiki.importer' %}active{% endif %}" href="{{ url_for('wiki.importer') }}">{{ icon('upload') }} Importer</a>
+    <a class="sb-link {% if ep == 'wiki.latex' %}active{% endif %}" href="{{ url_for('wiki.latex') }}">{{ icon('wiki-sigma') }} Cours LaTeX</a>
+    {% endif %}
+    <a class="sb-link {% if ep == 'wiki.documentation' %}active{% endif %}" href="{{ url_for('wiki.documentation') }}">{{ icon('help') }} Syntaxe</a>
+  </div>
+</nav>

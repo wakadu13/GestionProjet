@@ -1,0 +1,25 @@
+{# Formulaire « Importer une liste de mots » (page d'import et « Mon espace ») : variables `cartes`, `langues`, `dossiers_langue` #}
+<form method="post" enctype="multipart/form-data" data-qcm-cartes>
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="action" value="liste">
+  <div class="field"><label for="liste-mots">Une ligne par mot : mot, puis traduction (tabulation, virgule ou « = » entre les deux)</label>
+    <textarea class="input" id="liste-mots" name="liste" rows="6" spellcheck="false" placeholder="a job&#9;un emploi, un travail&#10;to achieve = réussir&#10;kitchen, cuisine"></textarea></div>
+  <div class="field"><label>ou un fichier exporté (.csv, .txt, .tsv)</label><input class="input" type="file" name="fichier" accept=".csv,.txt,.tsv,text/plain,text/csv"></div>
+  <div class="qcm-radios">
+    <label class="qcm-check"><input type="radio" name="ordre" value="langue_fr" checked> mot en langue apprise, puis traduction</label>
+    <label class="qcm-check"><input type="radio" name="ordre" value="fr_langue"> français d’abord, puis le mot</label>
+    <label class="qcm-check" title="Ex. : « reliable – that can be trusted ». Cartes de définition, QCM, dictée…"><input type="radio" name="ordre" value="langue_def"> mot puis sa définition, tout en langue apprise (sans traduction)</label>
+  </div>
+  <fieldset class="qcm-cartes"><legend>Types de cartes</legend>
+    {% for cle, nom, coche in cartes %}<label class="qcm-check"><input type="checkbox" name="cartes" value="{{ cle }}"{% if coche %} checked{% endif %}> {{ nom }}</label>{% endfor %}
+  </fieldset>
+  <div class="qcm-form-row">
+    <div class="field"><label>Langue</label><input class="input" name="langue" list="liste-langues" value="Anglais" required></div>
+    <div class="field"><label>Nom du paquet <span class="muted">(facultatif)</span></label><input class="input" name="titre" placeholder="Vocabulaire anglais du …"></div>
+    <div class="field"><label>Dossier</label><input class="input" name="dossier" list="liste-dossiers" placeholder="Vocabulaire"></div>
+  </div>
+  <datalist id="liste-langues">{% for l in langues %}<option value="{{ l }}">{% endfor %}</datalist>
+  <datalist id="liste-dossiers">{% for d in dossiers_langue or [] %}<option value="{{ d }}">{% endfor %}</datalist>
+  <p class="muted small mt">Un 3e champ sur la ligne devient la phrase d’exemple (mot entre [crochets] pour l’exercice en contexte), un 4e la note. Les lignes « # » des exports Anki et le HTML sont ignorés. Au plus 500 lignes par paquet.</p>
+  <button type="submit" class="btn btn-primary">Créer le paquet</button>
+</form>

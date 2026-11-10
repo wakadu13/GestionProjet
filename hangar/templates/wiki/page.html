@@ -1,0 +1,106 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}{{ note.title }} · Wiki{% endblock %}
+{% block body_class %}wiki-lecture{% endblock %}
+
+{% block header %}
+<div class="page-header wiki-header">
+  {{ ui.mobile_toggle() }}
+  {{ wk.crumbs(crumbs, note.title, icone) }}
+  <button type="button" class="fav-btn wiki-fav {% if favori %}on{% endif %}" data-fav="{{ url_for('wiki.favori', path=note.key) }}" title="{{ 'Retirer des favoris' if favori else 'Ajouter aux favoris' }}">{{ icon('star', 16) }}</button>
+  <div class="header-actions">
+    {% if ai_dispo and can_edit %}
+    <form method="post" action="{{ url_for('ai.generer_qcm') }}" class="inline-form">
+      {{ ui.csrf() }}
+      <input type="hidden" name="genre" value="qcm">
+      <input type="hidden" name="page" value="{{ note.key }}">
+      <button class="btn btn-sm" name="nombre" value="20" title="L’IA écrit 20 questions sur cette page, à relire avant publication">{{ icon('sparkle', 14) }} <span class="wiki-hide-sm">Générer un QCM</span></button>
+    </form>
+    {% endif %}
+    <a class="btn btn-sm btn-ghost wiki-hide-sm" href="{{ url_for('wiki.historique', path=note.key) }}" title="Historique des versions">{{ icon('history', 14) }} Historique</a>
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Plus d’actions">{{ icon('more', 16) }}</button>
+      <div class="menu" style="width:250px">
+        <a class="menu-item" href="{{ url_for('wiki.historique', path=note.key) }}">{{ icon('history') }} Historique des versions</a>
+        <button class="menu-item" type="button" data-imprimer>{{ icon('printer') }} Imprimer / PDF</button>
+        <button class="menu-item" type="button" data-plein-ecran>{{ icon('wiki-maximize') }} Plein écran <kbd class="right">Ctrl Maj F</kbd></button>
+        <a class="menu-item" href="{{ url_for('wiki.graphe', page=note.key) }}">{{ icon('wiki-graph') }} Voir dans le graphe</a>
+        <button class="menu-item" type="button" data-copy="{{ request.url_root.rstrip('/') }}{{ note.url }}">{{ icon('link') }} Copier le lien</button>
+        <button class="menu-item" type="button" data-copy="[[{{ vault.link_for(note) }}]]">{{ icon('copy') }} Copier le lien [[…]]</button>
+        {% if ai_dispo %}
+        <div class="menu-sep"></div>
+        <button class="menu-item" type="button" data-ai-ask="tuteur">{{ icon('graduation') }} Interroge-moi sur cette page</button>
+        <a class="menu-item" href="{{ url_for('ai.demander') }}">{{ icon('book') }} Demander au wiki</a>
+        <a class="menu-item" href="{{ url_for('ai.copie', page=note.key) }}">{{ icon('image') }} Corriger ma copie sur ce cours</a>
+        {% if can_edit %}<form method="post" action="{{ url_for('ai.transformations') }}">{{ ui.csrf() }}<input type="hidden" name="fiche" value="{{ note.key }}"><button class="menu-item">{{ icon('list-check') }} Fiche de révision (IA)</button></form>{% endif %}
+        {% endif %}
+        {% if can_edit %}
+        <form method="post" action="{{ url_for('ai.cartes_page') }}">{{ ui.csrf() }}<input type="hidden" name="page" value="{{ note.key }}"><button class="menu-item" title="Cartes tirées des encadrés (définitions, théorèmes…) et des ==surlignages==, sans IA">{{ icon('graduation') }} Cartes de révision de la page</button></form>
+        {% endif %}
+        {% if can_edit %}
+        <div class="menu-sep"></div>
+        <form method="post" action="{{ url_for('wiki.supprimer', path=note.key) }}" data-confirm="Mettre « {{ note.title }} » à la corbeille du coffre (.trash) ? Son texte reste dans l’historique.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Mettre à la corbeille</button></form>
+        {% endif %}
+      </div>
+    </div>
+    {% if can_edit %}<a class="btn btn-sm btn-primary" href="{{ url_for('wiki.edit', path=note.key) }}" title="Modifier (Ctrl+E)" data-edit-shortcut>{{ icon('edit', 14) }} Modifier</a>{% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content_class %}flush{% endblock %}
+{% block content %}
+<div class="wiki wiki-doc-layout{% if not toc %} no-toc{% endif %}">
+  <article class="wiki-doc" id="wiki-article">
+    <div class="wiki-doc-icon">{% if icone %}<span>{{ icone }}</span>{% else %}{{ icon('wiki-file-text', 34, stroke=1.4) }}{% endif %}</div>
+    <h1 class="wiki-doc-title">{{ note.title }}</h1>
+    <div class="wiki-doc-meta">
+      <span title="{{ note.modified|datetime }}">{{ icon('clock', 13) }} Modifiée {{ note.modified|ago }}</span>
+      <span>·</span><span>{{ mots }} mot{{ 's' if mots > 1 }}</span>
+      <span>·</span><span>{{ lecture }} min de lecture</span>
+    </div>
+
+    <div class="wiki-props">
+      {% if note.folders %}
+      <div class="wiki-prop"><div class="wiki-prop-k">{{ icon('folder', 14) }} Collection</div><div class="wiki-prop-v"><a class="wiki-pill" href="{{ crumbs[-1][1] }}">{{ note.folders|join(' / ') }}</a></div></div>
+      {% endif %}
+      {% if note.tags %}
+      <div class="wiki-prop"><div class="wiki-prop-k">{{ icon('hash', 14) }} Tags</div><div class="wiki-prop-v">{% for t in note.tags %}<a class="tag" href="{{ url_for('wiki.tag', tag=t|lower) }}">#{{ t }}</a>{% endfor %}</div></div>
+      {% endif %}
+      {% if note.aliases %}
+      <div class="wiki-prop"><div class="wiki-prop-k">{{ icon('link', 14) }} Alias</div><div class="wiki-prop-v">{% for a in note.aliases %}<span class="wiki-pill">{{ a }}</span>{% endfor %}</div></div>
+      {% endif %}
+      {% for p in proprietes %}
+      <div class="wiki-prop"><div class="wiki-prop-k">{{ icon('sliders', 14) }} {{ p.cle }}</div><div class="wiki-prop-v">{% if p.lien %}<a href="{{ p.lien }}" rel="noopener" target="_blank">{{ p.valeur }}</a>{% elif p.valeur %}{{ p.valeur }}{% else %}<span class="muted">—</span>{% endif %}</div></div>
+      {% endfor %}
+      {% if fiche %}
+      <div class="wiki-prop"><div class="wiki-prop-k">{{ icon('page', 14) }} Fiche</div><div class="wiki-prop-v"><a class="wiki-pill" href="{{ fiche.url }}">{{ fiche.title }}</a></div></div>
+      {% endif %}
+    </div>
+
+    <div class="markdown wiki-markdown">
+      {{ content|safe }}
+    </div>
+
+    <footer class="wiki-doc-foot">
+      <div class="wiki-backlinks">
+        <h3>{{ icon('link', 14) }} Rétroliens <span class="muted">{{ backlinks|length }}</span></h3>
+        {% if backlinks %}
+        <ul>{% for n in backlinks %}<li><a href="{{ n.url }}">{{ wk.page_icon(n, 14) }} {{ n.title }}</a>{% if n.folder %} <span class="muted small">{{ n.folder }}</span>{% endif %}</li>{% endfor %}</ul>
+        {% else %}
+        <p class="muted small">Aucune page ne pointe ici.</p>
+        {% endif %}
+        <a class="btn btn-sm btn-ghost" href="{{ url_for('wiki.graphe', page=note.key) }}">{{ icon('wiki-graph', 14) }} Voir dans le graphe</a>
+      </div>
+      <p class="muted small"><code>{{ note.path }}</code>{% if can_edit %} · <a href="{{ url_for('wiki.edit', path=note.key) }}">Modifier</a>{% endif %} · <a href="{{ url_for('wiki.historique', path=note.key) }}">Historique</a></p>
+    </footer>
+  </article>
+  {% if toc %}
+  <aside class="wiki-doc-aside">
+    <div class="wiki-aside-h">Sur cette page</div>
+    <nav class="wiki-toc">{{ toc|safe }}</nav>
+  </aside>
+  {% endif %}
+</div>
+{% endblock %}

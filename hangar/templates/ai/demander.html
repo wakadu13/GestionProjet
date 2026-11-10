@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set nav_section = "wiki" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Demander au wiki{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}"><link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><a href="{{ url_for('wiki.home') }}">{{ icon('book', 15) }} Wiki</a><span class="sep">/</span><span class="current">Demander au wiki</span></div>
+  <div class="header-actions"><a class="btn btn-sm" href="{{ url_for('ai.copie') }}">{{ icon('image', 14) }} <span class="ai-hide-sm">Corriger ma copie</span></a></div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner ai-dm" id="demander" data-url="{{ url_for('ai.demander') }}">
+  <div class="ai-dm-hero">
+    <div class="ai-hello-ic">{{ icon('book', 22) }}</div>
+    <h1>Demander au wiki</h1>
+    <p>L’IA répond d’après tes pages et le texte de tes PDF, et cite ses sources : chaque [1], [2]… mène à la page ou à la page du PDF concernée. Elle dit quand le wiki n’en parle pas.</p>
+  </div>
+  {% if not dispo %}
+  <div class="panel panel-b ai-none">{{ icon('alert', 16) }}<div><b>Aucun fournisseur d’IA n’est configuré.</b> {% if current_user.is_admin %}<a href="{{ url_for('ai.reglages') }}">Ajoute Claude ou un modèle local</a>.{% else %}Demande à un administrateur d’en ajouter un.{% endif %}</div></div>
+  {% else %}
+  {% if plafond %}<div class="panel panel-b ai-none mb">{{ icon('alert', 16) }}<div>Plafond mensuel de l’IA atteint : réessaie le mois prochain.</div></div>{% endif %}
+  <form class="ai-box ai-dm-form" data-demander-form>
+    <label for="demander-question" class="sr-only">Ta question</label>
+    <textarea class="ai-input" id="demander-question" name="question" rows="2" maxlength="2000" required placeholder="Ex. : quelle différence entre la transformée de Fourier et la transformée en Z ?">{{ question }}</textarea>
+    <div class="ai-bar"><span class="ai-hint" style="text-align:left">Ctrl+Entrée pour envoyer · les questions de suite tiennent compte des précédentes</span><button class="ai-send" type="submit" title="Demander" aria-label="Demander">{{ icon('arrow-up', 16) }}</button></div>
+  </form>
+  {% endif %}
+  <div class="ai-dm-echanges" data-demander-echanges>
+    {% for e in echanges %}
+    <div class="ai-dm-echange">
+      <div class="ai-msg ai-msg-u"><div class="ai-u-bubble">{{ e.question }}</div></div>
+      <div class="ai-msg ai-msg-a"><div class="ai-av">{{ icon('book', 14) }}</div><div class="ai-msg-main">
+        <div class="markdown wiki-markdown ai-dm-rep">{{ e.html|safe }}</div>
+        {% if e.sources %}
+        <details class="ai-sources"{% if loop.first %} open{% endif %}><summary>{{ icon('book', 13) }} Sources ({{ e.sources|length }})</summary>
+          <ol>{% for s in e.sources %}<li value="{{ s.n }}"{% if s.cite %} class="cite"{% endif %}><a href="{{ s.url }}">{{ s.titre }}</a>{% if s.type == 'pdf' %} <span class="muted">PDF</span>{% endif %}</li>{% endfor %}</ol>
+        </details>
+        {% endif %}
+        <div class="ai-msg-f"><span class="ai-msg-model">{{ e.quand|datetime }}{% if e.modele %} · {{ e.modele }}{% endif %}</span></div>
+      </div></div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ai/revision.js') }}?v={{ version }}" defer></script>{% endblock %}

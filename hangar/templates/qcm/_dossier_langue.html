@@ -1,0 +1,30 @@
+{# Dossier repliable de paquets de langue (page /qcm/) : variables `cat`, `liste` #}
+{% import "qcm/_macros.html" as qm with context %}
+<details class="qcm-cat" data-cle="{{ cat.langue }} · fichiers · {{ cat.nom }}"{% if q %} open{% endif %}{% if not cat.shown %} hidden{% endif %}>
+  <summary>
+    {{ icon('chevron-right', 15, 'chev') }}
+    {{ icon('folder', 15) }}
+    <span class="qcm-cat-name">{{ cat.nom }}</span>
+    <span class="qcm-cat-meta">
+      <span data-quiz-count>{{ cat.shown }} paquet{{ 's' if cat.shown > 1 }}</span>
+      {% if cat.resume.a_revoir %}<span class="qcm-due">{{ cat.resume.a_revoir }}</span>{% endif %}
+    </span>
+  </summary>
+  <div class="qcm-cat-body">
+    <div class="qcm-cat-actions">
+      <a class="btn btn-sm btn-primary" href="{{ url_for('qcm.langue_play', langue=cat.langue, mode='quotidien', dossier=cat.nom) }}">Session du jour du dossier</a>
+      <a class="btn btn-sm" href="{{ url_for('qcm.langue_play', langue=cat.langue, mode='intensif', dossier=cat.nom) }}" title="Tous les exercices ; ceux ratés reviennent jusqu’à être sus">Révision intensive</a>
+      <a class="btn btn-sm" href="{{ url_for('qcm.langue_menu', langue=cat.langue, dossier=cat.nom) }}">Modes et statistiques</a>
+      {% if can_edit %}
+      <form method="post" action="{{ url_for('qcm.supprimer') }}" data-confirm="Supprimer le dossier « {{ cat.nom }} » : tous ses paquets ({{ cat.sets|length }}) et leur progression ? Les fichiers seront effacés du coffre." style="margin-left:auto">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="categorie" value="{{ cat.nom }}"><input type="hidden" name="langue" value="{{ cat.langue }}">
+        <button type="submit" class="btn btn-sm btn-danger-ghost">{{ icon('trash', 13) }} Supprimer le dossier</button>
+      </form>
+      {% endif %}
+    </div>
+    <ul class="qcm-sets">
+      {% for entry in cat.sets %}{{ qm.paquet_card(entry, cat.langue, can_edit, liste) }}{% endfor %}
+    </ul>
+  </div>
+</details>

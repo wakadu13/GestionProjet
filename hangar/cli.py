@@ -187,14 +187,41 @@ def cmd_create_admin(args):
 
 def cmd_mail_send(args):
     from . import create_app
+    from .agenda import run_jobs
     from .mailer import run_scheduled, send_pending
     app = create_app(args.data)
     with app.app_context():
         force = {"reminders", "digest", "bilan"} if args.force else set()
         res = run_scheduled(force=force)
+        ag = run_jobs()
         stats = send_pending()
     print(f"Planifiés : {res or 'rien à envoyer pour l’instant'}")
+    print(f"Agenda : {ag['reminders']} rappel(s), {ag['daily']} programme(s) du jour")
     print(f"File : {stats['sent']} envoyé(s), {stats['outbox']} dans data/outbox, {stats['failed']} en échec")
+
+
+def cmd_agenda_import(args):
+    """Importe un fichier .ics dans l'agenda d'un utilisateur (le dernier import fait foi)."""
+    from . import create_app
+    from .agenda import import_calendar
+    from .ics import ICSError
+    from .models import User
+    app = create_app(args.data)
+    with app.test_request_context("/"):
+        user = (User.query.filter_by(username=args.user).first() if args.user
+                else User.query.filter_by(role="admin").order_by(User.id).first())
+        if user is None:
+            print("✗ Utilisateur introuvable (option --user).")
+            sys.exit(1)
+        try:
+            with open(args.file, "rb") as fh:
+                imp = import_calendar(user, fh.read(), os.path.basename(args.file), args.mode)
+        except (OSError, ICSError) as exc:
+            print(f"✗ {exc}")
+            sys.exit(1)
+    print(f"Import pour @{user.username} : {imp.total} séances dans le fichier ({imp.range_start:%d/%m} → "
+          f"{imp.range_end:%d/%m}) — {imp.added} ajoutée(s), {imp.modified} modifiée(s), {imp.removed} retirée(s), "
+          f"{imp.unchanged} inchangée(s).")
 
 
 def cmd_mail_test(args):
@@ -212,7 +239,7 @@ def cmd_mail_test(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="hangar", description="Hangar : gestion de projet et d’équipe locale.")
+    parser = argparse.ArgumentParser(prog="hangar", description="Hangar : agenda, cours, QCM, assistant IA et gestion de projet, en local.")
     parser.add_argument("--data", help="dossier des données (défaut : ./data)")
     sub = parser.add_subparsers(dest="cmd")
 
@@ -237,11 +264,24 @@ def main(argv=None):
 
     ms = sub.add_parser("mail-send", help="envoyer la file d’e-mails et les envois planifiés dus")
     ms.add_argument("--force", action="store_true", help="forcer rappels, récapitulatifs et bilans maintenant")
+    ai = sub.add_parser("agenda-import", help="importer l’emploi du temps (.ics) dans l’agenda")
+    ai.add_argument("file", help="fichier .ics")
+    ai.add_argument("--user", help="identifiant (par défaut : le premier administrateur)")
+    ai.add_argument("--mode", default="weeks", choices=["weeks", "future", "merge"],
+                    help="weeks = semaines du fichier (défaut), future = tout le planning à venir, merge = ne rien retirer")
     mt = sub.add_parser("mail-test", help="envoyer un e-mail de test")
     mt.add_argument("address")
 
     ca = sub.add_parser("create-admin", help="créer ou réparer un compte administrateur")
     ca.add_argument("--username")
+
+    # Commandes des modules (wiki, QCM, IA)
+    from .ai import cli as ai_cli
+    from .qcm import cli as qcm_cli
+    from .wiki import cli as wiki_cli
+    extra = {}
+    for mod in (wiki_cli, qcm_cli, ai_cli):
+        extra.update(mod.register(sub) or {})
 
     args = parser.parse_args(argv)
     if args.cmd is None:
@@ -249,7 +289,8 @@ def main(argv=None):
         if args.cmd is None:
             args.cmd, args.host, args.port, args.debug, args.no_browser = "run", "127.0.0.1", 5000, False, False
     {"run": cmd_run, "demo": cmd_demo, "reset": cmd_reset, "backup": cmd_backup, "rebuild-docs": cmd_rebuild_docs,
-     "create-admin": cmd_create_admin, "mail-send": cmd_mail_send, "mail-test": cmd_mail_test}[args.cmd](args)
+     "create-admin": cmd_create_admin, "mail-send": cmd_mail_send, "mail-test": cmd_mail_test,
+     "agenda-import": cmd_agenda_import, **extra}[args.cmd](args)
 
 
 if __name__ == "__main__":

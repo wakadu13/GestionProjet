@@ -15,9 +15,10 @@ from ..utils import back_url, visible_projects, week_bounds
 bp = Blueprint("home", __name__)
 
 
-@bp.route("/")
+@bp.route("/home")
 @login_required
 def index():
+    """Accueil de la gestion de projet (le tableau de bord de l'agenda est à la racine « / »)."""
     me = current_user
     projects = visible_projects(me)
     pids = [p.id for p in projects]

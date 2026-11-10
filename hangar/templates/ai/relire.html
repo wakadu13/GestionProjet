@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Relire · {{ contenu.titre }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><a href="{{ url_for('ai.transformations') }}">{{ icon('timer', 15) }} Travaux</a><span class="sep">/</span><span class="current ai-crumb">Relire · {{ contenu.titre }}</span></div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner ai-settings ai-relire">
+  <p class="help mb">{{ genre }} généré par l’IA d’après <b>{{ nom }}</b>. Décoche ce que tu ne gardes pas, corrige ce qu’il faut, puis publie.{% if avertissement %} <span class="warning-text">{{ avertissement }}</span>{% endif %}</p>
+  <form method="post">
+    {{ ui.csrf() }}
+    <div class="panel panel-b mb grid-2">
+      <div class="field"><label for="rl-titre">Titre</label><input class="input" id="rl-titre" name="titre" value="{{ contenu.titre }}" required></div>
+      <div class="field"><label for="rl-desc">Description</label><input class="input" id="rl-desc" name="description" value="{{ contenu.description }}"></div>
+    </div>
+    {% if questions %}
+    <ol class="ai-rl-liste">
+      {% for item in questions %}
+      <li class="panel panel-b ai-rl-item">
+        <div class="ai-rl-h"><label class="checkbox"><input type="checkbox" name="q{{ item.i }}-garder" value="1" checked> Garder</label><span class="badge">{{ item.q.type }}</span><span class="help">Question {{ loop.index }}</span></div>
+        <textarea class="input" name="q{{ item.i }}-question" rows="2" required>{{ item.q.question }}</textarea>
+        {% if item.q.type in ('QCM', 'QCR') %}
+        <ul class="ai-rl-choix">
+          {% for j, c in item.choix %}
+          <li>
+            {% if item.qcr %}<input type="checkbox" name="q{{ item.i }}-bonne-{{ j }}" value="1"{% if j in item.q.reponses %} checked{% endif %} title="Bonne réponse">
+            {% else %}<input type="radio" name="q{{ item.i }}-bonne" value="{{ j }}"{% if j in item.q.reponses %} checked{% endif %} title="Bonne réponse">{% endif %}
+            <input class="input input-sm" type="text" name="q{{ item.i }}-choix-{{ j }}" value="{{ c }}">
+          </li>
+          {% endfor %}
+        </ul>
+        <p class="help">Coche la ou les bonnes réponses ; vide un choix pour le retirer.</p>
+        {% elif item.q.type in ('TROU', 'QRC') %}
+        <div class="field"><label>Réponses acceptées (séparées par /)</label><input class="input" name="q{{ item.i }}-reponses" value="{{ item.reponses_texte }}"></div>
+        {% if item.q.type == 'QRC' %}<div class="field"><label>Consigne</label><input class="input" name="q{{ item.i }}-consigne" value="{{ item.q.consigne or '' }}"></div>{% endif %}
+        {% elif item.q.type == 'FLASHCARD' %}
+        <div class="field"><label>Verso</label><textarea class="input" name="q{{ item.i }}-verso" rows="2">{{ item.q.verso }}</textarea></div>
+        {% endif %}
+        <div class="field"><label>Explication</label><input class="input" name="q{{ item.i }}-explication" value="{{ item.q.explication or '' }}"></div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <ol class="ai-rl-liste">
+      {% for i, f in fiches %}
+      <li class="panel panel-b ai-rl-item">
+        <div class="ai-rl-h"><label class="checkbox"><input type="checkbox" name="v{{ i }}-garder" value="1" checked> Garder</label>{% if f.prononciation %}<span class="help">{{ f.prononciation }}</span>{% endif %}</div>
+        <div class="grid-2">
+          <div class="field"><label>Mot</label><input class="input" name="v{{ i }}-mot" value="{{ f.mot }}" required></div>
+          <div class="field"><label>Traductions (séparées par ;)</label><input class="input" name="v{{ i }}-traductions" value="{{ (f.traductions or [])|join(' ; ') }}"></div>
+        </div>
+        <div class="field"><label>Exemple (mot entre crochets)</label><input class="input" name="v{{ i }}-exemple" value="{{ f.exemple or '' }}"></div>
+        <div class="grid-2">
+          <div class="field"><label>Traduction de l’exemple</label><input class="input" name="v{{ i }}-exemple_traduction" value="{{ f.exemple_traduction or '' }}"></div>
+          <div class="field"><label>Note</label><input class="input" name="v{{ i }}-note" value="{{ f.note or '' }}"></div>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+    <div class="ai-rl-actions panel panel-b">
+      <button class="btn btn-primary">{{ icon('check', 14) }} Publier</button>
+      <button class="btn btn-danger-ghost" name="action" value="supprimer" data-confirm-msg="Supprimer ce brouillon ?" onclick="return confirm('Supprimer ce brouillon ?')">Supprimer le brouillon</button>
+      <span class="help grow">Vérifie chaque bonne réponse contre le cours : c’est là que l’IA se trompe le plus souvent.</span>
+    </div>
+  </form>
+</div>
+{% endblock %}

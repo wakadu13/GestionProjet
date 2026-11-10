@@ -1,0 +1,65 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Importer · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Importer des fichiers') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-two">
+  <div class="wiki-two-main">
+    <h1 class="wiki-doc-title">Importer des fichiers</h1>
+    <p class="text-2">Chaque note <code>.md</code> déposée devient une page du wiki, et chaque <strong>PDF</strong> se lit
+      directement dans le wiki (lecteur intégré, aussi sur téléphone). Dépose un dossier entier (un coffre Obsidian, par
+      exemple) pour garder ses sous-dossiers : les images, PDF, sons et vidéos qu'il contient sont importés avec, et les
+      liens <code>[[…]]</code> continuent de marcher.</p>
+    <form class="md-import" method="post" enctype="multipart/form-data" data-md-import>
+      {{ ui.csrf() }}
+      <label class="dropzone wiki-dropzone" data-wiki-dropzone>
+        <input type="file" name="fichiers" accept=".md,.markdown,.tex,image/*,.pdf,audio/*,video/*" multiple hidden data-import-files>
+        {{ icon('upload', 26) }}
+        <b>Glisse ici tes fichiers .md, .tex, PDF ou un dossier</b>
+        <span class="muted small">ou clique pour choisir des fichiers</span>
+      </label>
+      <div class="md-import-options">
+        <button type="button" class="btn btn-sm" data-pick-folder hidden>{{ icon('folder', 14) }} Choisir un dossier…</button>
+        <input type="file" multiple hidden webkitdirectory data-import-folder>
+        <label class="field-inline">Dossier de destination
+          <input class="input input-sm" type="text" name="dossier" list="import-folders" value="{{ folder }}" placeholder="(racine du wiki)" autocomplete="off">
+        </label>
+        <datalist id="import-folders">{% for f in folders %}<option value="{{ f }}">{% endfor %}</datalist>
+        <label class="checkbox small"><input type="checkbox" name="remplacer" value="1"> Remplacer les fichiers existants</label>
+        {% if ai_dispo %}
+        <label class="checkbox small" title="L’IA lit chaque PDF ou fichier .tex importé et en fait une page de cours (plan, formules, encadrés), en arrière-plan"><input type="checkbox" name="claude" value="1" data-claude> {{ icon('sparkle', 13) }} Transformer les cours (PDF, LaTeX) en pages avec l’IA</label>
+        {% if ai_lots() %}<label class="checkbox small" title="Traitement différé à moitié prix (Claude), résultat sous 24 heures"><input type="checkbox" name="lot" value="1" data-lot> sans urgence (lot, moitié prix)</label>{% endif %}
+        {% endif %}
+      </div>
+      <div class="md-import-summary" data-summary hidden>
+        <p data-summary-text></p>
+        <ul class="md-import-list" data-pending></ul>
+        <div class="flex gap mt">
+          <button type="submit" class="btn btn-primary" data-start>{{ icon('upload', 14) }} Importer</button>
+          <button type="button" class="btn" data-clear>Annuler</button>
+        </div>
+      </div>
+      <noscript><div class="mt"><button type="submit" class="btn btn-primary">Importer</button></div></noscript>
+    </form>
+    <section class="md-import-results" data-results hidden>
+      <div class="section-title"><h2>Résultat</h2></div>
+      <p data-results-text></p>
+      <ul class="md-import-list" data-results-list></ul>
+    </section>
+  </div>
+  <aside class="wiki-two-side panel panel-b">
+    <h3>Bon à savoir</h3>
+    <ul class="memo">
+      <li>Un fichier qui existe déjà n'est pas écrasé, sauf si « Remplacer » est coché (l'ancien texte d'une page reste dans l'historique).</li>
+      <li>Les dossiers cachés (<code>.obsidian</code>, <code>.trash</code>) sont ignorés.</li>
+      <li>Acceptés : notes <code>.md</code> (jusqu'à {{ max_note }} Mo), images, PDF, audio et vidéo (jusqu'à {{ max_attachment }} Mo).</li>
+      <li>Les grandes photos (plus de 2000 pixels) sont réduites et recompressées, sous le même nom.</li>
+      <li>Un cours en LaTeX (<code>.tex</code>) est converti en page : chapitres, formules, théorèmes en encadrés, tableaux. Les figures TikZ ne sont pas dessinées (leur code est gardé).</li>
+      <li>Dans une note, <code>![[cours.pdf]]</code> affiche le lecteur PDF et <code>![[cours.pdf#page=3]]</code> l'ouvre à la page 3.</li>
+      <li>Un coffre complet se copie aussi en ligne de commande : <code>uv run hangar wiki-import &lt;dossier ou adresse git&gt;</code>.</li>
+    </ul>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='wiki/import.js') }}?v={{ version }}" defer></script>{% endblock %}

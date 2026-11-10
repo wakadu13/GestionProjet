@@ -28,7 +28,7 @@ def _validate_user_fields(form, require_password=True):
 @bp.route("/setup", methods=["GET", "POST"])
 def setup():
     if db.session.query(User.id).first() is not None:
-        return redirect(url_for("home.index"))
+        return redirect(url_for("agenda.dashboard"))
     ws = Workspace.get()
     if request.method == "POST":
         errors, username, password = _validate_user_fields(request.form)
@@ -47,15 +47,15 @@ def setup():
         db.session.commit()
         current_app.config["_HAS_USERS"] = True
         login_user(user, remember=True)
-        flash("Bienvenue dans Hangar ! Commence par créer ton premier projet.", "success")
-        return redirect(url_for("projects.new"))
+        flash("Bienvenue ! Commence par importer ton emploi du temps (.ics) ou ajouter une tâche.", "success")
+        return redirect(url_for("agenda.imports"))
     return render_template("auth/setup.html", form={})
 
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("home.index"))
+        return redirect(url_for("agenda.dashboard"))
     ws = Workspace.get()
     if request.method == "POST":
         ident = (request.form.get("login") or "").strip().lower()
@@ -69,7 +69,7 @@ def login():
                 user.last_login_at = now()
                 db.session.commit()
                 nxt = request.args.get("next")
-                return redirect(nxt if is_safe_next(nxt) else url_for("home.index"))
+                return redirect(nxt if is_safe_next(nxt) else url_for("agenda.dashboard"))
         else:
             flash("Identifiant ou mot de passe incorrect.", "error")
     accounts = User.query.filter_by(active=True).order_by(User.role, User.first_name, User.last_name).all()
@@ -97,7 +97,7 @@ def signup():
         db.session.commit()
         login_user(user)
         flash("Compte créé. Bienvenue !", "success")
-        return redirect(url_for("home.index"))
+        return redirect(url_for("agenda.dashboard"))
     return render_template("auth/signup.html", ws=ws, form={})
 
 

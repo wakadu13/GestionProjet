@@ -8,7 +8,7 @@
     <div class="code">{{ error.code }}</div>
     <h2>{{ {400: 'Requête invalide', 403: 'Accès refusé', 404: 'Page introuvable', 413: 'Fichier trop volumineux', 500: 'Erreur interne'}.get(error.code, 'Erreur') }}</h2>
     <p class="muted mt">{{ error.description if error.code != 500 else 'Une erreur inattendue s’est produite. Réessaie ou consulte le terminal du serveur.' }}</p>
-    <div class="mt-lg flex gap center"><a class="btn" href="javascript:history.back()">{{ icon('arrow-left', 14) }} Retour</a><a class="btn btn-primary" href="{{ url_for('home.index') }}">Accueil</a></div>
+    <div class="mt-lg flex gap center"><a class="btn" href="javascript:history.back()">{{ icon('arrow-left', 14) }} Retour</a><a class="btn btn-primary" href="{{ url_for('agenda.dashboard') }}">Accueil</a></div>
   </div>
 </div>
 {% endblock %}

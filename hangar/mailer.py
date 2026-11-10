@@ -27,7 +27,7 @@ from .models import (
 
 EMAIL_RE = re.compile(r"^[^@\s<>,;\"']+@[^@\s<>,;\"']+\.[^@\s<>,;\"']+$")
 KIND_LABELS = {"notification": "Notification", "reminder": "Rappel", "digest": "Récapitulatif",
-               "bilan": "Bilan", "manual": "Message", "test": "Test"}
+               "bilan": "Bilan", "manual": "Message", "test": "Test", "agenda": "Agenda"}
 STATUS_LABELS = {"queued": "En attente", "sent": "Envoyé", "failed": "Échec", "outbox": "Boîte d’envoi locale"}
 WEEKDAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
@@ -313,7 +313,10 @@ def _open_issues_of(user: User):
 def send_reminders(cfg: MailConfig, today: date) -> int:
     n = 0
     tomorrow = today + timedelta(days=1)
+    from .agenda import digest_enabled
     for u in _recipients(reminders_only=True):
+        if digest_enabled(u):  # le résumé quotidien contient déjà les tickets à échéance
+            continue
         open_ = [i for i in _open_issues_of(u) if not i.is_closed and i.target_date and i.target_date <= tomorrow]
         if not open_:
             continue
@@ -481,6 +484,12 @@ def start_worker(app, interval: int = 30):
             try:
                 with app.app_context():
                     run_scheduled()
+                    try:  # agenda : rappels des tâches / séances et programme quotidien
+                        from .agenda import run_jobs
+                        run_jobs()
+                    except Exception:
+                        db.session.rollback()
+                        app.logger.exception("Erreur dans les rappels de l’agenda")
                     send_pending()
                     db.session.remove()
             except Exception:  # ne jamais arrêter le serveur pour un e-mail

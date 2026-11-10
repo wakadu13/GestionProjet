@@ -1,0 +1,27 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Wiki{% endblock %}
+{% block header %}
+<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([]) }}
+  <div class="header-actions">
+    {% if can_edit %}<a class="btn btn-sm" href="{{ url_for('wiki.importer') }}">{{ icon('upload', 14) }} Importer</a>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('wiki.edit', path=config.WIKI_HOME) }}">{{ icon('plus', 14) }} Créer la page d’accueil</a>{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow">
+  <h1 class="wiki-doc-title">Wiki</h1>
+  {% if recent %}
+  <p class="text-2">Crée une page <code>{{ config.WIKI_HOME }}.md</code> pour personnaliser cette page. Dernières pages modifiées :</p>
+  <div class="panel wiki-list">
+    {% for n in recent %}
+    <a class="wiki-row" href="{{ n.url }}">{{ wk.page_icon(n, 16) }}<span class="grow ellipsis"><b>{{ n.title }}</b>{% if n.folder %} <span class="muted small">{{ n.folder }}</span>{% endif %}</span><span class="muted small nowrap">{{ n.modified|ago }}</span></a>
+    {% endfor %}
+  </div>
+  {% else %}
+  {{ ui.empty('book', 'Le wiki est vide', 'Ajoute des fichiers .md dans le coffre (' ~ config.WIKI_DIR ~ '), importe un coffre Obsidian, ou crée ta première page.') }}
+  {% endif %}
+</div>
+{% endblock %}

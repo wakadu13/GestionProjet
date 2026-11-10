@@ -1,0 +1,142 @@
+{# Composants des pages QCM #}
+
+{% macro styles(katex=False) %}
+<link rel="stylesheet" href="{{ url_for('static', filename='qcm/qcm.css') }}?v={{ version }}">
+{% if katex %}<link rel="stylesheet" href="{{ url_for('static', filename='vendor/katex/katex.min.css') }}">{% endif %}
+{% endmacro %}
+
+{% macro katex_js() %}<script src="{{ url_for('static', filename='vendor/katex/katex.min.js') }}" defer></script>{% endmacro %}
+
+{% macro ring(pct, size='', color=None) %}<span class="qcm-ring {{ size }}" style="--p: {{ pct|round|int }};{% if color %}--c: {{ color }}{% endif %}" title="Maîtrise {{ pct|round|int }} %"><span>{{ pct|round|int }}</span></span>{% endmacro %}
+
+{% macro header(title, crumbs=(), actions='') %}
+<div class="page-header">
+  <button class="btn btn-ghost btn-icon mobile-toggle" type="button" data-sidebar-toggle>{{ icon('menu') }}</button>
+  <div class="crumbs">
+    <a href="{{ url_for('qcm.index') }}">{{ icon('graduation', 15) }} QCM</a>
+    {% for label, url in crumbs %}<span class="sep">{{ icon('chevron-right', 14) }}</span>{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}<span class="current">{{ label }}</span>{% endif %}{% endfor %}
+    {% if title %}<span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">{{ title }}</span>{% endif %}
+  </div>
+  {% if actions %}<div class="header-actions">{{ actions|safe }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro plan_badge(e) %}
+{%- if e -%}
+{%- if e.su -%}<span class="qcm-plan-badge ok">prêt ✓</span>
+{%- elif e.statut == "ok" -%}<span class="qcm-plan-badge {% if e.commencer_maintenant %}urgent{% endif %}">{% if e.commencer_maintenant %}à commencer maintenant{% else %}commencer le {{ e.debut|date }} au plus tard{% endif %}</span>
+{%- elif e.statut in ("retard", "impossible") -%}<span class="qcm-plan-badge retard">en retard</span>
+{%- elif e.statut == "passee" -%}<span class="qcm-plan-badge">examen passé</span>
+{%- endif -%}
+{%- endif -%}
+{% endmacro %}
+
+{# Carte d'un set de QCM (accueil) #}
+{% macro set_card(entry, can_edit, liste='qcm-categories') %}
+{% set s = entry.summary %}{% set qs = entry.set %}
+<li id="{{ entry.ancre }}" class="qcm-set" data-search="{{ qs.texte_recherche }}"{% if not entry.match %} hidden{% endif %}>
+  <div class="qcm-set-head">
+    <div class="qcm-set-title">{{ qs.titre }}{% if qs.proprietaire %} <span class="badge badge-perso" title="Dans ton espace : visible de toi seul">{{ icon('lock', 11) }} perso</span>{% endif %}</div>
+    {% if s.a_reviser %}<span class="qcm-due" title="{{ s.revisions + s.reapprendre }} révision(s), {{ s.nouvelles }} nouvelle(s)">{{ s.a_reviser }}</span>{% else %}<span class="qcm-due zero" title="À jour">{{ icon('check', 12) }}</span>{% endif %}
+  </div>
+  {% if qs.description %}<p class="qcm-set-desc" title="{{ qs.description }}">{{ qs.description }}</p>{% endif %}
+  {% if qs.source_page %}<p class="qcm-set-desc">D’après la page « {{ qs.source_page }} »</p>{% endif %}
+  <div class="qcm-set-stat"><div class="progress accent" title="Maîtrise {{ s.pct_maitrise|round|int }} %"><span style="width: {{ s.pct_maitrise|round|int }}%"></span></div><span class="pct">{{ s.pct_maitrise|round|int }} %</span></div>
+  <div class="qcm-set-status">
+    <span>{{ s.total }} question{{ 's' if s.total > 1 }}</span>
+    {% if s.a_reviser %}<span>· <b>{{ s.a_reviser }}</b> à réviser{% if s.dues > s.a_reviser %} (sur {{ s.dues }} dues){% endif %}{% if s.nouvelles and s.a_reviser > s.nouvelles %}, dont {{ s.nouvelles }} nouvelle{{ 's' if s.nouvelles > 1 }}{% endif %}</span>
+    {% elif s.quota_atteint %}<span>· quota du jour atteint ✓</span>
+    {% else %}<span>· à jour ✓</span>{% endif %}
+    {% if entry.deck and entry.deck.date_objectif %}<span class="qcm-plan-badge" title="Date d’examen">{{ icon('target', 11) }}&nbsp;{{ entry.deck.date_objectif|date }}</span>{% endif %}
+  </div>
+  <div class="qcm-set-buttons">
+    {% if s.a_reviser %}<a class="btn btn-sm btn-primary" href="{{ url_for('qcm.play', set=qs.id, mode='review') }}">{{ icon('play', 13) }} Réviser</a>{% endif %}
+    <a class="btn btn-sm" href="{{ url_for('qcm.play', set=qs.id, mode='all') }}" title="Toutes les questions, mélangées">Tout</a>
+    <a class="btn btn-sm" href="{{ url_for('qcm.play', set=qs.id, mode='intensif') }}" title="Les questions ratées reviennent jusqu’à être réussies 2 fois de suite">Intensif</a>
+    <a class="btn btn-sm" href="{{ url_for('qcm.play', set=qs.id, mode='examen') }}" title="Questions chronométrées, corrigées à la fin, note sur 20">Examen</a>
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Plus d’actions">{{ icon('more', 15) }}</button>
+      <div class="menu">
+        <a class="menu-item" href="{{ url_for('qcm.planning_page') }}#{{ entry.ancre }}">{{ icon('target') }} Planning et date d’examen</a>
+        {% if qs.est_masque %}{% if qs.proprietaire or can_edit %}<a class="menu-item" href="{{ url_for('qcm.masque_editeur', set=qs.id) }}">{{ icon('image') }} Modifier les zones</a>{% endif %}
+        {% else %}
+        <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id) }}">{{ icon('download') }} Exporter pour Anki (.apkg)</a>
+        <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='tsv') }}">{{ icon('table') }} Exporter en texte (Quizlet, tableur)</a>
+        {% endif %}
+        <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='json') }}">{{ icon('code') }} Télécharger le fichier .json</a>
+        {% if can_edit and not qs.proprietaire %}
+        <div class="menu-sep"></div>
+        <button class="menu-item" type="button" data-qcm-deplacer data-set="{{ qs.id }}" data-titre="{{ qs.titre }}" data-liste="{{ liste }}">{{ icon('move') }} Déplacer dans un dossier…</button>
+        <form method="post" action="{{ url_for('qcm.supprimer') }}" data-confirm="Supprimer « {{ qs.titre }} » et sa progression ? Le fichier sera effacé du coffre.">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="set" value="{{ qs.id }}">
+          <button class="menu-item danger">{{ icon('trash') }} Supprimer ce set</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</li>
+{% endmacro %}
+
+{# Carte d'un paquet de langue (accueil) #}
+{% macro paquet_card(entry, langue, can_edit, liste) %}
+{% set qs = entry.set %}
+<li id="{{ entry.ancre }}" class="qcm-set" data-search="{{ entry.search }}"{% if not entry.match %} hidden{% endif %}>
+  <div class="qcm-set-head">
+    <div class="qcm-set-title">{{ qs.titre }}{% if qs.proprietaire %} <span class="badge badge-perso" title="Dans ton espace : visible de toi seul">{{ icon('lock', 11) }} perso</span>{% endif %}</div>
+    <span class="badge">{{ qs|length }} exercice{{ 's' if qs|length > 1 }}</span>
+  </div>
+  {% if qs.description %}<p class="qcm-set-desc">{{ qs.description }}</p>{% endif %}
+  {% if qs.noms_types %}<p class="qcm-set-desc">Cartes : {{ qs.noms_types|join(' · ') }}</p>{% endif %}
+  <div class="qcm-set-buttons">
+    <a class="btn btn-sm btn-primary" href="{{ url_for('qcm.langue_play', langue=langue, mode='quotidien', fichier=qs.id) }}">{{ icon('play', 13) }} Réviser</a>
+    <a class="btn btn-sm" href="{{ url_for('qcm.langue_play', langue=langue, mode='intensif', fichier=qs.id) }}" title="Tous les exercices ; ceux ratés reviennent jusqu’à être sus">Intensif</a>
+    <a class="btn btn-sm" href="{{ url_for('qcm.langue_menu', langue=langue, fichier=qs.id) }}">Modes et stats</a>
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Plus d’actions">{{ icon('more', 15) }}</button>
+      <div class="menu">
+        <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id) }}">{{ icon('download') }} Exporter pour Anki (.apkg)</a>
+        <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='tsv') }}">{{ icon('table') }} Exporter en texte (Quizlet, tableur)</a>
+        <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='json') }}">{{ icon('code') }} Télécharger le fichier .json</a>
+        {% if can_edit and not qs.proprietaire %}
+        <div class="menu-sep"></div>
+        <button class="menu-item" type="button" data-qcm-deplacer data-set="{{ qs.id }}" data-titre="{{ qs.titre }}" data-liste="{{ liste }}">{{ icon('move') }} Déplacer dans un dossier…</button>
+        <form method="post" action="{{ url_for('qcm.supprimer') }}" data-confirm="Supprimer « {{ qs.titre }} » et sa progression ? Le fichier sera effacé du coffre.">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="set" value="{{ qs.id }}">
+          <button class="menu-item danger">{{ icon('trash') }} Supprimer ce paquet</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</li>
+{% endmacro %}
+
+{# Fenêtre « Déplacer dans un dossier » (remplie par qcm_index.js) #}
+{% macro deplacer_dialog() %}
+<dialog class="modal sm" id="qcm-deplacer">
+  <form method="post" action="{{ url_for('qcm.deplacer') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="set" value="">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <div class="modal-h"><h2>Déplacer « <span data-titre></span> »</h2><button class="btn btn-ghost btn-icon btn-sm close" type="button" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b">
+      <div class="field"><label for="qcm-deplacer-dossier">Dossier (nouveau ou existant)</label>
+        <input class="input" id="qcm-deplacer-dossier" name="dossier" list="qcm-categories" autocomplete="off" required></div>
+      <p class="muted small">La progression suit le set. Un set d’une langue reste rangé sous le dossier de sa langue.</p>
+    </div>
+    <div class="modal-f"><div class="right"><button class="btn" type="button" data-close>Annuler</button><button class="btn btn-primary">Déplacer</button></div></div>
+  </form>
+</dialog>
+{% endmacro %}
+
+{% macro previsions(prev, prev_max) %}
+<div class="qcm-prev" style="--n: {{ prev|length }}" role="img" aria-label="Révisions prévues par jour">
+  {% for p in prev %}
+  <div class="qcm-prev-col {% if loop.first %}today{% endif %}" title="{{ p.jour|date_long }} : {{ p.n }} révision{{ 's' if p.n > 1 }}">
+    <div class="qcm-prev-track"><div class="qcm-prev-bar" style="height: {{ (100 * p.n / prev_max)|round|int }}%"><span class="qcm-prev-n">{{ p.n or '' }}</span></div></div>
+    <span class="qcm-prev-j">{% if loop.first %}auj.{% else %}{{ ['lu','ma','me','je','ve','sa','di'][p.jour.weekday()] }} {{ p.jour.day }}{% endif %}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}

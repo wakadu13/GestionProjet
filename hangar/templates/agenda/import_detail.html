@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Import du {{ imp.created_at|datetime }}{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('agenda.imports') }}">{{ icon('upload', 15) }} Emploi du temps</a><span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">Import du {{ imp.created_at|datetime }}</span></div>
+  <div class="header-actions">
+    {% if file_ok %}<a class="btn btn-sm" href="{{ url_for('agenda.import_file', iid=imp.id) }}">{{ icon('download', 14) }} Fichier</a>{% endif %}
+    {% if can_undo %}{{ ui.confirm_button(url_for('agenda.import_undo', iid=imp.id), 'Annuler cet import', 'Revenir à l’emploi du temps d’avant cet import ? Les séances ajoutées par cet import (et leurs notes) seront supprimées.', cls='btn btn-sm btn-danger-ghost', icon_name='history') }}{% endif %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('agenda.calendar', view='week', date=imp.range_start.isoformat() if imp.range_start else None) }}">{{ icon('calendar', 14) }} Voir la semaine</a>
+  </div>
+</div>{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:980px;margin:0 auto">
+  {% if imp.undone_at %}<div class="ag-warn" style="margin-bottom:16px">{{ icon('history', 15) }} <span>Cet import a été annulé le {{ imp.undone_at|datetime }}.</span></div>{% endif %}
+  <div class="flex wrap gap-16 mb">
+    <div><div class="muted small">Fichier</div><b>{{ imp.filename }}</b></div>
+    <div><div class="muted small">Période couverte</div><b>{% if imp.range_start %}du {{ A.day_long(imp.range_start) }} au {{ A.day_long(imp.range_end) }}{% endif %}</b></div>
+    <div><div class="muted small">Règle</div><b>{{ modes.get(imp.mode, imp.mode) }}</b></div>
+  </div>
+  <div class="stats mb-lg">
+    <div class="stat"><div class="v">{{ imp.total }}</div><div class="l">{{ icon('graduation', 13) }} Séances dans le fichier</div></div>
+    <div class="stat accent"><div class="v">{{ imp.added }}</div><div class="l">{{ icon('plus', 13) }} Ajoutées</div></div>
+    <div class="stat {% if imp.modified %}warning{% endif %}"><div class="v">{{ imp.modified }}</div><div class="l">{{ icon('edit', 13) }} Modifiées</div></div>
+    <div class="stat {% if imp.removed %}danger{% endif %}"><div class="v">{{ imp.removed }}</div><div class="l">{{ icon('x-circle', 13) }} Retirées</div></div>
+    <div class="stat"><div class="v">{{ imp.unchanged }}</div><div class="l">{{ icon('check', 13) }} Inchangées</div></div>
+  </div>
+  {% if imp.warnings %}<div class="ag-warn" style="margin-bottom:16px">{{ icon('alert', 15) }}<span>{{ imp.warnings|nl2br }}</span></div>{% endif %}
+
+  {% if not imp.changed %}
+  {{ ui.empty('check-circle', 'Aucun changement', 'Le fichier est identique au planning déjà enregistré.') }}
+  {% endif %}
+
+  {% for key, label, cls, rows in sections if rows %}
+  <div class="section-title"><h2>{{ label }}</h2><span class="count">{{ rows|length }}</span></div>
+  {% if key == 'new' and rows|length > 12 %}
+  <details class="panel imp-collapsed"><summary class="panel-h">{{ icon('chevron-right', 14, 'chev') }}<span>Afficher les {{ rows|length }} séances</span></summary>
+  {% else %}<div class="panel">{% endif %}
+    {% for d in rows %}
+    <div class="imp-row {{ key }}">
+      <span class="imp-when"><b>{{ A.day_short(d.start_dt.date()) if d.start_dt else '' }}</b><br><span class="muted">{{ A.hm(d.start_dt) }}–{{ A.hm(d.end_dt) }}</span></span>
+      <div class="grow">
+        <div><b>{{ d.title }}</b>{% if d.kind %} <span class="ag-kind">{{ A.kind_label(d.kind, True) }}</span>{% endif %}{% if d.location %} <span class="muted small">· {{ d.location }}</span>{% endif %}
+          {% if cls %}<span class="badge badge-{{ cls }}">{{ {'modified': 'modifiée', 'removed': 'retirée', 'restored': 'rétablie', 'added': 'ajoutée'}[key] }}</span>{% endif %}</div>
+        {% if d.lines %}<ul class="imp-diff">{% for l in d.lines %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% if key == 'new' and rows|length > 12 %}</details>{% else %}</div>{% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

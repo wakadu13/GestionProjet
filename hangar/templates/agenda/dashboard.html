@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "agenda/_macros.html" as ag with context %}
+{% block title %}Tableau de bord{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('home', 15) }} Tableau de bord</span></div>
+  <div class="header-actions">
+    <a class="btn btn-sm" href="{{ url_for('agenda.imports') }}">{{ icon('upload', 14) }} Importer le planning</a>
+    <button class="btn btn-sm btn-primary" type="button" data-new-task>{{ icon('plus', 14) }} Nouvelle tâche</button>
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner ag-page">
+  <div class="home-hero ag-hero">
+    <div>
+      <h1>{{ greeting() }}, {{ current_user.short_name }} 👋</h1>
+      <div class="muted" style="margin-top:4px">{{ today|date_long|capitalize }} · semaine {{ today.isocalendar()[1] }}</div>
+    </div>
+  </div>
+
+  {% if nudge %}
+  <form method="post" action="{{ url_for('agenda.import_upload') }}" enctype="multipart/form-data" class="ag-nudge">
+    {{ ui.csrf() }}
+    <span class="ag-nudge-ic">{{ icon('upload', 18) }}</span>
+    <div class="grow">
+      <b>{% if last_import %}Nouveau planning ?{% else %}Importe ton emploi du temps{% endif %}</b>
+      <div class="small text-2">{% if last_import %}Dernier import {{ last_import.created_at|ago }} ({{ last_import.filename }}). Dépose le fichier .ics de la semaine : le dernier envoyé fait foi.{% else %}Dépose le fichier .ics exporté de ton planning : les cours apparaîtront ici et dans le calendrier.{% endif %}</div>
+    </div>
+    <label class="btn btn-sm btn-primary ag-file">{{ icon('upload', 14) }} Choisir le fichier .ics<input type="file" name="file" accept=".ics,text/calendar" data-autoupload hidden></label>
+  </form>
+  {% endif %}
+
+  {% if (pending_reminders or s.daily_mode != 'off') and not mail.ok %}
+  <div class="ag-warn">
+    {{ icon('mail', 15) }}
+    <span class="grow">
+      {% if not mail.address %}Tes rappels n’arriveront que dans l’application : <a href="{{ url_for('agenda.settings') }}">ajoute ton adresse e-mail</a>.
+      {% else %}Les e-mails sont enregistrés dans la boîte d’envoi locale (data/outbox) : {% if current_user.is_admin %}<a href="{{ url_for('mail.settings') }}">configure l’envoi réel (Gmail, Outlook…)</a>{% else %}demande à un administrateur de configurer l’envoi{% endif %} pour les recevoir.{% endif %}
+    </span>
+  </div>
+  {% endif %}
+
+  <div class="ag-top">
+    <div class="ag-now {% if current %}is-now{% endif %}">
+      {% set ev = current or next %}
+      {% if ev %}
+      <div class="ag-now-label">{% if current %}{{ icon('play', 13) }} En cours{% else %}{{ icon('clock', 13) }} Prochaine séance{% endif %}</div>
+      <button type="button" class="ag-now-card" data-ev="{{ ev.id }}" style="--ec: {{ A.event_color(ev) }}">
+        <span class="ag-now-title">{{ ev.title }}</span>
+        <span class="ag-now-meta">
+          {% if current %}jusqu’à {{ A.hm(ev.end) }}{% else %}{{ A.due_label(ev.start.date())|capitalize }} à {{ A.hm(ev.start) }}{% endif %}
+          {% if ev.kind %} · {{ A.kind_label(ev.kind) }}{% endif %}
+        </span>
+        <span class="ag-now-meta">{% if ev.location %}{{ icon('map-pin', 13) }} {{ ev.location }}{% endif %}{% if ev.teachers %} · {{ ev.teachers }}{% endif %}</span>
+        {% if not current %}<span class="ag-countdown" data-countdown="{{ ev.start.isoformat() }}"></span>{% endif %}
+      </button>
+      {% if current and next %}<div class="small muted" style="margin-top:8px">Ensuite : <b class="text-2">{{ next.title }}</b> à {{ A.hm(next.start) }}{% if next.location %} ({{ next.location }}){% endif %}</div>{% endif %}
+      {% else %}
+      <div class="ag-now-label">{{ icon('calendar', 13) }} Prochaine séance</div>
+      <div class="muted" style="padding:10px 0">Aucune séance à venir dans le planning importé.</div>
+      {% endif %}
+    </div>
+    <div class="stats ag-stats">
+      <a class="stat accent" href="{{ url_for('agenda.calendar', view='list') }}"><div class="v">{{ agenda_today|selectattr('type', 'equalto', 'event')|rejectattr('obj.cancelled')|list|length }}</div><div class="l">{{ icon('graduation', 13) }} Séances aujourd’hui{% if today_minutes %} · {{ A.duration_label(today_minutes) }}{% endif %}</div></a>
+      <a class="stat" href="{{ url_for('agenda.calendar', view='week') }}"><div class="v">{{ A.duration_label(week_minutes) if week_minutes else '0 h' }}</div><div class="l">{{ icon('clock', 13) }} De cours cette semaine</div></a>
+      <a class="stat" href="{{ url_for('agenda.tasks') }}"><div class="v">{{ open_count }}</div><div class="l">{{ icon('list-check', 13) }} Tâches à faire</div></a>
+      <a class="stat {% if groups.overdue %}danger{% endif %}" href="{{ url_for('agenda.tasks') }}#overdue"><div class="v">{{ groups.overdue|length }}</div><div class="l">{{ icon('alert', 13) }} En retard</div></a>
+      <a class="stat" href="{{ url_for('agenda.settings') }}#rappels"><div class="v">{{ pending_reminders }}</div><div class="l">{{ icon('bell', 13) }} Rappels programmés</div>{% if next_reminder %}<div class="tiny muted" style="margin-top:2px">prochain {{ A.due_label(next_reminder.remind_at.date()) }} {{ A.hm(next_reminder.remind_at) }}</div>{% endif %}</a>
+    </div>
+  </div>
+
+  <div class="ag-grid">
+    <section class="ag-main">
+      <div class="panel">
+        <div class="panel-h ag-weekbar">
+          {{ icon('calendar', 16) }}<h3>Semaine du {{ week.title }}</h3>
+          <div class="right flex gap-4">
+            <a class="btn btn-xs btn-ghost btn-icon" href="{{ url_for('agenda.dashboard', week=week.prev.isoformat()) }}" title="Semaine précédente">{{ icon('chevron-left', 14) }}</a>
+            <a class="btn btn-xs" href="{{ url_for('agenda.dashboard') }}">Aujourd’hui</a>
+            <a class="btn btn-xs btn-ghost btn-icon" href="{{ url_for('agenda.dashboard', week=week.next.isoformat()) }}" title="Semaine suivante">{{ icon('chevron-right', 14) }}</a>
+            <a class="btn btn-xs btn-ghost" href="{{ url_for('agenda.calendar', view='week', date=week.monday.isoformat()) }}" title="Ouvrir en grand">{{ icon('external', 13) }}</a>
+          </div>
+        </div>
+        <div class="ag-week-wrap">
+          {% if week.days|map(attribute='blocks')|map('length')|sum or week.bars %}
+          {{ ag.week_grid(week, recent, compact=True) }}
+          {% else %}
+          <div class="empty sm">{{ icon('calendar', 34) }}<h3>Rien de prévu cette semaine</h3><p>Importe ton emploi du temps ou clique sur « Nouvelle tâche ».</p><a class="btn btn-sm" href="{{ url_for('agenda.imports') }}">{{ icon('upload', 14) }} Importer un fichier .ics</a></div>
+          {% endif %}
+        </div>
+        <div class="ag-legend small muted">
+          <span><i class="lg tentative"></i> prévisionnel</span><span><i class="lg exam"></i> contrôle</span><span><i class="lg removed"></i> retiré du planning</span><span><span class="chg warning"></span> modifié récemment</span><span>Clique sur un créneau libre pour ajouter une tâche.</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="ag-side">
+      <div class="panel">
+        <div class="panel-h">{{ icon('sun', 16) }}<h3>Aujourd’hui</h3><span class="muted small">{{ A.day_short(today) }}</span>
+          <button class="btn btn-xs btn-ghost right" type="button" data-new-task data-date="{{ today.isoformat() }}">{{ icon('plus', 13) }} Tâche</button></div>
+        <div class="ag-today">
+          {% for x in agenda_today %}
+          {% if x.type == 'event' %}
+          {{ ag.event_line(x.obj, recent, x.get('state', '')) }}
+          {% else %}{% set t = x.obj.task %}
+          <div class="ag-line task {% if t.is_done %}done{% endif %}" style="--tc: {{ t.color or 'var(--accent)' }}">
+            <span class="ag-time">{% if t.start_time %}{{ A.hm(t.start_time) }}{% if t.end_time %}<small>{{ A.hm(t.end_time) }}</small>{% endif %}{% else %}<span class="small">Journée</span>{% endif %}</span>
+            {{ ag.task_check(t, x.obj.ghost) }}
+            <button type="button" class="ag-body" data-edit-task="{{ t.id }}"><span class="ag-title">{{ t.title }}</span>{% if t.category or t.event %}<span class="ag-meta">{% if t.category %}<span>{{ t.category }}</span>{% endif %}{% if t.event %}<span>{{ t.event.title }}</span>{% endif %}</span>{% endif %}</button>
+          </div>
+          {% endif %}
+          {% else %}
+          <div class="empty sm">Aucune séance ni tâche aujourd’hui.</div>
+          {% endfor %}
+        </div>
+        <div class="ag-tomorrow small">
+          <b>Demain</b> ·
+          {% if tomorrow_evs %}{{ tomorrow_evs|length }} séance{{ 's' if tomorrow_evs|length > 1 }}, première à <b>{{ A.hm(tomorrow_evs[0].start) }}</b>{% if tomorrow_evs[0].location %} ({{ tomorrow_evs[0].location }}){% endif %}, fin à {{ A.hm(tomorrow_evs|map(attribute='end')|max) }}
+          {% else %}<span class="muted">pas de cours</span>{% endif %}
+          {% if groups.tomorrow %} · {{ groups.tomorrow|length }} tâche{{ 's' if groups.tomorrow|length > 1 }}{% endif %}
+        </div>
+      </div>
+
+      <div class="panel" id="taches">
+        <div class="panel-h">{{ icon('list-check', 16) }}<h3>Mes tâches</h3><span class="count-pill">{{ open_count }}</span><a class="btn btn-xs btn-ghost right" href="{{ url_for('agenda.tasks') }}">Tout voir</a></div>
+        {{ ag.quick_add('Ajouter une tâche…', today.isoformat()) }}
+        <div class="tk-list">
+          {% set shown = namespace(n=0) %}
+          {% for key, label in A.TASK_GROUP_LABELS if key in ('overdue', 'today', 'tomorrow', 'week') and groups[key] %}
+          <div class="tk-group-h {% if key == 'overdue' %}danger-text{% endif %}">{{ label }} <span class="count-pill">{{ groups[key]|length }}</span></div>
+          {% for t in groups[key][:8] %}{{ ag.task_row(t, show_date=key in ('overdue', 'week')) }}{% set shown.n = shown.n + 1 %}{% endfor %}
+          {% endfor %}
+          {% if not shown.n %}<div class="empty sm">Rien à faire dans les 7 prochains jours. 🎉{% if groups.later or groups.nodate %}<br><a href="{{ url_for('agenda.tasks') }}" class="small" style="color:var(--accent-text)">{{ groups.later|length + groups.nodate|length }} tâche(s) plus tard ou sans date</a>{% endif %}</div>{% endif %}
+        </div>
+      </div>
+
+      {% if qcm and (qcm.cartes_dues or qcm.nouvelles or qcm.nouvelles_disponibles or qcm.objectifs or qcm.serie) %}
+      <div class="panel ag-qcm">
+        <div class="panel-h">{{ icon('graduation', 16) }}<h3>Révisions du jour</h3>{% if qcm.serie %}<span class="badge badge-warning" title="Jours de suite avec des révisions">🔥 {{ qcm.serie }} j</span>{% endif %}<a class="btn btn-xs btn-ghost right" href="{{ url_for('qcm.index') }}">QCM</a></div>
+        <div class="panel-b">
+          <div class="ag-qcm-top">
+            <div><div class="ag-qcm-v">{{ qcm.cartes_dues }}</div><div class="muted small">carte{{ 's' if qcm.cartes_dues > 1 }} à revoir</div></div>
+            {% set nv = qcm.nouvelles or qcm.nouvelles_disponibles %}
+            <div><div class="ag-qcm-v">{{ nv }}</div><div class="muted small">{{ 'nouvelles prévues' if qcm.nouvelles else 'à découvrir' }}</div></div>
+            {% if qcm.objectif %}<div><div class="ag-qcm-v">{{ qcm.aujourdhui }}<span class="muted small">/{{ qcm.objectif }}</span></div><div class="muted small">réponses aujourd’hui</div></div>{% endif %}
+          </div>
+          {% for st in qcm.par_set[:4] %}
+          <a class="ag-qcm-set" href="{{ st.url }}"><span class="ellipsis">{{ st.titre }}</span><span class="muted small nowrap">{{ st.cartes }} à revoir{% if st.nouvelles %} · {{ st.nouvelles }} nouv.{% endif %}</span></a>
+          {% endfor %}
+          {% for o in qcm.objectifs[:3] %}
+          <div class="ag-qcm-goal">{{ icon('flag', 13) }} <b>{{ o.titre }}</b> <span class="muted small">— examen {{ 'aujourd’hui' if o.jours == 0 else ('demain' if o.jours == 1 else 'dans ' ~ o.jours ~ ' j') }}</span></div>
+          {% endfor %}
+          {% if qcm.a_reviser %}<a class="btn btn-sm btn-primary w-full mt" href="{{ qcm.url_reviser }}">{{ icon('play', 13) }} Réviser maintenant</a>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if exams %}
+      <div class="panel">
+        <div class="panel-h"><span class="danger-text">{{ icon('alert', 16) }}</span><h3>Contrôles à venir</h3><span class="count-pill">{{ exams|length }}</span></div>
+        <div>{% for e in exams[:6] %}{{ ag.event_line(e, recent, show_day=True) }}{% endfor %}</div>
+      </div>
+      {% endif %}
+
+      {% if changes %}
+      <div class="panel">
+        <div class="panel-h">{{ icon('refresh', 16) }}<h3>Changements du planning</h3>{% if last_import %}<a class="btn btn-xs btn-ghost right" href="{{ url_for('agenda.import_detail', iid=last_import.id) }}">Détail</a>{% endif %}</div>
+        <div>{% for e in changes %}{{ ag.event_line(e, recent, show_day=True) }}{% endfor %}</div>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+</div>
+{% include "agenda/_event_modal.html" %}
+{{ ag.page_data(data) }}
+{% endblock %}
