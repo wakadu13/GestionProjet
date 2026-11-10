@@ -138,7 +138,7 @@ def search():
         projects=[{"title": p.name, "sub": p.identifier, "emoji": p.emoji, "url": url_for("issues.index", pid=p.id)}
                   for p in r["projects"]],
         pages=[{"title": p.title, "sub": p.project.name, "emoji": p.emoji,
-                "url": url_for("pages.view", pid=p.project_id, page_id=p.id)} for p in r["pages"]],
+                "url": url_for("pages.view", pid=p.project_id, page_id=p.id)} for p in r["pages"]] + _wiki_hits(text),
         members=[{"title": u.display_name, "sub": "@" + u.username, "initials": u.initials,
                   "color": u.avatar_color, "url": url_for("team.profile", username=u.username)}
                  for u in r["members"]],
@@ -147,6 +147,15 @@ def search():
         modules=[{"title": m.name, "sub": m.project.name,
                   "url": url_for("modules.detail", pid=m.project_id, mid=m.id)} for m in r["modules"]],
     )
+
+
+def _wiki_hits(text: str) -> list:
+    """Pages du wiki (coffre Obsidian) pour la palette Ctrl+K ; jamais bloquant."""
+    try:
+        from ..wiki.views import resultats_palette
+        return resultats_palette(text)
+    except Exception:
+        return []
 
 
 def _issue_hit(i: Issue):

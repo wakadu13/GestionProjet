@@ -1,0 +1,67 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Cours LaTeX · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Convertir un cours LaTeX') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-two">
+  <div class="wiki-two-main">
+    <h1 class="wiki-doc-title">Convertir un cours LaTeX</h1>
+    <p class="text-2">Un document <code>.tex</code> (complet ou extrait) devient une page du wiki : chapitres et sections
+      numérotés comme dans le PDF, formules (macros <code>\newcommand</code> développées), théorèmes, définitions et encadrés
+      en callouts colorés, démonstrations repliées, listes, tableaux, renvois et notes de bas de page.</p>
+    <form method="post" enctype="multipart/form-data" class="panel panel-b wiki-form" data-latex-form>
+      {{ ui.csrf() }}
+      <div class="field">
+        <label for="latex-source">Texte LaTeX</label>
+        <textarea class="input wiki-mono" id="latex-source" name="source" rows="12" placeholder="\section{Introduction}&#10;Soit $f$ une fonction…"></textarea>
+        <span class="help">ou choisis un fichier : <input type="file" name="fichier" accept=".tex,.latex,text/x-tex"></span>
+      </div>
+      <div class="flex gap wrap">
+        <div class="field grow"><label for="latex-nom">Nom de la page</label><input class="input" id="latex-nom" name="nom" placeholder="Ex. : Chapitre 3 — Intégrales"></div>
+        <div class="field grow"><label for="latex-dossier">Collection (dossier)</label>
+          <input class="input" id="latex-dossier" name="dossier" list="latex-folders" placeholder="(racine du wiki)" autocomplete="off">
+          <datalist id="latex-folders">{% for f in folders %}<option value="{{ f }}">{% endfor %}</datalist></div>
+      </div>
+      <div class="flex gap wrap">
+        <button type="button" class="btn" data-latex-apercu>{{ icon('eye', 14) }} Aperçu du Markdown</button>
+        <button type="submit" class="btn btn-primary">{{ icon('plus', 14) }} Créer la page</button>
+      </div>
+    </form>
+    <section class="mt-lg" data-latex-resultat hidden>
+      <div class="section-title"><h2>Markdown obtenu</h2><button type="button" class="btn btn-sm btn-ghost right" data-latex-copier>{{ icon('copy', 14) }} Copier</button></div>
+      <pre class="wiki-diff" data-latex-sortie></pre>
+    </section>
+  </div>
+  <aside class="wiki-two-side panel panel-b">
+    <h3>Bon à savoir</h3>
+    <ul class="memo">
+      <li>Les figures TikZ (circuits, chronogrammes, tableaux de Karnaugh) ne peuvent pas être dessinées : leur légende est gardée et leur code rangé dans un encadré replié. Importe aussi le PDF compilé et intègre-le avec <code>![[cours.pdf]]</code>.</li>
+      <li>Dans l’éditeur, coller du LaTeX propose aussi la conversion (menu Fichier ▸ Convertir du LaTeX).</li>
+      <li>Un fichier <code>.tex</code> déposé sur la page <a href="{{ url_for('wiki.importer') }}">Importer</a> est converti de la même façon.</li>
+    </ul>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.querySelector('[data-latex-form]');
+  const sortie = document.querySelector('[data-latex-sortie]');
+  const bloc = document.querySelector('[data-latex-resultat]');
+  form.querySelector('[data-latex-apercu]').addEventListener('click', async () => {
+    const data = new FormData(form);
+    try {
+      const r = await fetch(form.action || location.href, { method: 'POST', body: data, headers: { Accept: 'application/json', 'X-CSRF-Token': window.HANGAR.csrf } });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Conversion impossible.');
+      sortie.textContent = j.markdown;
+      bloc.hidden = false;
+    } catch (e) { window.HANGAR.toast(e.message, 'error'); }
+  });
+  document.querySelector('[data-latex-copier]').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(sortie.textContent); window.HANGAR.toast('Copié dans le presse-papiers', 'success', 1800); } catch (e) { /* refusé */ }
+  });
+})();
+</script>
+{% endblock %}

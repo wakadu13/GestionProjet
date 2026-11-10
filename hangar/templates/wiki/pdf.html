@@ -1,0 +1,35 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}{{ title }} · Wiki{% endblock %}
+{% block wiki_head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/vendor/pdfjs/pdf_viewer.min.css') }}">{% endblock %}
+{% block header %}
+<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs(crumbs, title, '📄') }}
+  <div class="header-actions">
+    {% if page_cours %}<a class="btn btn-sm" href="{{ page_cours.url }}">{{ icon('wiki-file-text', 14) }} Page du cours</a>{% endif %}
+    <a class="btn btn-sm btn-ghost" href="{{ attachment.url }}" download>{{ icon('download', 14) }} <span class="wiki-hide-sm">Télécharger</span></a>
+  </div>
+</div>
+{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block content %}
+<div class="wiki wiki-pdf-layout">
+  <article class="wiki-pdf-main">
+    {% include "wiki/_pdf_lecteur.html" %}
+    <p class="muted small wiki-pdf-foot">PDF · {{ size|filesize }} · <code>{{ attachment.path }}</code>
+      · pour l'intégrer à une page : <code>![[{{ attachment.name }}]]</code>{% if can_edit %} · sélectionne un passage pour le garder (carte ou citation){% endif %}</p>
+  </article>
+  <aside class="wiki-doc-aside wiki-pdf-aside">
+    <section data-pdf-outline-panel hidden>
+      <div class="wiki-aside-h">Sommaire du PDF</div>
+      <nav class="outline pdf-outline" data-pdf-outline></nav>
+    </section>
+    <div class="wiki-aside-h">Rétroliens</div>
+    {% if backlinks %}
+    <ul class="wiki-aside-list">{% for n in backlinks %}<li><a href="{{ n.url }}">{{ n.title }}</a></li>{% endfor %}</ul>
+    {% else %}
+    <p class="muted small">Aucune page ne cite ce PDF.</p>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

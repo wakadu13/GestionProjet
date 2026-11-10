@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{# Base des pages du wiki : feuille de style du rendu Obsidian, scripts (formules, diagrammes, code). #}
+{% set nav_section = "wiki" %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/highlight/github.min.css') }}" data-theme-css="light">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/highlight/github-dark.min.css') }}" data-theme-css="dark" media="not all">
+<script>window.WIKI = {{ {"vendor": url_for('static', filename='vendor/'), "editUrl": ""}|tojson }};</script>
+<script src="{{ url_for('static', filename='wiki/wiki.js') }}?v={{ version }}" defer></script>
+<script src="{{ url_for('static', filename='wiki/plein_ecran.js') }}?v={{ version }}" defer></script>
+{% block wiki_head %}{% endblock %}
+{% endblock %}

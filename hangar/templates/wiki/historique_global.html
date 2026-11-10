@@ -1,0 +1,32 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Historique · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Historique') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-two">
+  <div class="wiki-two-main">
+    <h1 class="wiki-doc-title">Historique du wiki</h1>
+    <p class="muted">Les versions précédentes gardées à chaque modification d’une page (éditeur, import, restauration).</p>
+    {% if versions %}
+    <div class="panel wiki-list">
+      {% for v in versions %}
+      {% if v.note %}
+      <a class="wiki-row" href="{{ url_for('wiki.historique', path=v.note.key) }}?v={{ v.id }}">{{ wk.page_icon(v.note, 16) }}<span class="grow ellipsis"><b>{{ v.note.title }}</b> <span class="muted small">{{ v.note.folder }}</span></span><span class="muted small nowrap">{% if v.auteur %}{{ v.auteur }} · {% endif %}{{ v.date|ago }}</span></a>
+      {% else %}
+      <div class="wiki-row muted">{{ icon('trash', 16) }}<span class="grow ellipsis">{{ v.page }} <span class="small">(page supprimée ou déplacée)</span></span><span class="small nowrap">{{ v.date|ago }}</span></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% else %}
+    {{ ui.empty('history', 'Aucune version gardée pour l’instant', 'Elles apparaîtront ici dès qu’une page sera modifiée depuis le wiki.') }}
+    {% endif %}
+  </div>
+  <aside class="wiki-two-side">
+    <div class="section-title" style="margin-top:0"><h2>Fichiers modifiés récemment</h2></div>
+    <div class="panel wiki-list">
+      {% for n in recent %}<a class="wiki-row" href="{{ n.url }}">{{ wk.page_icon(n, 15) }}<span class="grow ellipsis">{{ n.title }}</span><span class="muted small nowrap">{{ n.modified|ago }}</span></a>{% endfor %}
+    </div>
+  </aside>
+</div>
+{% endblock %}

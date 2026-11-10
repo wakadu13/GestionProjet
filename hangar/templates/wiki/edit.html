@@ -1,0 +1,217 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}{% if is_new %}Nouvelle page{% else %}Modifier{% endif %} · {{ name }}{% endblock %}
+{% block body_class %}editing{% endblock %}
+{% block header %}
+<div class="page-header wiki-header">
+  {{ ui.mobile_toggle() }}
+  {{ wk.crumbs(crumbs, (note.title if note else name), ('✎' if not is_new else '+')) }}
+  <span class="badge {% if is_new %}badge-accent{% endif %}">{{ 'Nouvelle page' if is_new else 'Modification' }}</span>
+  <div class="header-actions">
+    {% if note %}<a class="btn btn-sm btn-ghost wiki-hide-sm" href="{{ url_for('wiki.historique', path=note.key) }}">{{ icon('history', 14) }} Historique</a>{% endif %}
+    <a class="btn btn-sm" href="{{ note.url if note else url_for('wiki.home') }}" data-editor-close>{{ icon('x', 14) }} Fermer</a>
+  </div>
+</div>
+{% endblock %}
+{% block content_class %}wiki-edit-content{% endblock %}
+{% block content %}
+<div class="wiki wiki-edit-layout">
+<article class="wiki-editor editor">
+  {% if error %}
+  <div class="callout" data-callout="danger"><div class="callout-title">{{ error }}</div></div>
+  {% endif %}
+  <form method="post" id="editor-form" data-preview-url="{{ preview_url }}" data-import-url="{{ import_url }}" data-latex-url="{{ latex_url }}"{% if ameliorer_url %} data-ameliorer-url="{{ ameliorer_url }}"{% endif %} data-note-key="{{ key }}" data-note-name="{{ name }}">
+    {{ ui.csrf() }}
+    <input type="hidden" name="version" value="{{ version }}">
+    <div class="toolbar" role="toolbar" aria-label="Mise en forme" hidden>
+      <div class="toolbar-group">
+        <button type="button" class="button" data-action="undo" title="Annuler (Ctrl+Z)" aria-label="Annuler">↶</button>
+        <button type="button" class="button" data-action="redo" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">↷</button>
+      </div>
+      <span class="toolbar-sep"></span>
+      <div class="toolbar-group">
+        <button type="button" class="button primary" data-action="page-link" title="Lien vers une page (Ctrl+K, ou tape [[)">[[ Lien ]]</button>
+        <button type="button" class="button" data-action="web-link" title="Lien web">{{ icon('link', 14) }}</button>
+        <button type="button" class="button" data-action="attach" title="Insérer une image ou un PDF, ajouté au coffre (tu peux aussi le coller ou le glisser dans le texte)">{{ icon('image', 14) }}</button>
+      </div>
+      <span class="toolbar-sep"></span>
+      <div class="toolbar-group">
+        <button type="button" class="button" data-action="bold" title="Gras (Ctrl+B)"><b>G</b></button>
+        <button type="button" class="button" data-action="italic" title="Italique (Ctrl+I)"><i>I</i></button>
+        <button type="button" class="button" data-action="strike" title="Barré"><s>B</s></button>
+        <button type="button" class="button" data-action="highlight" title="Surligner (Ctrl+Maj+H)"><mark>S</mark></button>
+        <button type="button" class="button" data-action="code" title="Code (Ctrl+Maj+C)"><code>&lt;/&gt;</code></button>
+      </div>
+      <span class="toolbar-sep"></span>
+      <div class="toolbar-group">
+        <button type="button" class="button" data-action="heading" title="Titre : un clic de plus pour descendre d'un niveau">{{ icon('heading', 14) }}</button>
+        <button type="button" class="button" data-action="list" title="Liste à puces">{{ icon('list-ul', 14) }}</button>
+        <button type="button" class="button" data-action="task" title="Case à cocher (Ctrl+Entrée pour la cocher)">{{ icon('list-check', 14) }}</button>
+        <details class="toolbar-menu" data-menu="encadre">
+          <summary class="button" title="Encadré (callout) : définition, théorème, méthode, attention…">Encadré ▾</summary>
+          <div class="wiki-menu" role="menu" data-menu-encadres></div>
+        </details>
+        <button type="button" class="button" data-action="table" title="Tableau (« Insérer » pour l'aligner)">{{ icon('table', 14) }}</button>
+        <button type="button" class="button" data-action="codeblock" title="Bloc de code">{ }</button>
+        <button type="button" class="button" data-action="math" title="Formule LaTeX (Ctrl+Maj+M) : $…$ dans le texte, ou bloc $$ sur une ligne vide">∑</button>
+        <details class="toolbar-menu" data-menu="inserer">
+          <summary class="button" title="Symboles, formules types, date, séparateur, alignement d'un tableau">Insérer ▾</summary>
+          <div class="wiki-menu menu-inserer" role="menu" data-menu-inserer></div>
+        </details>
+      </div>
+      <span class="toolbar-sep"></span>
+      <button type="button" class="button" data-action="aide" title="Aide : syntaxe Markdown et raccourcis" aria-label="Aide">?</button>
+      {% if ameliorer_url %}
+      <span class="toolbar-sep"></span>
+      <button type="button" class="button wiki-ai-btn" data-action="ameliorer" title="L’IA corrige l’orthographe et rend le passage sélectionné (ou toute la page) plus clair, sans changer le sens ni le balisage ; Ctrl+Z annule">{{ icon('sparkle', 14) }} Améliorer</button>
+      {% endif %}
+      <span class="toolbar-fill"></span>
+      <div class="segmented" role="radiogroup" aria-label="Mode d'affichage">
+        <button type="button" class="button" role="radio" data-mode="live" aria-checked="true" title="Aperçu en direct : la mise en forme s'affiche pendant la saisie, la syntaxe réapparaît sur la ligne en cours">Édition</button>
+        <button type="button" class="button" role="radio" data-mode="source" aria-checked="false" title="Source : le Markdown brut">Source</button>
+        <button type="button" class="button" role="radio" data-mode="split" aria-checked="false" title="Côte à côte : le texte à gauche, la page rendue à droite, mise à jour pendant la saisie">Côte à côte</button>
+        <button type="button" class="button" role="radio" data-mode="reading" aria-checked="false" title="Lecture : la page telle qu'elle sera publiée (Ctrl+E)">Lecture</button>
+      </div>
+      <details class="toolbar-menu">
+        <summary class="button" title="Ouvrir, télécharger ou importer des fichiers .md">Fichier ▾</summary>
+        <div class="wiki-menu" role="menu">
+          <button type="button" role="menuitem" data-action="open-md">Ouvrir un fichier .md ou .tex…</button>
+          <button type="button" role="menuitem" data-action="latex">Convertir du LaTeX en Markdown</button>
+          <button type="button" role="menuitem" data-action="download-md">Télécharger la page en .md</button>
+          {% if note %}<a role="menuitem" href="{{ url_for('wiki.historique', path=note.key) }}">Historique des versions</a>{% endif %}
+          <a role="menuitem" href="{{ import_url }}">Importer des fichiers .md…</a>
+        </div>
+      </details>
+      <button type="button" class="button" data-plein-ecran aria-pressed="false" aria-label="Plein écran" title="Plein écran (Ctrl+Maj+F)">{{ icon('wiki-maximize', 14) }}</button>
+    </div>
+    <div class="editor-notice" data-latex-notice hidden>
+      <span>Ce texte est un document <b>LaTeX</b> : le wiki ne peut pas l'afficher tel quel.</span>
+      <button type="button" class="button primary small" data-action="latex">Le convertir en page</button>
+    </div>
+    <div class="editor-notice" data-brouillon-notice hidden>
+      <span>Un <b>brouillon non enregistré</b> du <span data-brouillon-date></span> a été retrouvé sur cet appareil<span data-brouillon-autre hidden> (la page a changé depuis)</span>.</span>
+      <span class="editor-notice-actions">
+        <button type="button" class="button primary small" data-brouillon="reprendre">Reprendre le brouillon</button>
+        <button type="button" class="button small" data-brouillon="ignorer">Ignorer</button>
+      </span>
+    </div>
+    <div class="editor-area">
+      <textarea name="content" id="editor" rows="22" spellcheck="true" autofocus
+        placeholder="Écris ici en Markdown.">{{ content }}</textarea>
+      <div class="editor-cm" hidden></div>
+      <div class="markdown preview" hidden></div>
+    </div>
+    <div class="editor-footer">
+      <div class="editor-actions">
+        <button type="button" class="btn btn-primary" data-action="save" title="Enregistrer sans quitter (Ctrl+S)" hidden>{{ icon('check', 14) }} Enregistrer</button>
+        <button type="submit" class="btn" data-submit>Enregistrer et fermer</button>
+        <a class="btn btn-ghost" href="{{ note.url if note else url_for('wiki.home') }}">Fermer</a>
+      </div>
+      <div class="editor-liens" data-suggestions-liens role="status" hidden></div>
+      <div class="editor-status" hidden>
+        <label class="editor-autosave" title="Enregistre tout seul quelques secondes après la dernière frappe, comme Obsidian"><input type="checkbox" data-autosave> Enregistrement auto</label>
+        <span class="editor-count" data-count></span>
+        <span class="editor-state" data-state aria-live="polite"></span>
+      </div>
+    </div>
+    <input type="file" accept=".md,.markdown,.txt,.tex,.latex,text/markdown,text/plain" hidden data-md-input>
+    <input type="file" accept="image/*,.pdf,audio/*,video/*" multiple hidden data-attach-input>
+  </form>
+</article>
+<aside class="wiki-edit-aside">
+  <div class="wiki-aside-h">Plan</div>
+  <nav class="outline" data-outline><p class="muted small">Les titres de la page apparaîtront ici.</p></nav>
+  <div class="wiki-aside-h" style="margin-top:22px">Raccourcis</div>
+  <ul class="memo">
+    <li>Tape <kbd>[[</kbd> pour lier une page, <kbd>![[</kbd> pour intégrer une image ou une note.</li>
+    <li><kbd>Ctrl</kbd>+<kbd>S</kbd> enregistre, <kbd>Ctrl</kbd>+<kbd>E</kbd> bascule en lecture.</li>
+    <li><kbd>Ctrl</kbd>+<kbd>K</kbd> lien vers une page · <kbd>Ctrl</kbd>+<kbd>F</kbd> rechercher et remplacer.</li>
+    <li><kbd>#</kbd> propose les tags, <kbd>[!</kbd> les types d’encadré.</li>
+    <li>Colle ou glisse une image ou un PDF : il est ajouté au coffre.</li>
+    <li>Un cours LaTeX ? Colle-le ou ouvre le <code>.tex</code> (menu Fichier).</li>
+  </ul>
+</aside>
+</div>
+
+<dialog id="page-link-dialog" class="dialog">
+  <h2>Lien vers une page</h2>
+  <label for="page-search">Page</label>
+  <input type="search" id="page-search" autocomplete="off" placeholder="Rechercher une page, ou taper le nom d'une nouvelle page">
+  <ul class="choices" id="page-choices" role="listbox"></ul>
+  <label for="page-label">Texte affiché <span class="muted">(facultatif)</span></label>
+  <input type="text" id="page-label" placeholder="Par défaut : le nom de la page">
+  <div class="dialog-actions">
+    <button type="button" class="btn" data-close>Annuler</button>
+    <button type="button" class="btn btn-primary" id="page-ok">Insérer le lien</button>
+  </div>
+</dialog>
+
+<dialog id="web-link-dialog" class="dialog">
+  <h2>Lien web</h2>
+  <label for="web-url">Adresse</label>
+  <input type="url" id="web-url" placeholder="https://exemple.fr">
+  <label for="web-label">Texte affiché <span class="muted">(facultatif)</span></label>
+  <input type="text" id="web-label" placeholder="Par défaut : l'adresse">
+  <div class="dialog-actions">
+    <button type="button" class="btn" data-close>Annuler</button>
+    <button type="button" class="btn btn-primary" id="web-ok">Insérer le lien</button>
+  </div>
+</dialog>
+
+<dialog id="latex-paste-dialog" class="dialog">
+  <h2>Coller du LaTeX</h2>
+  <p>Le texte collé est un document LaTeX. Le convertir en page du wiki (chapitres, formules, théorèmes en encadrés, tableaux) ?</p>
+  <div class="dialog-actions">
+    <button type="button" class="btn" data-paste-choice="raw">Coller tel quel</button>
+    <button type="button" class="btn btn-primary" data-paste-choice="convert">Convertir</button>
+  </div>
+</dialog>
+
+<dialog id="open-md-dialog" class="dialog">
+  <h2>Ouvrir <span data-md-name></span></h2>
+  <p>La page contient déjà du texte. Que faire du contenu de ce fichier ?</p>
+  <div class="dialog-actions">
+    <button type="button" class="btn" data-close>Annuler</button>
+    <button type="button" class="btn" data-md-choice="insert">Insérer au curseur</button>
+    <button type="button" class="btn btn-primary" data-md-choice="replace">Remplacer tout</button>
+  </div>
+</dialog>
+
+<dialog id="aide-dialog" class="dialog dialog-large">
+  <h2>Écrire dans le wiki</h2>
+  <div class="aide-colonnes">
+    <table class="aide-table">
+      <tbody>
+        <tr><td><code># Titre</code>, <code>## Sous-titre</code></td><td>titres (bouton « Titre » : un clic de plus descend d'un niveau)</td></tr>
+        <tr><td><code>**gras**</code> · <code>*italique*</code> · <code>==surligné==</code> · <code>~~barré~~</code></td><td>mise en forme</td></tr>
+        <tr><td><code>- élément</code> · <code>1. élément</code> · <code>- [ ] tâche</code></td><td>listes, cases à cocher (Ctrl+Entrée coche)</td></tr>
+        <tr><td><code>[[Page]]</code> · <code>[[Page|texte]]</code> · <code>![[image.png]]</code></td><td>lien vers une page, texte affiché, image ou PDF intégré</td></tr>
+        <tr><td><code>&gt; [!definition] Titre</code></td><td>encadré (définition, théorème, méthode, warning, retenir…) ; <code>[!type]-</code> le replie</td></tr>
+        <tr><td><code>$x^2$</code> · <code>$$ … $$</code></td><td>formule dans le texte, formule en bloc (LaTeX)</td></tr>
+        <tr><td><code>| a | b |</code></td><td>tableau (« Insérer → Aligner le tableau » pour ranger les colonnes)</td></tr>
+        <tr><td><code>```python</code></td><td>bloc de code coloré</td></tr>
+        <tr><td><code>#tag</code> · <code>%%commentaire%%</code></td><td>tag (proposé en tapant #), commentaire invisible à la lecture</td></tr>
+      </tbody>
+    </table>
+    <ul class="memo">
+      <li><kbd>Ctrl</kbd>+<kbd>S</kbd> enregistrer · <kbd>Ctrl</kbd>+<kbd>E</kbd> lecture · <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd> annuler, rétablir</li>
+      <li><kbd>Ctrl</kbd>+<kbd>B</kbd> gras · <kbd>Ctrl</kbd>+<kbd>I</kbd> italique · <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>H</kbd> surligner · <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>M</kbd> formule</li>
+      <li><kbd>Ctrl</kbd>+<kbd>K</kbd> lien vers une page · <kbd>Ctrl</kbd>+<kbd>F</kbd> rechercher et remplacer · <kbd>Tab</kbd> indenter</li>
+      <li><kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>F</kbd> plein écran · « Côte à côte » : texte et rendu ensemble</li>
+      <li>Colle ou glisse une image, un PDF ou un <code>.md</code> dans le texte. Un brouillon est gardé sur l'appareil tant que la page n'est pas enregistrée.</li>
+    </ul>
+  </div>
+  <div class="dialog-actions">
+    <button type="button" class="btn btn-primary" data-close>Fermer</button>
+  </div>
+</dialog>
+
+<script type="application/json" id="link-choices">{{ link_choices|tojson }}</script>
+<script type="application/json" id="attachment-choices">{{ attachment_choices|tojson }}</script>
+<script type="application/json" id="tag-choices">{{ tag_choices|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='wiki/vendor/codemirror.min.js') }}?v={{ version }}" defer></script>
+<script src="{{ url_for('static', filename='wiki/editor.js') }}?v={{ version }}" defer></script>
+{% endblock %}

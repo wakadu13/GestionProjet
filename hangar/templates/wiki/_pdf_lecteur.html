@@ -1,0 +1,65 @@
+<div class="pdf-reader{% if integre %} is-embedded{% endif %}" data-pdf-reader
+  data-src="{{ attachment.url }}" data-key="{{ attachment.path }}"
+  data-worker="{{ url_for('static', filename='wiki/vendor/pdfjs/pdf.worker.min.js') }}" data-wasm="{{ url_for('static', filename='wiki/vendor/pdfjs/wasm/') }}"{% if can_edit and not integre %}
+  data-can-edit="1" data-annotation-url="{{ url_for('wiki.pdf_annotation') }}" data-csrf="{{ csrf_token() }}" data-page-cours="{{ page_cours.key if page_cours else '' }}"{% endif %}>
+  <div class="pdf-toolbar" role="toolbar" aria-label="Lecteur PDF">
+    <div class="pdf-group">
+      <button type="button" class="button" data-pdf="prev" title="Page précédente (←)" disabled>‹</button>
+      <label class="pdf-pagenum"><input type="number" min="1" value="1" data-pdf="page" aria-label="Numéro de page" inputmode="numeric"><span data-pdf="count">/ …</span></label>
+      <button type="button" class="button" data-pdf="next" title="Page suivante (→)" disabled>›</button>
+    </div>
+    <div class="pdf-group">
+      <button type="button" class="button" data-pdf="zoom-out" title="Dézoomer (Ctrl+molette)">−</button>
+      <select data-pdf="zoom" aria-label="Zoom">
+        <option value="auto">Zoom auto</option>
+        <option value="page-width">Largeur de page</option>
+        <option value="page-fit">Page entière</option>
+        <option value="0.5">50 %</option>
+        <option value="0.75">75 %</option>
+        <option value="1">100 %</option>
+        <option value="1.25">125 %</option>
+        <option value="1.5">150 %</option>
+        <option value="2">200 %</option>
+        <option value="3">300 %</option>
+        <option value="custom" hidden disabled></option>
+      </select>
+      <button type="button" class="button" data-pdf="zoom-in" title="Zoomer (Ctrl+molette)">+</button>
+    </div>
+    <div class="pdf-group pdf-find">
+      <input type="search" data-pdf="find" placeholder="Rechercher dans le PDF…" aria-label="Rechercher dans le PDF" autocomplete="off">
+      <span class="pdf-find-count" data-pdf="find-count" aria-live="polite"></span>
+    </div>
+    <span class="toolbar-fill"></span>
+    <div class="pdf-group">
+      {% if integre %}<a class="button" href="{{ attachment.view_url }}" target="_top" title="Ouvrir dans le lecteur complet">Ouvrir</a>{% endif %}
+      <a class="button" href="{{ attachment.url }}" download title="Télécharger le PDF">Télécharger</a>
+      <button type="button" class="button" data-pdf="fullscreen" title="Plein écran">⤢</button>
+    </div>
+  </div>
+  <div class="pdf-frame">
+    <div class="pdf-scroll" data-pdf="container" tabindex="0"><div class="pdfViewer"></div></div>
+    <p class="pdf-status" data-pdf="status">Chargement du PDF…</p>
+  </div>
+  <noscript><p>Le lecteur a besoin de JavaScript : <a href="{{ attachment.url }}">ouvrir le fichier PDF</a>.</p></noscript>
+</div>
+{% if can_edit and not integre %}
+<dialog id="pdf-annotation-dialog" class="dialog">
+  <h2>Garder ce passage</h2>
+  <blockquote class="pdf-annotation-extrait" data-annotation-extrait></blockquote>
+  <div class="pdf-annotation-choix">
+    <label class="checkbox"><input type="radio" name="annotation-cible" value="carte" checked> Carte de révision (recto/verso) dans « {{ attachment.path.stem }} — annotations »</label>
+    <label class="checkbox"><input type="radio" name="annotation-cible" value="note"> Citation dans une page du wiki</label>
+  </div>
+  <label data-annotation-recto-label>Recto : la question posée (facultatif)</label>
+  <input type="text" data-annotation-recto placeholder="Ex. : Que dit le cours sur … ?" maxlength="500">
+  <label data-annotation-page-label hidden>Page du wiki (créée si besoin)</label>
+  <input type="text" data-annotation-page list="annotation-pages" hidden placeholder="{{ page_cours.key if page_cours else attachment.path.stem }}">
+  <datalist id="annotation-pages">{% for key in pages_wiki %}<option value="{{ key }}">{% endfor %}</datalist>
+  <p class="muted small">Source notée : {{ attachment.name }}, page <span data-annotation-page-pdf></span>.</p>
+  <div class="dialog-actions">
+    <button type="button" class="btn" data-annotation-fermer>Annuler</button>
+    <button type="button" class="btn btn-primary" data-annotation-ok>Ajouter</button>
+  </div>
+</dialog>
+{% endif %}
+<script type="module" src="{{ url_for('static', filename='wiki/lecteur_pdf.js') }}?v={{ version }}"></script>

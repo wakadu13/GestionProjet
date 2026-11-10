@@ -1,0 +1,16 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}#{{ tag }} · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([('Tags', url_for('wiki.tags'))], '#' ~ tag) }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow">
+  <h1 class="wiki-doc-title">#{{ tag }}</h1>
+  <p class="muted">{{ notes|length }} page{{ 's' if notes|length > 1 }}</p>
+  <div class="panel wiki-list">
+    {% for n in notes %}
+    <a class="wiki-row" href="{{ n.url }}">{{ wk.page_icon(n, 16) }}<span class="grow ellipsis"><b>{{ n.title }}</b>{% if n.folder %} <span class="muted small">{{ n.folder }}</span>{% endif %}</span><span class="muted small nowrap">{{ n.modified|ago }}</span></a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

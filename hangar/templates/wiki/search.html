@@ -1,0 +1,47 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Recherche · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Recherche') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow">
+  <h1 class="wiki-doc-title">Recherche</h1>
+  <form class="wiki-search-big" action="{{ url_for('wiki.search') }}" method="get" role="search">
+    {{ icon('search', 16) }}<input class="input" type="search" name="q" value="{{ query }}" placeholder="Rechercher dans toutes les pages et les PDF…" aria-label="Rechercher" autofocus>
+    <button type="submit" class="btn btn-primary">Rechercher</button>
+  </form>
+  {% if query %}
+  <p class="muted">{{ results|length }} page{{ 's' if results|length > 1 }}{% if pdfs %} et {{ pdfs|length }} PDF{% endif %} pour « {{ query }} »
+    {% if ai_dispo %} · <a href="{{ url_for('ai.demander', q=query) }}">{{ icon('sparkle', 13) }} Demander au wiki</a>{% endif %}</p>
+  {% if results %}
+  <div class="wiki-results">
+    {% for n, snippet in results %}
+    <a class="wiki-result" href="{{ n.url }}">
+      <div class="wiki-result-t">{{ wk.page_icon(n, 15) }} <b>{{ n.title }}</b>{% if n.folder %} <span class="muted small">{{ n.folder }}</span>{% endif %}</div>
+      <p>{{ snippet|safe }}</p>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Aucune page ne correspond. Essaie d’autres mots, ou parcours le <a href="{{ url_for('wiki.sommaire') }}">sommaire</a>.</p>
+  {% endif %}
+  {% if pdfs or pdf_restants %}
+  <div class="section-title"><h2>Dans les PDF</h2>{% if pdfs %}<span class="count">{{ pdfs|length }}</span>{% endif %}</div>
+  {% if pdf_restants %}<p class="muted small">Lecture du texte des PDF en cours ({{ pdf_restants }} restant{{ 's' if pdf_restants > 1 }}) : relance la recherche dans un moment pour tout voir.</p>{% endif %}
+  <div class="wiki-results">
+    {% for r in pdfs %}
+    <div class="wiki-result">
+      <div class="wiki-result-t">{{ icon('wiki-pdf', 15) }} <a href="{{ r.pdf.view_url }}"><b>{{ r.pdf.path.stem }}</b></a> <span class="muted small">PDF{% if r.pdf.path.parent.parts %} · {{ r.pdf.path.parent }}{% endif %} · {{ r.nombre }} page{{ 's' if r.nombre > 1 }}</span></div>
+      {% for numero, extrait in r.pages %}
+      <p><a class="wiki-result-page" href="{{ r.pdf.view_url }}#page={{ numero }}">p. {{ numero }}</a> {{ extrait|safe }}</p>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% else %}
+  <p class="muted">Saisis un ou plusieurs mots. La recherche ignore les accents et la casse, et fouille aussi le texte des PDF.
+    Tu peux aussi parcourir le <a href="{{ url_for('wiki.sommaire') }}">sommaire</a> ou le <a href="{{ url_for('wiki.graphe') }}">graphe</a>.</p>
+  {% endif %}
+</div>
+{% endblock %}
