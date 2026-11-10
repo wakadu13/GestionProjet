@@ -239,7 +239,7 @@ def cmd_mail_test(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="hangar", description="Hangar : gestion de projet et d’équipe locale.")
+    parser = argparse.ArgumentParser(prog="hangar", description="Hangar : agenda, cours, QCM, assistant IA et gestion de projet, en local.")
     parser.add_argument("--data", help="dossier des données (défaut : ./data)")
     sub = parser.add_subparsers(dest="cmd")
 
