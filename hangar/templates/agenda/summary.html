@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Résumé quotidien{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('agenda.settings') }}">{{ icon('mail', 15) }} Rappels et e-mails</a><span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">Aperçu du résumé quotidien</span></div>
+  <div class="header-actions">
+    <div class="seg ag-seg">
+      <a class="{% if day == today %}active{% endif %}" href="{{ url_for('agenda.summary_preview', day='today') }}">Aujourd’hui</a>
+      <a class="{% if day != today %}active{% endif %}" href="{{ url_for('agenda.summary_preview', day='tomorrow') }}">Demain</a>
+    </div>
+    <form method="post" action="{{ url_for('agenda.settings_test') }}">{{ ui.csrf() }}<input type="hidden" name="what" value="program"><button class="btn btn-sm btn-primary" {% if not mail.address %}disabled title="Renseigne d’abord ton adresse"{% endif %}>{{ icon('send', 14) }} M’envoyer le résumé</button></form>
+  </div>
+</div>{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:760px;margin:0 auto">
+  <p class="help mb">
+    {% if s.daily_mode == 'off' %}Le résumé par e-mail est <b>désactivé</b>.{% else %}Envoyé chaque jour à {{ '%02d'|format(s.daily_hour) }}:00 ({{ 'résumé du jour' if s.daily_mode == 'morning' else 'résumé du lendemain' }}){% if mail.address %} à <b>{{ mail.address }}</b>{% endif %}.{% endif %}
+    <a href="{{ url_for('agenda.settings') }}" style="color:var(--accent-text)">Modifier</a>
+  </p>
+  {% if built %}
+  <div class="panel" style="overflow:hidden">
+    <div class="panel-h small"><b>Objet :</b>&nbsp;{{ built[0] }}</div>
+    <iframe title="Aperçu de l’e-mail" srcdoc="{{ built[1] }}" style="width:100%;height:900px;border:0;background:#f3f4f6" sandbox=""></iframe>
+  </div>
+  {% else %}
+  {{ ui.empty('check-circle', 'Rien à faire ce jour-là', 'Aucun cours, aucune tâche ni révision : le résumé ne sera pas envoyé.') }}
+  {% endif %}
+</div>
+{% endblock %}

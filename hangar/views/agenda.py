@@ -575,6 +575,23 @@ def settings():
                            history=history)
 
 
+@bp.route("/agenda/summary")
+@login_required
+def summary_preview():
+    """Aperçu du résumé quotidien tel qu'il partira par e-mail."""
+    from .. import digest
+    at = now()
+    s = A.settings_of(current_user)
+    which = request.args.get("day")
+    if which in ("today", "tomorrow"):
+        day = at.date() + timedelta(days=1 if which == "tomorrow" else 0)
+    else:
+        day = at.date() + timedelta(days=1) if s.daily_mode == "evening" else at.date()
+    built = digest.construire(current_user, day, at)
+    return render_template("agenda/summary.html", built=built, day=day, s=s, mail=A.mail_status(current_user),
+                           sections=digest.sections_enregistrees())
+
+
 @bp.route("/agenda/settings/test", methods=["POST"])
 @login_required
 def settings_test():
@@ -589,7 +606,7 @@ def settings_test():
         day = at.date() + timedelta(days=1) if s.daily_mode == "evening" or at.hour >= 18 else at.date()
         built = A.build_day_email(current_user, day, at)
         if not built:
-            flash(f"Rien de prévu le {A.day_long(day)} : aucun programme à envoyer.", "info")
+            flash(f"Rien à faire le {A.day_long(day)} : aucun résumé à envoyer.", "info")
             return redirect(url_for("agenda.settings"))
         m = mailer.queue_email(current_user.contact_email, built[0], built[1], kind="agenda", to_user=current_user)
         db.session.commit()

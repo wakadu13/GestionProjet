@@ -6,111 +6,76 @@
   <title>{% block title %}Hangar{% endblock %} · {{ ws.name if ws else 'Hangar' }}</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ version }}">
+  <script>try{if(localStorage.getItem('hangar.sbCollapsed')==='1')document.documentElement.classList.add('sb-collapsed');if(localStorage.getItem('hangar.ai')==='1')document.documentElement.classList.add('ai-open');}catch(e){}</script>
+  {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% import "macros.html" as ui with context %}
 {% if current_user.is_authenticated %}
 {% set sb = sidebar() %}
 {% set pid_ctx = request.view_args.get('pid') if request.view_args else None %}
-<div class="app">
-  <aside class="sidebar" id="sidebar">
-    <div class="sb-head">
-      <div class="dd" style="width:100%">
-        <button class="sb-ws" data-menu type="button">
-          <span class="ws-logo">{{ ws.emoji }}</span>
-          <span class="grow ellipsis">{{ ws.name }}</span>
-          {{ icon('chevron-down', 14) }}
-        </button>
-        <div class="menu left" style="width:230px">
-          <div class="menu-h">@{{ current_user.username }}</div>
-          <a class="menu-item" href="{{ url_for('settings.profile') }}">{{ icon('user') }} Mon profil</a>
-          {% if current_user.is_admin %}
-          <a class="menu-item" href="{{ url_for('settings.workspace') }}">{{ icon('settings') }} Paramètres de l’espace</a>
-          <a class="menu-item" href="{{ url_for('settings.backup') }}">{{ icon('database') }} Sauvegardes</a>
-          <a class="menu-item" href="{{ url_for('mail.settings') }}">{{ icon('mail') }} E-mails automatiques</a>
-          {% endif %}
-          {% if not current_user.is_guest %}<a class="menu-item" href="{{ url_for('mail.compose') }}">{{ icon('send') }} Écrire un e-mail</a>{% endif %}
-          <a class="menu-item" href="{{ url_for('settings.tokens') }}">{{ icon('key') }} Jetons d’API</a>
-          <a class="menu-item" href="{{ url_for('settings.about') }}">{{ icon('help') }} À propos</a>
-          <div class="menu-sep"></div>
-          <form method="post" action="{{ url_for('auth.logout') }}">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <button class="menu-item danger">{{ icon('logout') }} Se déconnecter</button>
-          </form>
-        </div>
+{% set ep = request.endpoint or '' %}
+{% set agcfg = agenda_cfg() %}
+{% set nav = nav_section if nav_section is defined else section_of(ep) %}
+<div class="shell" data-section="{{ nav }}">
+  <header class="topbar">
+    <button class="btn btn-ghost btn-icon btn-sm tb-menu" type="button" data-sidebar-toggle title="Menu">{{ icon('menu', 16) }}</button>
+    <div class="dd tb-ws">
+      <button class="tb-ws-btn" data-menu type="button">
+        <span class="ws-logo">{{ ws.emoji }}</span>
+        <span class="ellipsis">{{ ws.name }}</span>
+        {{ icon('chevron-down', 14) }}
+      </button>
+      <div class="menu left" style="width:240px">
+        <div class="menu-h">@{{ current_user.username }}</div>
+        <a class="menu-item" href="{{ url_for('settings.profile') }}">{{ icon('user') }} Mon profil</a>
+        {% if current_user.is_admin %}
+        <a class="menu-item" href="{{ url_for('settings.workspace') }}">{{ icon('settings') }} Paramètres de l’espace</a>
+        <a class="menu-item" href="{{ url_for('settings.backup') }}">{{ icon('database') }} Sauvegardes</a>
+        <a class="menu-item" href="{{ url_for('mail.settings') }}">{{ icon('mail') }} E-mails automatiques</a>
+        {% endif %}
+        <a class="menu-item" href="{{ url_for('ai.reglages') }}">{{ icon('sparkle') }} Fournisseurs d’IA</a>
+        {% if not current_user.is_guest %}<a class="menu-item" href="{{ url_for('mail.compose') }}">{{ icon('send') }} Écrire un e-mail</a>{% endif %}
+        <a class="menu-item" href="{{ url_for('settings.tokens') }}">{{ icon('key') }} Jetons d’API</a>
+        <a class="menu-item" href="{{ url_for('settings.about') }}">{{ icon('help') }} À propos</a>
+        <div class="menu-sep"></div>
+        <form method="post" action="{{ url_for('auth.logout') }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="menu-item danger">{{ icon('logout') }} Se déconnecter</button>
+        </form>
       </div>
     </div>
-    <div class="sb-actions">
-      <button class="btn btn-sm" type="button" data-new-task title="Nouvelle tâche (T)">{{ icon('plus', 14) }} Nouvelle tâche</button>
-      <button class="btn btn-sm btn-icon" type="button" data-create-issue {% if pid_ctx %}data-project="{{ pid_ctx }}"{% endif %} title="Nouveau ticket de projet (C)">{{ icon('edit', 14) }}</button>
-      <button class="btn btn-sm btn-icon" type="button" data-palette title="Rechercher (Ctrl+K)">{{ icon('search', 14) }}</button>
+    <button class="tb-search" type="button" data-palette title="Rechercher (Ctrl+K)">{{ icon('search', 14) }}<span class="grow">Rechercher dans {{ ws.name }}…</span><kbd>Ctrl K</kbd></button>
+    <div class="tb-right">
+      <a class="btn btn-ghost btn-icon btn-sm tb-notif" href="{{ url_for('home.notifications') }}" title="Notifications">{{ icon('inbox', 16) }}<span class="tb-dot {% if not sb.unread %}hide{% endif %}" id="notif-badge">{{ sb.unread if sb.unread < 100 else '99+' }}</span></a>
+      <a class="btn btn-ghost btn-icon btn-sm" href="{{ url_for('home.shortcuts') }}" data-shortcuts title="Raccourcis clavier (?)">{{ icon('help', 16) }}</a>
+      <button class="btn btn-ghost btn-icon btn-sm" type="button" data-theme-toggle title="Thème clair / sombre (Maj+D)">{{ icon('moon', 16) }}</button>
+      <button class="btn btn-sm tb-ai" type="button" data-ai-toggle title="Assistant IA (Ctrl+J)">{{ icon('sparkle', 15) }}<span>Assistant IA</span></button>
+      <a class="tb-avatar" href="{{ url_for('settings.profile') }}" title="{{ current_user.display_name }}">{{ ui.avatar(current_user, 26) }}</a>
     </div>
-    <nav class="sb-scroll">
-      {% set ep = request.endpoint or '' %}
-      {% set agcfg = agenda_cfg() %}
-      <a class="sb-link {% if ep == 'agenda.dashboard' %}active{% endif %}" href="{{ url_for('agenda.dashboard') }}">{{ icon('home') }} Tableau de bord</a>
-      <a class="sb-link {% if ep == 'agenda.calendar' %}active{% endif %}" href="{{ url_for('agenda.calendar') }}">{{ icon('calendar') }} Calendrier</a>
-      <a class="sb-link {% if ep == 'agenda.tasks' %}active{% endif %}" href="{{ url_for('agenda.tasks') }}">{{ icon('list-check') }} Tâches {% if agcfg.due %}<span class="sb-badge {% if agcfg.overdue %}danger{% endif %}" title="{{ agcfg.due }} pour aujourd’hui ou en retard">{{ agcfg.due }}</span>{% endif %}</a>
-      <a class="sb-link {% if ep.startswith('agenda.import') %}active{% endif %}" href="{{ url_for('agenda.imports') }}">{{ icon('upload') }} Emploi du temps</a>
-      <a class="sb-link {% if ep == 'home.notifications' %}active{% endif %}" href="{{ url_for('home.notifications') }}">{{ icon('bell') }} Notifications {% if sb.unread %}<span class="sb-badge" id="notif-badge">{{ sb.unread if sb.unread < 100 else '99+' }}</span>{% else %}<span class="sb-badge hide" id="notif-badge"></span>{% endif %}</a>
-      <a class="sb-link {% if ep == 'agenda.settings' %}active{% endif %}" href="{{ url_for('agenda.settings') }}">{{ icon('mail') }} Rappels et e-mails</a>
-
-      <details class="sb-group" {% if not ep.startswith('agenda.') and ep not in ('home.notifications',) %}open{% endif %}>
-        <summary class="sb-section-h"><span>Gestion de projet</span>{{ icon('chevron-right', 13, 'chev') }}</summary>
-      <a class="sb-link {% if ep == 'home.index' %}active{% endif %}" href="{{ url_for('home.index') }}">{{ icon('briefcase') }} Accueil projets</a>
-      <a class="sb-link {% if ep == 'home.workspace_issues' %}active{% endif %}" href="{{ url_for('home.workspace_issues') }}">{{ icon('layers') }} Mes tickets</a>
-      <a class="sb-link {% if ep.startswith('saved_views.global') %}active{% endif %}" href="{{ url_for('saved_views.global_index') }}">{{ icon('eye') }} Vues</a>
-      <a class="sb-link {% if ep == 'planning.workspace' %}active{% endif %}" href="{{ url_for('planning.workspace') }}">{{ icon('gantt') }} Planning</a>
-      <a class="sb-link {% if ep == 'analytics.index' and not pid_ctx %}active{% endif %}" href="{{ url_for('analytics.index') }}">{{ icon('chart') }} Analytique</a>
-      <a class="sb-link {% if ep.startswith('bilan.') and not pid_ctx %}active{% endif %}" href="{{ url_for('bilan.index') }}">{{ icon('flag') }} Bilan</a>
-      <a class="sb-link {% if ep.startswith('team.') %}active{% endif %}" href="{{ url_for('team.index') }}">{{ icon('users') }} Équipe</a>
-      <a class="sb-link {% if ep == 'projects.index' %}active{% endif %}" href="{{ url_for('projects.index') }}">{{ icon('folder') }} Projets</a>
-      </details>
-
-      {% if sb.favorites %}
-      <div class="sb-section">
-        <div class="sb-section-h"><span>Favoris</span></div>
-        {% for f in sb.favorites %}
-        <a class="sb-link" href="{{ f.url }}">{% if f.emoji %}<span class="p-emoji">{{ f.emoji }}</span>{% else %}{{ icon(f.icon) }}{% endif %}<span class="ellipsis">{{ f.title }}</span></a>
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      <div class="sb-section">
-        <div class="sb-section-h"><span>Vos projets</span>{% if not current_user.is_guest %}<a href="{{ url_for('projects.new') }}" title="Nouveau projet">{{ icon('plus', 14) }}</a>{% endif %}</div>
-        {% for p in sb.projects %}
-        <details class="sb-project" {% if pid_ctx == p.id %}open{% endif %}>
-          <summary><span class="p-emoji" style="background: color-mix(in srgb, {{ p.color }} 16%, transparent)">{{ p.emoji }}</span><span class="ellipsis">{{ p.name }}</span>{{ icon('chevron-right', 14, 'chev') }}</summary>
-          <div class="sb-sub">
-            {% set here = pid_ctx == p.id %}
-            <a class="sb-link {% if here and ep.startswith('issues.') and ep != 'issues.archives' %}active{% endif %}" href="{{ url_for('issues.index', pid=p.id) }}">{{ icon('layers', 15) }} Tickets</a>
-            {% if p.cycles_enabled %}<a class="sb-link {% if here and ep.startswith('cycles.') %}active{% endif %}" href="{{ url_for('cycles.index', pid=p.id) }}">{{ icon('cycle', 15) }} Cycles</a>{% endif %}
-            {% if p.modules_enabled %}<a class="sb-link {% if here and ep.startswith('modules.') %}active{% endif %}" href="{{ url_for('modules.index', pid=p.id) }}">{{ icon('module', 15) }} Modules</a>{% endif %}
-            {% if p.views_enabled %}<a class="sb-link {% if here and ep.startswith('saved_views.') %}active{% endif %}" href="{{ url_for('saved_views.index', pid=p.id) }}">{{ icon('eye', 15) }} Vues</a>{% endif %}
-            {% if p.pages_enabled %}<a class="sb-link {% if here and ep.startswith('pages.') %}active{% endif %}" href="{{ url_for('pages.index', pid=p.id) }}">{{ icon('page', 15) }} Pages</a>{% endif %}
-            {% if p.intake_enabled %}<a class="sb-link {% if here and ep.startswith('intake.') %}active{% endif %}" href="{{ url_for('intake.index', pid=p.id) }}">{{ icon('inbox', 15) }} Intake</a>{% endif %}
-            <a class="sb-link {% if here and ep.startswith('planning.') %}active{% endif %}" href="{{ url_for('planning.index', pid=p.id) }}">{{ icon('gantt', 15) }} Planning</a>
-            <a class="sb-link {% if here and ep == 'analytics.index' %}active{% endif %}" href="{{ url_for('analytics.index', pid=p.id) }}">{{ icon('chart', 15) }} Analytique</a>
-            <a class="sb-link {% if here and ep.startswith('bilan.') %}active{% endif %}" href="{{ url_for('bilan.project', pid=p.id) }}">{{ icon('flag', 15) }} Bilan</a>
-            <a class="sb-link {% if here and ep == 'issues.archives' %}active{% endif %}" href="{{ url_for('issues.archives', pid=p.id) }}">{{ icon('archive', 15) }} Archives</a>
-            <a class="sb-link {% if here and ep == 'projects.settings' %}active{% endif %}" href="{{ url_for('projects.settings', pid=p.id) }}">{{ icon('settings', 15) }} Paramètres</a>
-          </div>
-        </details>
-        {% else %}
-        <div class="muted small" style="padding:6px 9px">Aucun projet rejoint. <a href="{{ url_for('projects.index') }}" style="color:var(--accent-text)">Parcourir</a></div>
-        {% endfor %}
-      </div>
+  </header>
+  <div class="app">
+    <nav class="rail" aria-label="Sections">
+      {% for key, label, ic, endpoint in [('agenda', 'Agenda', 'calendar', 'agenda.dashboard'), ('travail', 'Travail', 'layers', 'home.index'), ('wiki', 'Wiki', 'book', 'wiki.home'), ('qcm', 'QCM', 'graduation', 'qcm.index'), ('ia', 'IA', 'sparkle', 'ai.index')] %}
+      <a class="rail-item {% if nav == key %}active{% endif %}" href="{{ url_for(endpoint) }}" title="{{ label }}"><span class="rail-ic">{{ icon(ic, 18) }}</span><span class="rail-l">{{ label }}</span>{% if key == 'agenda' and agcfg.due %}<span class="rail-badge {% if agcfg.overdue %}danger{% endif %}">{{ agcfg.due }}</span>{% endif %}</a>
+      {% endfor %}
+      <span class="rail-sp"></span>
+      <a class="rail-item {% if nav == 'reglages' %}active{% endif %}" href="{{ url_for('settings.profile') }}" title="Réglages"><span class="rail-ic">{{ icon('settings', 18) }}</span><span class="rail-l">Réglages</span></a>
     </nav>
-    <div class="sb-foot">
-      <a class="sb-user" href="{{ url_for('team.profile', username=current_user.username) }}">{{ ui.avatar(current_user, 24) }}<span class="name">{{ current_user.display_name }}</span></a>
-      <button class="btn btn-ghost btn-icon btn-sm" type="button" data-theme-toggle title="Thème clair / sombre (Maj+D)">{{ icon('moon', 15) }}</button>
-      <a class="btn btn-ghost btn-icon btn-sm" href="{{ url_for('home.shortcuts') }}" data-shortcuts title="Raccourcis clavier (?)">{{ icon('keyboard', 15) }}</a>
-    </div>
-  </aside>
-  <main class="main">
-    {% block header %}{% endblock %}
-    <div class="content {% block content_class %}{% endblock %}">{% block content %}{% endblock %}</div>
-  </main>
+    <aside class="sidebar" id="sidebar">
+      {% if nav == 'wiki' %}{% include "wiki/_sidebar.html" %}
+      {% elif nav == 'qcm' %}{% include "qcm/_sidebar.html" %}
+      {% elif nav == 'ia' %}{% include "ai/_sidebar.html" %}
+      {% elif nav == 'agenda' %}{% include "partials/sidebar_agenda.html" %}
+      {% elif nav == 'reglages' %}{% include "partials/sidebar_reglages.html" %}
+      {% else %}{% include "partials/sidebar_travail.html" %}{% endif %}
+    </aside>
+    <main class="main">
+      {% block header %}{% endblock %}
+      <div class="content {% block content_class %}{% endblock %}">{% block content %}{% endblock %}</div>
+    </main>
+    {% include "ai/panel.html" %}
+  </div>
 </div>
 {% include "partials/create_issue.html" %}
 {% include "partials/task_modal.html" %}
@@ -133,6 +98,7 @@ window.HANGAR = {
   contextProject: {{ (pid_ctx or none)|tojson }},
   agenda: {{ {"defaultReminder": agcfg.default_reminder, "channel": agcfg.channel, "hasEmail": agcfg.has_email, "createUrl": url_for('agenda.task_create'), "dayUrl": url_for('agenda.api_day'), "reminderDelete": url_for('agenda.reminder_delete', rid=0), "taskUrl": url_for('agenda.task_update', tid=0), "settingsUrl": url_for('agenda.settings')}|tojson }},
   {% endif %}
+  ai: {{ ai_client_config()|tojson }},
   urls: { search: "{{ url_for('api.search') }}", markdown: "{{ url_for('api.markdown_preview') }}", members: "{{ url_for('api.members') }}", lookup: "{{ url_for('api.lookup') }}", theme: "{{ url_for('api.theme') }}", notif: "{{ url_for('api.notifications_summary') }}", newProject: "{{ url_for('projects.new') }}", home: "{{ url_for('agenda.dashboard') }}", projectsHome: "{{ url_for('home.index') }}", calendar: "{{ url_for('agenda.calendar') }}", tasks: "{{ url_for('agenda.tasks') }}", imports: "{{ url_for('agenda.imports') }}", myIssues: "{{ url_for('home.workspace_issues') }}", notifications: "{{ url_for('home.notifications') }}", analytics: "{{ url_for('analytics.index') }}", team: "{{ url_for('team.index') }}", projects: "{{ url_for('projects.index') }}", workload: "{{ url_for('team.workload') }}", profile: "{{ url_for('settings.profile') }}" }
 };
 </script>

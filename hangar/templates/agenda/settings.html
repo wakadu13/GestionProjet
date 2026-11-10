@@ -21,17 +21,18 @@
       <p class="help" style="margin-top:8px">Les rappels sont envoyés tant que Hangar est lancé sur ton ordinateur. Si l’application était fermée au moment d’un rappel, il part à la réouverture, sauf si la séance ou la tâche est déjà passée.</p>
     </div>
 
-    <h2>{{ icon('sun', 17) }} Programme quotidien</h2>
+    <h2>{{ icon('sun', 17) }} Résumé quotidien</h2>
     <div class="panel panel-b mb-lg">
       <div class="col start" style="gap:8px">
-        <label class="checkbox"><input type="radio" name="daily_mode" value="off" {% if s.daily_mode == 'off' %}checked{% endif %}> Pas d’e-mail quotidien</label>
-        <label class="checkbox"><input type="radio" name="daily_mode" value="morning" {% if s.daily_mode == 'morning' %}checked{% endif %}> <span>Le matin : le programme <b>du jour</b></span></label>
-        <label class="checkbox"><input type="radio" name="daily_mode" value="evening" {% if s.daily_mode == 'evening' %}checked{% endif %}> <span>La veille au soir : le programme <b>du lendemain</b></span></label>
+        <label class="checkbox"><input type="radio" name="daily_mode" value="off" {% if s.daily_mode == 'off' %}checked{% endif %}> Pas de résumé par e-mail</label>
+        <label class="checkbox"><input type="radio" name="daily_mode" value="morning" {% if s.daily_mode == 'morning' %}checked{% endif %}> <span>Le matin : ce qu’il y a à faire <b>dans la journée</b></span></label>
+        <label class="checkbox"><input type="radio" name="daily_mode" value="evening" {% if s.daily_mode == 'evening' %}checked{% endif %}> <span>La veille au soir : ce qu’il y a à faire <b>le lendemain</b></span></label>
       </div>
       <div class="field mt" style="max-width:220px"><label for="st-dh">Heure d’envoi</label>
         <select class="input" id="st-dh" name="daily_hour">{% for h in range(0, 24) %}<option value="{{ h }}" {% if s.daily_hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select>
       </div>
-      <p class="help">Séances avec horaires et salles, tâches prévues, tâches en retard et contrôles des 7 jours suivants. Rien n’est envoyé les jours vides.</p>
+      <p class="help">Un seul e-mail avec tout ce qu’il y a à faire : cours (horaires, salles), tâches du jour et en retard, tickets de projet à échéance, révisions de QCM, contrôles des 7 jours suivants et changements récents du planning. Rien n’est envoyé les jours sans rien à faire.</p>
+      <a class="btn btn-sm" href="{{ url_for('agenda.summary_preview') }}">{{ icon('eye', 14) }} Voir l’aperçu du résumé</a>
     </div>
 
     <h2 id="rappels">{{ icon('bell', 17) }} Rappels</h2>
@@ -93,7 +94,7 @@
   <h2 style="margin-top:20px">{{ icon('send', 17) }} Tester</h2>
   <div class="panel panel-b mb-lg flex wrap gap">
     <form method="post" action="{{ url_for('agenda.settings_test') }}">{{ ui.csrf() }}<input type="hidden" name="what" value="test"><button class="btn btn-sm" {% if not mail.address %}disabled title="Renseigne d’abord ton adresse"{% endif %}>{{ icon('mail', 14) }} M’envoyer un e-mail de test</button></form>
-    <form method="post" action="{{ url_for('agenda.settings_test') }}">{{ ui.csrf() }}<input type="hidden" name="what" value="program"><button class="btn btn-sm" {% if not mail.address %}disabled title="Renseigne d’abord ton adresse"{% endif %}>{{ icon('sun', 14) }} M’envoyer mon programme maintenant</button></form>
+    <form method="post" action="{{ url_for('agenda.settings_test') }}">{{ ui.csrf() }}<input type="hidden" name="what" value="program"><button class="btn btn-sm" {% if not mail.address %}disabled title="Renseigne d’abord ton adresse"{% endif %}>{{ icon('sun', 14) }} M’envoyer le résumé maintenant</button></form>
   </div>
 
   <h2>{{ icon('clock', 17) }} Rappels programmés</h2>

@@ -688,68 +688,107 @@ def _task_line(t: AgendaTask, today: date) -> str:
             f'{" <span style=color:#6b7280>· " + escape(t.category) + "</span>" if t.category else ""}</li>')
 
 
-def build_day_email(user: User, day: date, at: datetime) -> tuple[str, str] | None:
-    """Programme d'une journée : séances, tâches, retards, contrôles à venir. None s'il n'y a rien."""
-    m = _mail()
-    cfg = m._cfg()
-    a = datetime.combine(day, time(0))
-    evs = [e for e in events_between(user, a, a + timedelta(days=1), include_removed=False) if not e.cancelled]
-    occs = [o for o in task_occurrences(user, day, day, include_done=False)]
-    overdue = [t for t in AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.done_at.is_(None),
-                                                  AgendaTask.due_date < at.date()).order_by(AgendaTask.due_date)]
-    exams = [e for e in events_between(user, a + timedelta(days=1), a + timedelta(days=8), include_removed=False)
-             if is_exam(e) and not e.cancelled]
-    if not (evs or occs or overdue):
+# ---------------------------------------------------------------------------
+# Résumé quotidien : sections de l'agenda (voir hangar/digest.py)
+# ---------------------------------------------------------------------------
+
+from . import digest  # noqa: E402
+
+
+@digest.section("agenda.cours", ordre=10)
+def _digest_cours(ctx):
+    a = datetime.combine(ctx.jour, time(0))
+    evs = [e for e in events_between(ctx.user, a, a + timedelta(days=1), include_removed=False) if not e.cancelled]
+    if not evs:
         return None
-    parts = []
-    if evs:
-        total = sum(e.minutes for e in evs if not e.multi_day)
-        parts.append(f'<h2 style="font-size:14px;margin:6px 0">Emploi du temps'
-                     f'{" · " + duration_label(total) + " de cours" if total else ""}</h2>'
-                     f'<table role="presentation" cellpadding="0" cellspacing="0" width="100%">'
-                     + "".join(_event_line(e) for e in evs) + "</table>")
+    total = sum(e.minutes for e in evs if not e.multi_day)
+    timed = [e for e in evs if not e.multi_day]
+    html = ""
+    if timed:
+        html += (f'<div style="color:#6b7280;font-size:12.5px;margin-bottom:4px">{duration_label(total)} de cours, '
+                 f'de {hm(timed[0].start)} à {hm(max(e.end for e in timed))}</div>')
+    html += ('<table role="presentation" cellpadding="0" cellspacing="0" width="100%">'
+             + "".join(_event_line(e) for e in evs) + "</table>")
+    return digest.Section("agenda.cours", "Emploi du temps", html, compte=len(evs),
+                          libelle=digest.pluriel(len(evs), "séance"), couleur="#3f76ff")
+
+
+@digest.section("agenda.taches", ordre=20)
+def _digest_taches(ctx):
+    occs = task_occurrences(ctx.user, ctx.jour, ctx.jour, include_done=False)
+    overdue = (AgendaTask.query.filter(AgendaTask.user_id == ctx.user.id, AgendaTask.done_at.is_(None),
+                                       AgendaTask.due_date < ctx.aujourdhui).order_by(AgendaTask.due_date).all())
+    if not (occs or overdue):
+        return None
+    html = ""
     if occs:
         occs.sort(key=lambda o: (o.task.start_time or time(23, 59), o.task.title.lower()))
-        parts.append('<h2 style="font-size:14px;margin:16px 0 6px">Tâches prévues</h2><ul style="padding-left:18px;margin:0">'
-                     + "".join(_task_line(o.task, at.date()) for o in occs) + "</ul>")
+        html += '<ul style="padding-left:18px;margin:0">' + "".join(_task_line(o.task, ctx.aujourdhui) for o in occs) + "</ul>"
     if overdue:
-        parts.append('<h2 style="font-size:14px;margin:16px 0 6px;color:#dc2626">En retard</h2>'
-                     '<ul style="padding-left:18px;margin:0">' + "".join(_task_line(t, at.date()) for t in overdue[:12]) + "</ul>")
-    if exams:
-        parts.append('<h2 style="font-size:14px;margin:16px 0 6px">Contrôles dans les 7 prochains jours</h2>'
-                     '<ul style="padding-left:18px;margin:0">'
-                     + "".join(f"<li>{escape(day_short(e.start.date()))} {hm(e.start)} — <b>{escape(e.title)}</b>"
-                               f"{' · ' + escape(e.location) if e.location else ''}</li>" for e in exams) + "</ul>")
-    if day == at.date():
-        heading = "Ton programme d’aujourd’hui"
-    elif day == at.date() + timedelta(days=1):
-        heading = "Ton programme de demain"
-    else:
-        heading = f"Ton programme du {day_long(day)}"
-    html = m.layout(heading,
-                    f"<p>Bonjour {escape(user.short_name)},</p><p>Voici ton programme du <b>{escape(day_long(day))}</b>.</p>"
-                    + "".join(parts),
-                    button=("Ouvrir mon agenda", m.absolute("/", cfg)), cfg=cfg)
-    bits = []
-    if evs:
-        bits.append(f"{len(evs)} séance{'s' if len(evs) > 1 else ''}")
-    if occs:
-        bits.append(f"{len(occs)} tâche{'s' if len(occs) > 1 else ''}")
-    if overdue:
-        bits.append(f"{len(overdue)} en retard")
-    subject = f"📅 Programme du {day_short(day)} : {', '.join(bits)}"
-    return subject, html
+        html += ('<div style="font-size:12.5px;font-weight:600;color:#dc2626;margin:10px 0 2px">'
+                 f'En retard ({len(overdue)})</div><ul style="padding-left:18px;margin:0">'
+                 + "".join(_task_line(t, ctx.aujourdhui) for t in overdue[:12]) + "</ul>")
+    n = len(occs)
+    libelle = digest.pluriel(n, "tâche") if n else digest.pluriel(len(overdue), "en retard", "en retard")
+    if n and overdue:
+        libelle += f" (+{len(overdue)} en retard)"
+    return digest.Section("agenda.taches", "Tâches", html, compte=n or len(overdue), libelle=libelle,
+                          couleur="#dc2626" if overdue else "#8b5cf6")
+
+
+@digest.section("agenda.controles", ordre=40)
+def _digest_controles(ctx):
+    a = datetime.combine(ctx.jour, time(0))
+    exams = [e for e in events_between(ctx.user, a + timedelta(days=1), a + timedelta(days=8), include_removed=False)
+             if is_exam(e) and not e.cancelled]
+    if not exams:
+        return None
+    items = [f"{escape(day_short(e.start.date()))} {hm(e.start)} — <b>{escape(e.title)}</b>"
+             f"{' · ' + escape(e.location) if e.location else ''}" for e in exams]
+    return digest.Section("agenda.controles", "Contrôles dans les 7 jours", digest.liste_html(items),
+                          compte=len(exams), couleur="#dc2626", a_faire=False, tuile=False)
+
+
+@digest.section("agenda.changements", ordre=45)
+def _digest_changements(ctx):
+    recent = recent_import_ids(ctx.user, ctx.at, days=2)
+    if not recent:
+        return None
+    a = datetime.combine(ctx.aujourdhui, time(0))
+    evs = (AgendaEvent.query.filter(AgendaEvent.user_id == ctx.user.id, AgendaEvent.changed_import_id.in_(recent),
+                                    AgendaEvent.change_kind.in_(("added", "modified", "removed", "restored")),
+                                    AgendaEvent.start >= a, AgendaEvent.start < a + timedelta(days=8))
+           .order_by(AgendaEvent.start).all())
+    if not evs:
+        return None
+    labels = {"added": "ajouté", "modified": "modifié", "removed": "retiré", "restored": "rétabli"}
+    items = []
+    for e in evs[:12]:
+        extra = ""
+        if e.change_kind in ("modified", "restored") and e.changes:
+            extra = f"<br><span style='color:#6b7280'>{escape(' · '.join(change_lines(e.changes)))}</span>"
+        items.append(f"<b>{labels[e.change_kind]}</b> — {escape(day_short(e.start.date()))} {hm(e.start)} : "
+                     f"{escape(e.title)}{extra}")
+    return digest.Section("agenda.changements", "Changements récents du planning", digest.liste_html(items),
+                          compte=len(evs), couleur="#d97706", a_faire=False, tuile=False)
+
+
+def build_day_email(user: User, day: date, at: datetime) -> tuple[str, str] | None:
+    """Résumé quotidien (toutes les sections enregistrées). None s'il n'y a rien à faire ce jour-là."""
+    built = digest.construire(user, day, at)
+    return (built[0], built[1]) if built else None
 
 
 def send_daily_programs(at: datetime | None = None) -> int:
+    """Envoie le résumé quotidien aux comptes qui l'ont activé (une fois par jour, à l'heure choisie)."""
     at = at or now()
     m = _mail()
     n = 0
-    for s in AgendaSettings.query.filter(AgendaSettings.daily_mode.in_(("morning", "evening"))).all():
-        if at.hour < (s.daily_hour or 0) or s.last_daily_date == at.date():
+    for user in User.query.filter(User.active.is_(True), User.contact_email.isnot(None)).all():
+        if not m.valid_email(user.contact_email):
             continue
-        user = db.session.get(User, s.user_id)
-        if user is None or not user.active or not m.valid_email(user.contact_email):
+        s = settings_of(user)
+        if s.daily_mode not in ("morning", "evening") or at.hour < (s.daily_hour or 0) or s.last_daily_date == at.date():
             continue
         day = at.date() if s.daily_mode == "morning" else at.date() + timedelta(days=1)
         built = build_day_email(user, day, at)
@@ -759,6 +798,12 @@ def send_daily_programs(at: datetime | None = None) -> int:
             n += 1
     db.session.commit()
     return n
+
+
+def digest_enabled(user: User) -> bool:
+    s = db.session.get(AgendaSettings, user.id)
+    mode = s.daily_mode if s is not None else AgendaSettings.daily_mode.default.arg
+    return mode in ("morning", "evening")
 
 
 def queue_import_email(user: User, imp: AgendaImport, at: datetime) -> None:

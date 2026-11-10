@@ -313,7 +313,10 @@ def _open_issues_of(user: User):
 def send_reminders(cfg: MailConfig, today: date) -> int:
     n = 0
     tomorrow = today + timedelta(days=1)
+    from .agenda import digest_enabled
     for u in _recipients(reminders_only=True):
+        if digest_enabled(u):  # le résumé quotidien contient déjà les tickets à échéance
+            continue
         open_ = [i for i in _open_issues_of(u) if not i.is_closed and i.target_date and i.target_date <= tomorrow]
         if not open_:
             continue

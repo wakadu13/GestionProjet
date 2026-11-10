@@ -1139,7 +1139,7 @@ class AgendaSettings(db.Model):
     allday_hour = db.Column(db.Integer, default=8)        # heure de référence des tâches sans heure
     default_reminder = db.Column(db.Integer, default=-1)  # minutes ; -1 = aucun rappel par défaut
     reminder_channel = db.Column(db.String(10), default="email")
-    daily_mode = db.Column(db.String(10), default="off")  # off | morning (programme du jour) | evening (du lendemain)
+    daily_mode = db.Column(db.String(10), default="morning")  # off | morning (résumé du jour) | evening (du lendemain)
     daily_hour = db.Column(db.Integer, default=7)
     last_daily_date = db.Column(db.Date)
     import_email = db.Column(db.Boolean, default=False)   # e-mail récapitulatif des changements après un import

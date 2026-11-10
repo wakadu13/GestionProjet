@@ -1,0 +1,17 @@
+{# Menu de la section Agenda #}
+<div class="sb-title"><span>Agenda</span><button class="btn btn-ghost btn-icon btn-xs" type="button" data-sidebar-collapse title="Masquer le menu">{{ icon('sidebar', 15) }}</button></div>
+<div class="sb-actions">
+  <button class="btn btn-sm" type="button" data-new-task title="Nouvelle tâche (T)">{{ icon('plus', 14) }} Nouvelle tâche</button>
+</div>
+<nav class="sb-scroll">
+  <a class="sb-link {% if ep == 'agenda.dashboard' %}active{% endif %}" href="{{ url_for('agenda.dashboard') }}">{{ icon('home') }} Tableau de bord</a>
+  <a class="sb-link {% if ep == 'agenda.calendar' %}active{% endif %}" href="{{ url_for('agenda.calendar') }}">{{ icon('calendar') }} Calendrier</a>
+  <a class="sb-link {% if ep == 'agenda.tasks' %}active{% endif %}" href="{{ url_for('agenda.tasks') }}">{{ icon('list-check') }} Tâches {% if agcfg.due %}<span class="sb-badge {% if agcfg.overdue %}danger{% endif %}" title="{{ agcfg.due }} pour aujourd’hui ou en retard">{{ agcfg.due }}</span>{% endif %}</a>
+  <a class="sb-link {% if ep.startswith('agenda.import') %}active{% endif %}" href="{{ url_for('agenda.imports') }}">{{ icon('upload') }} Emploi du temps</a>
+  <a class="sb-link {% if ep == 'home.notifications' %}active{% endif %}" href="{{ url_for('home.notifications') }}">{{ icon('bell') }} Notifications {% if sb.unread %}<span class="sb-badge">{{ sb.unread if sb.unread < 100 else '99+' }}</span>{% endif %}</a>
+  <div class="sb-section">
+    <div class="sb-section-h"><span>E-mails</span></div>
+    <a class="sb-link {% if ep == 'agenda.summary_preview' %}active{% endif %}" href="{{ url_for('agenda.summary_preview') }}">{{ icon('sun') }} Résumé quotidien</a>
+    <a class="sb-link {% if ep == 'agenda.settings' %}active{% endif %}" href="{{ url_for('agenda.settings') }}">{{ icon('mail') }} Rappels et e-mails</a>
+  </div>
+</nav>

@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}En cours d’intégration{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">En cours d’intégration</span></div></div>{% endblock %}
+{% block content %}{{ ui.empty('zap', 'Bientôt disponible', 'Cette section est en cours d’intégration.') }}{% endblock %}

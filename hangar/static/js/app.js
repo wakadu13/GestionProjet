@@ -1199,9 +1199,35 @@
   }
 
   /* ------------------------------------------------------------------ Barre latérale mobile */
+  const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
+  function setCollapsed(on) {
+    document.documentElement.classList.toggle('sb-collapsed', on);
+    try { localStorage.setItem('hangar.sbCollapsed', on ? '1' : '0'); } catch (e) { /* ignore */ }
+  }
   document.addEventListener('click', (e) => {
-    if (e.target.closest('[data-sidebar-toggle]')) { document.body.classList.toggle('sb-open'); return; }
+    if (e.target.closest('[data-sidebar-toggle]')) {
+      if (isMobile()) document.body.classList.toggle('sb-open');
+      else setCollapsed(!document.documentElement.classList.contains('sb-collapsed'));
+      return;
+    }
+    if (e.target.closest('[data-sidebar-collapse]')) {
+      if (isMobile()) document.body.classList.remove('sb-open'); else setCollapsed(true);
+      return;
+    }
     if (document.body.classList.contains('sb-open') && !e.target.closest('#sidebar')) document.body.classList.remove('sb-open');
+  });
+
+  /* ------------------------------------------------------------------ Panneau de l'assistant IA */
+  function toggleAI(force) {
+    const on = force === undefined ? !document.documentElement.classList.contains('ai-open') : force;
+    document.documentElement.classList.toggle('ai-open', on);
+    try { localStorage.setItem('hangar.ai', on ? '1' : '0'); } catch (e) { /* ignore */ }
+    document.dispatchEvent(new CustomEvent('hangar:ai-toggle', { detail: { open: on } }));
+  }
+  H.toggleAI = toggleAI;
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-ai-toggle]')) { e.preventDefault(); toggleAI(); } });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') { e.preventDefault(); toggleAI(); }
   });
 
   /* ------------------------------------------------------------------ Notifications (sondage léger) */

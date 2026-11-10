@@ -42,6 +42,9 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
         DATA_DIR=str(data),
         UPLOAD_DIR=str(data / "uploads"),
         BACKUP_DIR=str(data / "backups"),
+        # Wiki (coffre Obsidian) : dossier de notes, réglable avec HANGAR_VAULT (ex. un coffre Obsidian existant)
+        WIKI_DIR=str(Path(os.environ.get("HANGAR_VAULT") or data / "vault").resolve()),
+        WIKI_HOME=os.environ.get("HANGAR_WIKI_HOME", "Accueil"),
         MAX_CONTENT_LENGTH=50 * 1024 * 1024,
         SESSION_COOKIE_SAMESITE="Lax",
         REMEMBER_COOKIE_DURATION=60 * 60 * 24 * 30,
@@ -54,6 +57,10 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
     login_manager.init_app(app)
 
     from . import models  # noqa: F401
+    from .ai import models as _ai_models  # noqa: F401
+    from .qcm import models as _qcm_models  # noqa: F401
+    from .wiki import models as _wiki_models  # noqa: F401
+    Path(app.config["WIKI_DIR"]).mkdir(parents=True, exist_ok=True)
 
     with app.app_context():
         db.create_all()
@@ -103,10 +110,14 @@ def _auto_migrate() -> None:
 
 
 def _register_blueprints(app: Flask) -> None:
+    from .ai import views as ai_views
+    from .qcm import views as qcm_views
     from .views import (agenda, analytics, api, apiv1, auth, bilan, cycles, home, intake, issues, mail, modules,
-                        pages, planning, projects, saved_views, settings, team)
+                        pages, planning, projects, saved_views, settings, team, workgraph)
+    from .wiki import views as wiki_views
     for bp in (auth.bp, agenda.bp, home.bp, projects.bp, issues.bp, cycles.bp, modules.bp, saved_views.bp, pages.bp,
-               intake.bp, analytics.bp, team.bp, settings.bp, api.bp, apiv1.bp, mail.bp, planning.bp, bilan.bp):
+               intake.bp, analytics.bp, team.bp, settings.bp, api.bp, apiv1.bp, mail.bp, planning.bp, bilan.bp,
+               workgraph.bp, wiki_views.bp, qcm_views.bp, ai_views.bp):
         app.register_blueprint(bp)
 
 
@@ -184,7 +195,8 @@ def _register_template_helpers(app: Flask) -> None:
         icon=icons.icon, state_icon=icons.state_icon, priority_icon=icons.priority_icon, charts=charts,
         csrf_token=csrf_token, M=models, IQ=issue_query, activity_text=activity_text, version=__version__,
         can=utils.can, project_role=utils.project_role, is_favorite=utils.is_favorite,
-        markdown_toc=utils.markdown_toc, greeting=utils.greeting,
+        markdown_toc=utils.markdown_toc, greeting=utils.greeting, section_of=section_of,
+        ai_client_config=_ai_client_config,
         fmtiso=lambda s: utils.fmt_date(__import__("datetime").date.fromisoformat(str(s)[:10]), True) if s else "—",
     )
 
@@ -213,6 +225,27 @@ def _register_template_helpers(app: Flask) -> None:
             ctx["sidebar"] = _sidebar_data
             ctx["picker_data"] = _picker_data
         return ctx
+
+
+SECTIONS = {"agenda": "agenda", "wiki": "wiki", "qcm": "qcm", "ai": "ia", "settings": "reglages", "mail": "reglages"}
+
+
+def section_of(endpoint: str | None) -> str:
+    """Section de la barre d'icônes (Agenda, Travail, Wiki, QCM, IA, Réglages) d'une page.
+
+    Une page peut l'imposer avec `{% set nav_section = "wiki" %}` en tête de son gabarit."""
+    endpoint = endpoint or ""
+    if endpoint in ("home.notifications", "mail.compose"):
+        return "agenda" if endpoint == "home.notifications" else "travail"
+    return SECTIONS.get(endpoint.split(".")[0], "travail")
+
+
+def _ai_client_config() -> dict:
+    try:
+        from .ai import client_config
+        return client_config() if current_user.is_authenticated else {}
+    except Exception:  # l'assistant ne doit jamais empêcher une page de s'afficher
+        return {}
 
 
 def _sidebar_data():

@@ -275,6 +275,14 @@ def main(argv=None):
     ca = sub.add_parser("create-admin", help="créer ou réparer un compte administrateur")
     ca.add_argument("--username")
 
+    # Commandes des modules (wiki, QCM, IA)
+    from .ai import cli as ai_cli
+    from .qcm import cli as qcm_cli
+    from .wiki import cli as wiki_cli
+    extra = {}
+    for mod in (wiki_cli, qcm_cli, ai_cli):
+        extra.update(mod.register(sub) or {})
+
     args = parser.parse_args(argv)
     if args.cmd is None:
         args = parser.parse_args((argv or sys.argv[1:]) + ["run"]) if not (argv or sys.argv[1:]) else args
@@ -282,7 +290,7 @@ def main(argv=None):
             args.cmd, args.host, args.port, args.debug, args.no_browser = "run", "127.0.0.1", 5000, False, False
     {"run": cmd_run, "demo": cmd_demo, "reset": cmd_reset, "backup": cmd_backup, "rebuild-docs": cmd_rebuild_docs,
      "create-admin": cmd_create_admin, "mail-send": cmd_mail_send, "mail-test": cmd_mail_test,
-     "agenda-import": cmd_agenda_import}[args.cmd](args)
+     "agenda-import": cmd_agenda_import, **extra}[args.cmd](args)
 
 
 if __name__ == "__main__":
