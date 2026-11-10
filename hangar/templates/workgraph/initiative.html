@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "workgraph/_ui.html" as wg with context %}
+{% block title %}{{ ini.name }} · Initiatives{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}?v={{ version }}">{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    <a href="{{ url_for('workgraph.initiatives') }}">{{ icon('target', 15) }} Initiatives</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current"><span>{{ ini.emoji or '💡' }}</span><span class="ellipsis wg-crumb-name">{{ ini.name }}</span></span>
+  </div>
+  <div class="header-actions">
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('workgraph.index', sel='i:%d' % ini.id) }}">{{ icon('workgraph', 14) }} <span class="wg-hide-sm">Voir dans le</span> Workgraph</a>
+    {% if can_edit %}
+    <button class="btn btn-sm" type="button" data-open="edit-initiative-modal">{{ icon('edit', 14) }} Modifier</button>
+    <div class="dd">
+      <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Actions">{{ icon('more', 16) }}</button>
+      <div class="menu" style="width:230px">
+        <button class="menu-item" type="button" data-open="link-modal">{{ icon('link') }} Lier des projets ou modules</button>
+        <a class="menu-item" href="#updates" data-wg-focus="update-body">{{ icon('message') }} Publier une mise à jour</a>
+        {% if can_delete %}
+        <div class="menu-sep"></div>
+        <form method="post" action="{{ url_for('workgraph.initiative_delete', iid=ini.id) }}" data-confirm="Supprimer l’initiative « {{ ini.name }} » ? Les projets, modules et tickets sont conservés.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Supprimer</button></form>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="split wg-detail-split">
+  <div class="main-col wg-main">
+    <div class="wg-main-inner">
+      <div class="wg-hero">
+        {{ wg.type_badge('initiative') }}
+        <h1><span class="wg-emoji lg">{{ ini.emoji or '💡' }}</span>{{ ini.name }}</h1>
+        <div class="flex wrap gap-4">
+          {{ wg.health_pill(s.health_info, s.forced) }}
+          {{ wg.status_pill(ini.status_label, ini.status_color) }}
+          {% if s.target %}<span class="wg-pill {% if not s.late %}ghost{% endif %}" style="--c: {{ 'var(--danger)' if s.late else 'var(--text-3)' }}" title="Échéance cible{% if not ini.target_date %} (déduite des projets et modules liés){% endif %}">{{ icon('calendar', 11) }}{{ s.target|date(True) }}{% if not ini.is_closed and s.days_left is not none %} · {% if s.days_left > 1 %}dans {{ s.days_left }} jours{% elif s.days_left == 1 %}demain{% elif s.days_left == 0 %}aujourd’hui{% else %}dépassée de {{ -s.days_left }} j{% endif %}{% endif %}</span>{% endif %}
+        </div>
+      </div>
+
+      {% if ini.description %}
+      <div class="md wg-desc">{{ ini.description|md }}</div>
+      {% elif can_edit %}
+      <button class="wg-desc-empty" type="button" data-open="edit-initiative-modal">{{ icon('edit', 14) }} Ajouter une description (objectif, périmètre, critères de réussite)</button>
+      {% endif %}
+
+      <section class="wg-overview panel">
+        <div class="wg-ov-ring">{{ wg.ring(s.pct, 72) }}<div><div class="wg-big">{{ s.pct }} %</div><div class="small muted">{{ s.stats.done }} / {{ s.stats.total - s.stats.counts.cancelled }} tickets terminés</div></div></div>
+        <div class="wg-ov-bar">
+          {{ ui.segbar(s.stats.counts) }}
+          <div class="wg-ov-legend">{% for g, lab, col in M.STATE_GROUPS %}{% if s.stats.counts[g] %}<span>{{ state_icon(g) }} {{ lab }} <b>{{ s.stats.counts[g] }}</b></span>{% endif %}{% endfor %}</div>
+        </div>
+        <div class="wg-ov-stats">
+          <div><b>{{ s.stats.open }}</b><span>ouverts</span></div>
+          <div class="{% if s.stats.overdue %}bad{% endif %}"><b>{{ s.stats.overdue }}</b><span>en retard</span></div>
+          <div class="{% if s.blocked_open %}warn{% endif %}"><b>{{ s.blocked_open }}</b><span>bloqués</span></div>
+        </div>
+      </section>
+
+      <section class="panel wg-sec">
+        <div class="panel-h"><h3>{{ icon('briefcase', 15) }} Projets</h3><span class="badge">{{ projects|length }}</span>{% if can_edit %}<button class="btn btn-xs btn-ghost right" type="button" data-open="link-modal">{{ icon('plus', 13) }} Lier</button>{% endif %}</div>
+        {% if projects %}
+        <div class="wg-rows">
+          {% for d in projects %}{% set p = d.p %}
+          <div class="wg-row">
+            <span class="wg-row-ic" style="background: color-mix(in srgb, {{ p.color }} 16%, transparent)">{{ p.emoji }}</span>
+            <div class="grow wg-row-main">
+              <a class="bold ellipsis" href="{{ url_for('issues.index', pid=p.id) }}">{{ p.name }}</a>
+              <div class="tiny muted flex gap-4 wrap"><span class="mono">{{ p.identifier }}</span><span>· {{ d.st.open }} ouvert{{ 's' if d.st.open > 1 }}</span>{% if d.st.overdue %}<span class="danger-text">· {{ d.st.overdue }} en retard</span>{% endif %}{% if p.target_date %}<span>· fin {{ p.target_date|date }}</span>{% endif %}</div>
+            </div>
+            {{ wg.health_pill(d.health) }}
+            <span class="wg-row-prog">{{ ui.progress(d.st.pct) }}<span class="small">{{ d.st.pct }} %</span></span>
+            {% if p.lead %}{{ ui.avatar(p.lead, 22) }}{% endif %}
+            {% if can_edit %}<form method="post" action="{{ url_for('workgraph.initiative_unlink', iid=ini.id) }}" class="inline-form" data-confirm="Retirer le projet « {{ p.name }} » de l’initiative ?">{{ ui.csrf() }}<input type="hidden" name="kind" value="project"><input type="hidden" name="id" value="{{ p.id }}"><button class="btn btn-ghost btn-icon btn-xs" title="Retirer de l’initiative">{{ icon('unlink', 13) }}</button></form>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty sm">Aucun projet lié.{% if can_edit %} <button class="btn btn-xs" type="button" data-open="link-modal">Lier un projet</button>{% endif %}</div>
+        {% endif %}
+        {% if hidden %}<div class="tiny muted wg-sec-foot">{{ hidden }} projet(s) privé(s) lié(s) non affiché(s).</div>{% endif %}
+      </section>
+
+      <section class="panel wg-sec">
+        <div class="panel-h"><h3>{{ icon('module', 15) }} Modules (épopées)</h3><span class="badge">{{ modules|length }}</span>{% if can_edit %}<button class="btn btn-xs btn-ghost right" type="button" data-open="link-modal">{{ icon('plus', 13) }} Lier</button>{% endif %}</div>
+        {% if modules %}
+        <div class="wg-rows">
+          {% for d in modules %}{% set m = d.m %}
+          <div class="wg-row">
+            <span class="wg-row-ic" style="color: {{ m.status_color }}">{{ icon('module', 16) }}</span>
+            <div class="grow wg-row-main">
+              <a class="bold ellipsis" href="{{ url_for('modules.detail', pid=m.project_id, mid=m.id) }}">{{ m.name }}</a>
+              <div class="tiny muted flex gap-4 wrap"><span class="mono">{{ m.project.identifier }}</span><span>· {{ m.status_label }}</span><span>· {{ d.st.done }}/{{ d.st.total }} terminés</span>{% if m.target_date %}<span class="{% if m.target_date < today and m.status not in ('completed', 'cancelled') %}danger-text{% endif %}">· échéance {{ m.target_date|date }}</span>{% endif %}</div>
+            </div>
+            {{ wg.health_pill(d.health) }}
+            <span class="wg-row-prog">{{ ui.progress(d.st.pct) }}<span class="small">{{ d.st.pct }} %</span></span>
+            {% if m.lead %}{{ ui.avatar(m.lead, 22) }}{% endif %}
+            {% if can_edit %}<form method="post" action="{{ url_for('workgraph.initiative_unlink', iid=ini.id) }}" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="kind" value="module"><input type="hidden" name="id" value="{{ m.id }}"><button class="btn btn-ghost btn-icon btn-xs" title="Retirer de l’initiative">{{ icon('unlink', 13) }}</button></form>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty sm">Aucun module lié directement. <span class="tiny">Tous les modules des projets liés comptent déjà dans l’avancement.</span></div>
+        {% endif %}
+      </section>
+
+      {% if jalons %}
+      <section class="panel wg-sec">
+        <div class="panel-h"><h3>{{ icon('flag', 15) }} Jalons</h3><span class="badge">{{ jalons|length }}</span></div>
+        {% macro jalon_items(items) %}
+          {% for j in items %}
+          <li class="{% if j.done %}done{% elif j.late %}late{% elif j.date <= today %}now{% endif %} k-{{ j.kind }}">
+            <span class="wg-tl-dot">{% if j.done %}{{ icon('check', 10) }}{% endif %}</span>
+            <span class="wg-tl-date">{{ j.date|date(True) }}</span>
+            <span class="wg-tl-title">{% if j.url %}<a href="{{ j.url }}">{{ j.title }}</a>{% else %}{{ j.title }}{% endif %}{% if j.sub %} <span class="mono tiny muted">{{ j.sub }}</span>{% endif %}</span>
+            <span class="wg-tl-state tiny">{% if j.done %}atteint{% elif j.late %}en retard{% else %}{{ j.date|due }}{% endif %}</span>
+          </li>
+          {% endfor %}
+        {% endmacro %}
+        <ol class="wg-timeline">{{ jalon_items(jalons[:12]) }}</ol>
+        {% if jalons|length > 12 %}
+        <details class="wg-more-jalons"><summary>Afficher les {{ jalons|length - 12 }} autres jalons</summary><ol class="wg-timeline">{{ jalon_items(jalons[12:]) }}</ol></details>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      {% if s.blockers or neighbours.blocks or neighbours.blocked_by %}
+      <section class="panel wg-sec">
+        <div class="panel-h"><h3>{{ icon('ban', 15) }} Dépendances bloquantes</h3><span class="badge {% if s.blockers %}badge-danger{% endif %}">{{ s.blockers|length }}</span></div>
+        {% if neighbours.blocked_by or neighbours.blocks %}
+        <div class="wg-neigh">
+          {% for d in neighbours.blocked_by %}<a class="wg-pill" style="--c: var(--danger)" href="{{ url_for('workgraph.initiative_detail', iid=d.ini.id) }}">Bloquée par {{ d.ini.emoji }} {{ d.ini.name }} · {{ d.open }} ouverte{{ 's' if d.open > 1 }}</a>{% endfor %}
+          {% for d in neighbours.blocks %}<a class="wg-pill" style="--c: var(--warning)" href="{{ url_for('workgraph.initiative_detail', iid=d.ini.id) }}">Bloque {{ d.ini.emoji }} {{ d.ini.name }} · {{ d.open }} ouverte{{ 's' if d.open > 1 }}</a>{% endfor %}
+        </div>
+        {% endif %}
+        {% if s.blockers %}
+        <div class="wg-rows">
+          {% for b in s.blockers[:25] %}
+          <div class="wg-row wg-dep">
+            <a class="mono small" href="{{ url_for('issues.detail', pid=b.blocked.project_id, seq=b.blocked.seq) }}">{{ b.blocked.key }}</a>
+            <span class="ellipsis grow small">{{ b.blocked.title }}</span>
+            <span class="tiny muted nowrap">bloqué par</span>
+            <a class="mono small" href="{{ url_for('issues.detail', pid=b.blocker.project_id, seq=b.blocker.seq) }}">{{ b.blocker.key }}</a>
+            <span class="ellipsis grow small wg-hide-sm">{{ b.blocker.title }}</span>
+            {% if b.external %}<span class="wg-pill" style="--c: var(--danger)" title="Le ticket bloquant n’appartient pas à l’initiative">Externe</span>{% endif %}
+          </div>
+          {% endfor %}
+          {% if s.blockers|length > 25 %}<div class="tiny muted wg-sec-foot">… et {{ s.blockers|length - 25 }} autre(s).</div>{% endif %}
+        </div>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <section class="wg-sec" id="updates">
+        <div class="wg-sec-h"><h3>{{ icon('activity', 15) }} Mises à jour</h3><span class="badge">{{ ini.updates|length }}</span></div>
+        {% if can_edit %}
+        <form method="post" action="{{ url_for('workgraph.initiative_update_add', iid=ini.id) }}" class="panel wg-upd-form">
+          {{ ui.csrf() }}
+          <div class="wg-upd-health">
+            <span class="small muted">Santé constatée :</span>
+            {% for k, lab, col in healths %}
+            <label class="wg-radio" style="--c: {{ col }}"><input type="radio" name="health" value="{{ k }}" {% if (s.health or 'on_track') == k %}checked{% endif %}><span><span class="dot"></span>{{ lab }}</span></label>
+            {% endfor %}
+          </div>
+          <textarea class="input" id="update-body" name="body" rows="3" required placeholder="Où en est-on ? Ce qui avance, ce qui bloque, les prochaines étapes… (markdown)"></textarea>
+          <div class="flex gap"><span class="tiny muted">Avancement actuel enregistré avec la note : {{ s.pct }} %</span><button class="btn btn-sm btn-primary right">Publier</button></div>
+        </form>
+        {% endif %}
+        {% if ini.updates %}
+        <ol class="wg-updates">
+          {% for u in ini.updates %}
+          <li class="wg-update" style="--c: {{ u.health_color }}">
+            <div class="wg-upd-h">
+              {{ ui.avatar(u.author, 22) }}
+              <b>{{ u.author.display_name if u.author else 'Compte supprimé' }}</b>
+              <span class="wg-pill" style="--c: {{ u.health_color }}"><span class="dot"></span>{{ u.health_label }}</span>
+              {% if u.progress is not none %}<span class="tiny muted">{{ u.progress }} %</span>{% endif %}
+              <span class="tiny muted right" title="{{ u.created_at|datetime }}">{{ u.created_at|ago }}</span>
+              {% if can_edit and (current_user.is_admin or u.author_id == current_user.id) %}
+              <form method="post" action="{{ url_for('workgraph.initiative_update_delete', iid=ini.id, uid=u.id) }}" class="inline-form" data-confirm="Supprimer cette mise à jour ?">{{ ui.csrf() }}<button class="btn btn-ghost btn-icon btn-xs" title="Supprimer">{{ icon('trash', 13) }}</button></form>
+              {% endif %}
+            </div>
+            <div class="md small">{{ u.body|md }}</div>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <div class="muted small wg-upd-empty">Aucune mise à jour publiée. Publie régulièrement un point d’avancement avec la santé constatée : l’historique reste consultable ici.</div>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+
+  <aside class="side-col wg-side">
+    <h4>Propriétés</h4>
+    <div class="wg-props">
+      <div class="wg-prop"><span class="k">{{ icon('activity', 14) }} Santé</span>
+        <div class="v">
+          {% if can_edit %}
+          <form method="post" action="{{ url_for('workgraph.initiative_edit', iid=ini.id) }}">{{ ui.csrf() }}<input type="hidden" name="field" value="health">
+            <select class="input input-sm" name="value" data-autosubmit>
+              <option value="">Automatique{% if s.health_auto_info %} : {{ s.health_auto_info.label }}{% endif %}</option>
+              {% for k, lab, col in healths %}<option value="{{ k }}" {% if ini.health_override == k %}selected{% endif %}>Forcée : {{ lab }}</option>{% endfor %}
+            </select>
+          </form>
+          {% else %}{{ wg.health_pill(s.health_info, s.forced) or '—' }}{% endif %}
+        </div>
+      </div>
+      {% if s.reasons or s.forced %}
+      <ul class="wg-reasons">
+        {% if s.forced %}<li>Santé fixée à la main{% if s.health_auto_info and s.health_auto != s.health %} (calcul : {{ s.health_auto_info.label|lower }}){% endif %}.</li>{% endif %}
+        {% for r in s.reasons %}<li>{{ r }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      <div class="wg-prop"><span class="k">{{ icon('target', 14) }} Statut</span>
+        <div class="v">
+          {% if can_edit %}
+          <form method="post" action="{{ url_for('workgraph.initiative_edit', iid=ini.id) }}">{{ ui.csrf() }}<input type="hidden" name="field" value="status">
+            <select class="input input-sm" name="value" data-autosubmit>{% for k, lab, col in statuses %}<option value="{{ k }}" {% if ini.status == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select>
+          </form>
+          {% else %}{{ wg.status_pill(ini.status_label, ini.status_color) }}{% endif %}
+        </div>
+      </div>
+      <div class="wg-prop"><span class="k">{{ icon('user', 14) }} Responsable</span>
+        <div class="v">
+          {% if can_edit %}
+          <form method="post" action="{{ url_for('workgraph.initiative_edit', iid=ini.id) }}">{{ ui.csrf() }}<input type="hidden" name="field" value="lead_id">
+            <select class="input input-sm" name="value" data-autosubmit><option value="">Aucun</option>{% for u in users %}<option value="{{ u.id }}" {% if ini.lead_id == u.id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select>
+          </form>
+          {% else %}{% if ini.lead %}{{ ui.user_chip(ini.lead, 20) }}{% else %}<span class="muted">Aucun</span>{% endif %}{% endif %}
+        </div>
+      </div>
+      <div class="wg-prop"><span class="k">{{ icon('calendar', 14) }} Début</span>
+        <div class="v">
+          {% if can_edit %}<form method="post" action="{{ url_for('workgraph.initiative_edit', iid=ini.id) }}">{{ ui.csrf() }}<input type="hidden" name="field" value="start_date"><input class="input input-sm" type="date" name="value" value="{{ ini.start_date.isoformat() if ini.start_date else '' }}" data-autosubmit></form>
+          {% else %}{{ ini.start_date|date(True) if ini.start_date else '—' }}{% endif %}
+          {% if not ini.start_date and s.start %}<span class="tiny muted">déduit : {{ s.start|date(True) }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="wg-prop"><span class="k">{{ icon('flag', 14) }} Échéance</span>
+        <div class="v">
+          {% if can_edit %}<form method="post" action="{{ url_for('workgraph.initiative_edit', iid=ini.id) }}">{{ ui.csrf() }}<input type="hidden" name="field" value="target_date"><input class="input input-sm" type="date" name="value" value="{{ ini.target_date.isoformat() if ini.target_date else '' }}" data-autosubmit></form>
+          {% else %}{{ ini.target_date|date(True) if ini.target_date else '—' }}{% endif %}
+          {% if not ini.target_date and s.target %}<span class="tiny muted">déduite des projets : {{ s.target|date(True) }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <h4>Avancement</h4>
+    <div class="flex gap"><div class="grow">{{ ui.progress(s.pct) }}</div><span class="small nowrap">{{ s.pct }} %</span></div>
+    <div class="tiny muted mt-0" style="margin-top:6px">Part des tickets terminés (hors annulés) des projets et modules liés.</div>
+
+    <h4>Informations</h4>
+    <div class="col small" style="gap:6px">
+      <span class="flex gap-4"><span class="muted">Créée par</span> {% if ini.created_by %}{{ ui.user_chip(ini.created_by, 18) }}{% else %}—{% endif %}</span>
+      <span><span class="muted">Créée le</span> {{ ini.created_at|datetime }}</span>
+      <span><span class="muted">Modifiée</span> {{ ini.updated_at|ago }}</span>
+      {% if ini.health_since and ini.health_seen %}<span><span class="muted">Santé « {{ M.HEALTH_LABELS.get(ini.health_seen, ini.health_seen)|lower }} » depuis</span> {{ ini.health_since|date(True) }}</span>{% endif %}
+    </div>
+  </aside>
+</div>
+
+{% if can_edit %}
+<dialog class="modal" id="edit-initiative-modal">
+  {{ wg.initiative_form(url_for('workgraph.initiative_edit', iid=ini.id), 'Modifier l’initiative', 'Enregistrer', users, statuses, healths=healths, ini=ini) }}
+</dialog>
+
+<dialog class="modal" id="link-modal">
+  <form method="post" action="{{ url_for('workgraph.initiative_link', iid=ini.id) }}">
+    {{ ui.csrf() }}
+    <div class="modal-h"><h2>Lier à « {{ ini.name }} »</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b panel-menu" style="width:auto;max-height:62vh">
+      <div class="pm-search"><input class="input input-sm" type="search" placeholder="Filtrer…" data-opt-filter></div>
+      <div class="pm-section">
+        <div class="pm-h">Projets</div>
+        {% for p in cand_projects %}
+        <label class="opt" data-opt-text="{{ (p.identifier ~ ' ' ~ p.name)|lower }}"><input type="checkbox" name="project_ids" value="{{ p.id }}"><span>{{ p.emoji }}</span><span class="ellipsis">{{ p.name }}</span><span class="muted tiny right mono">{{ p.identifier }}</span></label>
+        {% else %}<div class="muted small">Tous les projets visibles sont déjà liés.</div>{% endfor %}
+      </div>
+      {% for p, ms in cand_modules %}
+      <div class="pm-section">
+        <div class="pm-h">Modules · {{ p.emoji }} {{ p.name }}</div>
+        {% for m in ms %}
+        <label class="opt" data-opt-text="{{ (p.identifier ~ ' ' ~ m.name)|lower }}"><input type="checkbox" name="module_ids" value="{{ m.id }}"><span style="color:{{ m.status_color }}">{{ icon('module', 14) }}</span><span class="ellipsis">{{ m.name }}</span><span class="muted tiny right">{{ m.status_label }}</span></label>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="modal-f"><span class="tiny muted">Un projet lié compte en entier ; un module lié seul ne compte que pour ses tickets.</span><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Lier la sélection</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='workgraph/workgraph.js') }}?v={{ version }}"></script>{% endblock %}
