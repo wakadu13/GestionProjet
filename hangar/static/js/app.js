@@ -922,17 +922,22 @@
     pal.close();
     if (it.run) it.run(); else if (it.url) location.href = it.url;
   }
+  const sansAccents = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const palSearch = debounce(async (q) => {
-    const acts = ACTIONS.filter((a) => !q || a.title.toLowerCase().includes(q.toLowerCase()));
+    const acts = ACTIONS.filter((a) => !q || sansAccents(a.title).includes(sansAccents(q)));
     let r = { issues: [], projects: [], pages: [], members: [], cycles: [], modules: [] };
     try { r = await api(`${H.urls.search}?q=${encodeURIComponent(q)}`); } catch (e) { /* hors ligne */ }
+    // Sources des modules (wiki : pages, PDF, QCM, langues, commandes) : H.paletteSources, [[groupe, éléments], …]
+    const extra = (await Promise.all((H.paletteSources || []).map((f) => Promise.resolve().then(() => f(q)).catch(() => [])))).flat();
+    const vus = new Set(extra.flatMap(([, items]) => items.map((it) => it.url)).filter(Boolean));
     const issueIt = (i) => ({ title: i.title, key: i.key, sub: i.sub, url: i.url, icon: stateIcon(i.state_group, i.state_color) });
     const gen = (arr, ic) => arr.map((x) => ({ title: x.title, sub: x.sub, url: x.url, icon: x.emoji ? `<span>${esc(x.emoji)}</span>` : (x.initials ? avatarHTML(x) : ic) }));
     palRender([
       [q ? 'Tickets' : 'Récemment modifiés', r.issues.map(issueIt)],
       ['Actions', q ? acts : acts.slice(0, 6)],
+      ...extra,
       ['Projets', gen(r.projects, ICON.briefcase)],
-      ['Pages', gen(r.pages, ICON.page)],
+      ['Pages', gen(r.pages, ICON.page).filter((it) => !vus.has(it.url))],
       ['Cycles', gen(r.cycles, ICON.cycle)],
       ['Modules', gen(r.modules, ICON.module)],
       ['Membres', gen(r.members, ICON.user)],

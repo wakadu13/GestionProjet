@@ -128,6 +128,7 @@ def run_job(job: AIJob) -> None:
     except Exception:  # noqa: BLE001
         log.exception("Travail d'IA %s (%s)", job.id, job.kind)
         db.session.rollback()
+        _noter_erreur(f"Travail d'IA {job.id} ({job.kind})")
         job.status, job.message = "error", "Erreur inattendue (détail dans le journal du serveur)."
     job.finished_at = now()
     db.session.commit()
@@ -253,7 +254,18 @@ def _loop(app) -> None:
                 time.sleep(5)
         except Exception:  # noqa: BLE001 - le fil ne doit pas mourir en laissant _worker occupé
             log.exception("Travaux d'IA : arrêt inattendu")
+            db.session.rollback()
+            _noter_erreur("Fil des travaux d'IA : arrêt inattendu")
         finally:
             db.session.remove()
             with _lock:
                 _worker = None
+
+
+def _noter_erreur(contexte: str) -> None:
+    """Incident du fil des travaux : noté aussi sur la page « Erreurs du serveur » (/erreurs/)."""
+    try:
+        from ..wiki import erreurs
+        erreurs.noter(contexte=contexte)
+    except Exception:  # noqa: BLE001
+        pass

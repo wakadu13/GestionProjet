@@ -163,6 +163,8 @@ def _register_hooks(app: Flask) -> None:
     @app.errorhandler(500)
     def _server_error(err):
         db.session.rollback()
+        from .wiki import erreurs  # page /erreurs/ des administrateurs
+        erreurs.noter(getattr(err, "original_exception", None), request=request)
         if request.path.startswith("/api/"):
             return {"ok": False, "error": "Erreur interne"}, 500
         return render_template("errors.html", error=err), 500

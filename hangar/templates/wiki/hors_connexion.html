@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="{{ theme_color }}">
+  <title>Hors connexion · Hangar</title>
+  <link rel="manifest" href="{{ url_for('wiki.manifeste') }}">
+  <link rel="icon" href="{{ url_for('static', filename='wiki/icone-192.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}">
+  <script src="{{ url_for('static', filename='wiki/hors_ligne_wiki.js') }}?v={{ version }}" defer></script>
+</head>
+<body class="hl-body">
+  {# Page servie par le service worker du wiki quand une page n'est ni accessible ni en cache. Elle ne contient
+     rien du wiki : la liste des pages lisibles est lue dans le cache de l'appareil (hors_ligne_wiki.js). #}
+  <main class="hl" data-cache="{{ cache }}">
+    <header class="hl-entete">
+      <a class="btn btn-sm" href="{{ url_for('wiki.home') }}">{{ icon('arrow-left', 14) }} Wiki</a>
+      <span class="hl-reseau" data-hl-reseau>○ Hors ligne</span>
+    </header>
+    <div class="hl-logo"><img src="{{ url_for('static', filename='wiki/icone-192.png') }}" alt="" width="56" height="56"></div>
+    <h1 class="wiki-doc-title">Pas de connexion</h1>
+    <p class="text-2">Cette page n’est pas disponible hors connexion. Voici ce qui l’est sur cet appareil : les pages
+      du wiki déjà lues et les dossiers gardés hors ligne depuis le <a href="{{ url_for('wiki.sommaire') }}">sommaire</a>
+      (bouton « ⤓ Hors ligne » d’un dossier).</p>
+    <div class="panel hl-liste" data-pages-hors-ligne><p class="muted">Lecture du cache…</p></div>
+    <p class="muted small">Les QCM ont leur propre application hors ligne, dans la section QCM.</p>
+    <p><button type="button" class="btn btn-primary" data-hl-reessayer>{{ icon('refresh', 14) }} Réessayer</button></p>
+  </main>
+</body>
+</html>

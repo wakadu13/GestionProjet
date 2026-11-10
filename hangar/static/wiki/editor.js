@@ -12,7 +12,7 @@
 //
 // Repris de Revision (wiki/static/wiki/editor.js) pour Hangar : jeton de sécurité
 // « _csrf », barre d'outils collée en haut de la zone de contenu (qui défile seule
-// dans Hangar), Ctrl+K gardé pour le lien (pas la palette de Hangar), « Améliorer »
+// dans Hangar), Ctrl+K gardé pour le lien (Ctrl+P ouvre la palette), « Améliorer »
 // envoyé au module d'IA avec la clé de la page.
 (function () {
   "use strict";
@@ -1319,9 +1319,9 @@
   const theme_ = new Compartment();
   const sombre = () => (window.wikiTheme ? window.wikiTheme.resolved() : (document.documentElement.dataset.theme || "light")) === "dark";
   // Hauteur cachée par la barre d'outils collée en haut (aucune en plein écran : elle est rentrée).
-  // Dans Hangar, la barre d'outils reste visible, même en plein écran.
-  const stickyTop = () => toolbar.getBoundingClientRect().height
-    + (parseFloat(getComputedStyle(form).getPropertyValue("--sticky-top")) || 0);
+  // En plein écran, la barre d'outils rentre en haut de l'écran (elle revient quand la souris touche le bord).
+  const stickyTop = () => (document.body.classList.contains("plein-ecran") ? 0
+    : toolbar.getBoundingClientRect().height + (parseFloat(getComputedStyle(form).getPropertyValue("--sticky-top")) || 0));
 
   const appKeymap = [
     { key: "Mod-s", run: () => (save(true), true), preventDefault: true },
@@ -1466,8 +1466,9 @@
   // Barre d'outils et recherche collées en haut de la zone de contenu : dans Hangar,
   // c'est elle qui défile (sous la barre du haut), d'où un décalage nul.
   function layout() {
+    const pleinEcran = document.body.classList.contains("plein-ecran");
     form.style.setProperty("--sticky-top", "0px");
-    form.style.setProperty("--toolbar-h", `${toolbar.getBoundingClientRect().height}px`);
+    form.style.setProperty("--toolbar-h", `${pleinEcran ? 0 : toolbar.getBoundingClientRect().height}px`);
   }
   // Ctrl+K dans le texte : lien vers une page (la palette de Hangar ne s'ouvre pas).
   host.addEventListener("keydown", (e) => {

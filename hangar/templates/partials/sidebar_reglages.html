@@ -12,6 +12,7 @@
     <a class="sb-link {% if ep == 'settings.workspace' %}active{% endif %}" href="{{ url_for('settings.workspace') }}">{{ icon('settings') }} Paramètres de l’espace</a>
     <a class="sb-link {% if ep == 'mail.settings' %}active{% endif %}" href="{{ url_for('mail.settings') }}">{{ icon('send') }} Envoi des e-mails</a>
     <a class="sb-link {% if ep == 'settings.backup' %}active{% endif %}" href="{{ url_for('settings.backup') }}">{{ icon('database') }} Sauvegardes</a>
+    {% set nerr = erreurs_ouvertes() %}<a class="sb-link {% if ep == 'wiki.erreurs' %}active{% endif %}" href="{{ url_for('wiki.erreurs') }}">{{ icon('alert') }} Erreurs du serveur{% if nerr %} <span class="sb-badge danger" title="{{ nerr }} erreur(s) à regarder">{{ nerr }}</span>{% endif %}</a>
     {% endif %}
     <a class="sb-link {% if ep == 'settings.about' %}active{% endif %}" href="{{ url_for('settings.about') }}">{{ icon('help') }} À propos</a>
   </div>

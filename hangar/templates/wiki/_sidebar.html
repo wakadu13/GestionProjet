@@ -1,7 +1,15 @@
-{# Menu de la section Wiki (façon Plane Wiki) : nouvelle page, accueil, collections, favoris, récents, outils #}
+{# Menu de la section Wiki (façon Plane Wiki) : nouvelle page, accueil, collections, favoris, récents, révision, outils.
+   Comme le menu de Revision, il donne accès à tout depuis le wiki (révisions du jour, QCM, langues, IA, documentation). #}
 {% import "wiki/_macros.html" as wk with context %}
 {% set sb = wiki_sidebar() %}
-<div class="sb-title"><span>Wiki</span><button class="btn btn-ghost btn-icon btn-xs" type="button" data-sidebar-collapse title="Masquer le menu">{{ icon('sidebar', 15) }}</button></div>
+{% set titre_menu = "Cacher le menu pendant la lecture" if sb.menu_epingle else "Garder le menu affiché pendant la lecture" %}
+<div class="sb-title"><span>Wiki</span>
+  <span class="wiki-sb-boutons">
+    <button class="btn btn-ghost btn-icon btn-xs wiki-epingle" type="button" data-epingler-menu aria-pressed="{{ 'true' if sb.menu_epingle else 'false' }}" aria-label="{{ titre_menu }}" title="{{ titre_menu }}">{{ icon('wiki-panel', 15) }}</button>
+    <button class="btn btn-ghost btn-icon btn-xs" type="button" data-plein-ecran aria-pressed="false" aria-label="Plein écran" title="Plein écran (Ctrl+Maj+F)">{{ icon('wiki-maximize', 15) }}</button>
+    <button class="btn btn-ghost btn-icon btn-xs" type="button" data-sidebar-collapse title="Masquer le menu">{{ icon('sidebar', 15) }}</button>
+  </span>
+</div>
 <div class="sb-actions">
   {% if sb.can_edit %}<a class="btn btn-sm" href="{{ url_for('wiki.new') }}" title="Créer une page">{{ icon('plus', 14) }} Nouvelle page</a>{% endif %}
   <a class="btn btn-sm btn-icon" href="{{ url_for('wiki.search') }}" title="Rechercher dans le wiki">{{ icon('search', 14) }}</a>
@@ -35,6 +43,20 @@
     {% endfor %}
   </div>
 
+  <div class="sb-section wiki-sb-revision">
+    <div class="sb-section-h"><span>Révision</span></div>
+    <a class="sb-link" href="{{ url_for('qcm.aujourdhui') }}">{{ icon('sun') }} Aujourd’hui</a>
+    <a class="sb-link" href="{{ url_for('qcm.index') }}">{{ icon('graduation') }} QCM</a>
+    <a class="sb-link" href="{{ url_for('qcm.langues_index') }}">{{ icon('languages') }} Langues</a>
+    {% if sb.ai %}
+    <a class="sb-link" href="{{ url_for('ai.demander') }}">{{ icon('sparkle') }} Demander au wiki</a>
+    <a class="sb-link" href="{{ url_for('ai.copie') }}">{{ icon('image') }} Corriger ma copie</a>
+    {% if sb.can_edit %}<a class="sb-link" href="{{ url_for('ai.transformations') }}#transformer">{{ icon('upload') }} Transformer un cours</a>{% endif %}
+    {% endif %}
+    {% if sb.can_edit %}<a class="sb-link" href="{{ url_for('ai.transformations') }}">{{ icon('timer') }} Travaux de l’IA</a>{% endif %}
+    <a class="sb-link {% if ep == 'wiki.documentation' %}active{% endif %}" href="{{ url_for('wiki.documentation') }}">{{ icon('help') }} Documentation</a>
+  </div>
+
   <div class="sb-section">
     <div class="sb-section-h"><span>Outils</span></div>
     <a class="sb-link {% if ep in ('wiki.tags', 'wiki.tag') %}active{% endif %}" href="{{ url_for('wiki.tags') }}">{{ icon('hash') }} Tags</a>
@@ -44,6 +66,6 @@
     <a class="sb-link {% if ep == 'wiki.importer' %}active{% endif %}" href="{{ url_for('wiki.importer') }}">{{ icon('upload') }} Importer</a>
     <a class="sb-link {% if ep == 'wiki.latex' %}active{% endif %}" href="{{ url_for('wiki.latex') }}">{{ icon('wiki-sigma') }} Cours LaTeX</a>
     {% endif %}
-    <a class="sb-link {% if ep == 'wiki.documentation' %}active{% endif %}" href="{{ url_for('wiki.documentation') }}">{{ icon('help') }} Syntaxe</a>
+    <a class="sb-link" href="{{ url_for('wiki.hors_connexion') }}" title="Pages lisibles sans connexion sur cet appareil">{{ icon('download') }} Hors ligne</a>
   </div>
 </nav>

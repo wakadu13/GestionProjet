@@ -2,6 +2,8 @@
 {% import "macros.html" as ui with context %}
 {% import "wiki/_macros.html" as wk with context %}
 {% block title %}{{ title }} · Wiki{% endblock %}
+{# Lecture : le menu de gauche est caché (il revient au bord gauche), sauf s'il a été épinglé (bouton ▯). #}
+{% block body_class %}wiki-lecture wiki-lecture-pdf{% if request.cookies.get('wiki_menu') != 'epingle' %} menu-cache{% endif %}{% endblock %}
 {% block wiki_head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/vendor/pdfjs/pdf_viewer.min.css') }}">{% endblock %}
 {% block header %}
 <div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs(crumbs, title, '📄') }}
@@ -9,7 +11,8 @@
     {% if page_cours %}<a class="btn btn-sm" href="{{ page_cours.url }}">{{ icon('wiki-file-text', 14) }} Page du cours</a>
     {% elif ai_dispo and can_edit %}
     <form method="post" action="{{ url_for('ai.transformations') }}" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="pdf" value="{{ attachment.path }}">
-      <button class="btn btn-sm" title="L’IA lit le PDF et en fait une page du wiki (plan, formules, encadrés), en quelques minutes">{{ icon('sparkle', 14) }} <span class="wiki-hide-sm">Créer une page de cours avec l’IA</span></button></form>
+      <button class="btn btn-sm" title="L’IA lit le PDF et en fait une page du wiki (plan, formules, encadrés), en quelques minutes">{{ icon('sparkle', 14) }} <span class="wiki-hide-sm">Créer une page de cours avec l’IA</span></button>
+      {% if ai_lots() %}<label class="checkbox small wiki-hide-sm" title="Dans un lot traité à moitié prix, résultat sous 24 heures"><input type="checkbox" name="lot" value="1"> sans urgence (lot, moitié prix)</label>{% endif %}</form>
     {% endif %}
     <a class="btn btn-sm btn-ghost" href="{{ attachment.url }}" download>{{ icon('download', 14) }} <span class="wiki-hide-sm">Télécharger</span></a>
   </div>

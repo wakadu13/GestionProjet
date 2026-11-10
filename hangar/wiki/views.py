@@ -22,10 +22,10 @@ from flask_login import current_user
 from .. import ai
 from ..extensions import db
 from ..icons import ICONS
-from . import commun, historique, installation, texte_pdf, uploads
+from . import commun, erreurs, historique, installation, texte_pdf, uploads
 from . import latex as latex_converter
 from .commun import can_edit, deny, render, wants_json
-from .render import Renderer, render_note
+from .render import Renderer
 from .vault import Note, clean_key, get_vault, split_frontmatter, toujours_verifier
 
 bp = Blueprint("wiki", __name__)
@@ -53,6 +53,7 @@ ICONS.setdefault("wiki-file-text", '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 
 ICONS.setdefault("wiki-pdf", '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>'
                              '<path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 17v-4h1.5a1.5 1.5 0 0 1 0 3H8"/>')
 ICONS.setdefault("wiki-sigma", '<path d="M18 7V4H6l6 8-6 8h12v-3"/>')
+ICONS.setdefault("wiki-panel", '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/>')
 ICONS.setdefault("wiki-list-tree", '<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/>'
                                    '<path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>')
 
@@ -94,16 +95,34 @@ def _apres_requete(_exc):
         verif.__exit__(None, None, None)
 
 
+# Lecture hors ligne : le service worker, le manifeste et la page « hors connexion » sont servis sans
+# compte (le navigateur les demande lui-même, et la page hors connexion ne montre rien du wiki).
+PUBLICS = {"wiki.service_worker", "wiki.manifeste", "wiki.hors_connexion"}
+
+
 @bp.before_request
 def _connexion():
+    if request.endpoint in PUBLICS:
+        return None
     if not current_user.is_authenticated:
         return current_app.login_manager.unauthorized()
     return None
 
 
+@bp.after_request
+def _cache_prive(response):
+    """Pages et fichiers du wiki : jamais gardés par un proxy pour les resservir à quelqu'un d'autre."""
+    if request.endpoint not in PUBLICS:
+        cc = response.headers.get("Cache-Control", "")
+        if "private" not in cc and "no-store" not in cc:
+            response.headers["Cache-Control"] = f"private, {cc}" if cc else "private"
+    return response
+
+
 @bp.app_context_processor
 def _gabarits():
-    return {"wiki_sidebar": commun.sidebar_data, "wiki_icone": commun.icone}
+    return {"wiki_sidebar": commun.sidebar_data, "wiki_icone": commun.icone, "cache_hors_ligne": "hangar-wiki-v1",
+            "erreurs_ouvertes": erreurs.ouvertes}
 
 
 # Panneau IA : la page du wiki affichée lui est décrite (texte Markdown, titre, adresse).
@@ -149,15 +168,79 @@ def fil_ariane(parts):
     return sortie
 
 
+def _qcm_de_la_page(note):
+    """Sets de QCM écrits d'après cette page (``source_page``), avec la progression du compte :
+    maîtrise et boutons Réviser / Tout / Examen du panneau « Réviser ce cours »."""
+    try:
+        from ..qcm import quiz, services
+        from ..qcm.models import QuizDeck, QuizProgress
+        cle = note.key.lower()
+        sets = [s for s in services.bibliotheque(current_user.id).sets.values()
+                if (s.source_page or "").strip().lower() == cle]
+        if not sets:
+            return []
+        maintenant, decks = quiz.maintenant(), QuizDeck.map_for(current_user.id)
+        return [{"set": s, "ancre": services.ancre(s.id),
+                 "summary": services.resume_set(s, QuizProgress.map_for(current_user.id, s.id), maintenant,
+                                                decks.get(s.id))}
+                for s in sorted(sets, key=lambda s: s.titre.lower())]
+    except Exception:  # noqa: BLE001 - la section QCM ne doit jamais empêcher la lecture d'une page
+        current_app.logger.exception("Wiki : QCM de la page %s", note.key)
+        return []
+
+
+def _cartes_de_la_page(vault, note):
+    """Cartes qu'on peut tirer de la page (encadrés, surlignages) et set déjà écrit, s'il existe."""
+    from . import cartes
+    try:
+        texte = (vault.root / note.path).read_text(encoding="utf-8")
+        nombre = len(cartes.extraire(texte))
+        if not nombre:
+            return None
+        from ..qcm import quiz
+        existe = quiz.get_library().commune().get(cartes.chemin_du_set(note).removesuffix(".json")) is not None
+    except Exception:  # noqa: BLE001
+        return None
+    return {"nombre": nombre, "existe": existe}
+
+
+def _tuteur_de_la_page(note):
+    """Historique du tuteur sur cette page pour le compte, si une IA est configurée."""
+    if not commun.ai_dispo():
+        return None
+    try:
+        from ..ai import core, demandes
+        from ..ai.models import AITutorExchange
+        from ..ai.revision_views import echange_html
+        echanges = (AITutorExchange.query.filter_by(user_id=current_user.id, page=note.key)
+                    .order_by(AITutorExchange.id.desc()).limit(demandes.HISTORIQUE_TUTEUR).all())[::-1]
+        return {"echanges": [echange_html(e) for e in echanges], "plafond": core.cap_reached()}
+    except Exception:  # noqa: BLE001 - le tuteur ne doit jamais empêcher la lecture d'une page
+        current_app.logger.exception("Wiki : tuteur de la page %s", note.key)
+        return None
+
+
+def _fiche_en_cours(note) -> bool:
+    try:
+        from ..ai import travaux
+        return bool(travaux.en_cours("fiche", note.path.as_posix()))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _note_page(vault, note):
     content, toc = vault.render(note)
     backlinks = sorted(vault.backlinks.get(note.key.lower(), ()), key=lambda n: n.title.lower())
     fiche = vault.notes.get(note.path.with_name(f"{note.path.stem} (Fiche)").with_suffix("").as_posix().lower())
     mots = len(re.findall(r"\w+", note.clean_body))
     commun.noter_visite(note.key)
+    edition = can_edit()
     return render("wiki/page.html", vault=vault, note=note, content=content, toc=toc, backlinks=backlinks,
                   fiche=fiche, favori=commun.est_favori(note), mots=mots, lecture=max(1, round(mots / 220)),
-                  proprietes=proprietes(note), crumbs=fil_ariane(note.folders), icone=commun.icone(note))
+                  proprietes=proprietes(note), crumbs=fil_ariane(note.folders), icone=commun.icone(note),
+                  qcm_page=_qcm_de_la_page(note), cartes=_cartes_de_la_page(vault, note) if edition else None,
+                  tuteur=_tuteur_de_la_page(note),
+                  fiche_en_cours=edition and fiche is None and commun.ai_dispo() and _fiche_en_cours(note))
 
 
 @bp.route("/wiki/")
@@ -528,17 +611,6 @@ def graphe_donnees():
     return jsonify(noeuds=noeuds, liens=sorted(liens))
 
 
-@bp.route("/documentation/")
-def documentation():
-    """Guide de la syntaxe (livré avec Hangar), affiché avec le moteur du wiki."""
-    vault = get_vault()
-    chemin = installation.DEFAUT_DIR / "Guide" / "Syntaxe Obsidian.md"
-    meta, body = split_frontmatter(chemin.read_text(encoding="utf-8").lstrip("﻿"))
-    note = Note(PurePosixPath("Guide/Syntaxe Obsidian.md"), chemin.stat().st_mtime, meta, body)
-    content, toc = render_note(vault, note)
-    return render("wiki/documentation.html", vault=vault, note=note, content=content, toc=toc)
-
-
 # ---------------------------------------------------------------------------
 # Historique des pages
 # ---------------------------------------------------------------------------
@@ -713,5 +785,9 @@ def lien_wiki(key: str) -> str:
     """Adresse d'une page du wiki d'après sa clé (pour les autres modules : QCM, IA…)."""
     return url_for("wiki.page", path=key) if key else url_for("wiki.home")
 
+
+# Routes ajoutées au blueprint : lecture hors ligne (PWA), palette de commandes, documentation,
+# erreurs du serveur, anciennes adresses de Revision.
+from . import pwa, vues_revision  # noqa: E402,F401
 
 __all__ = ["bp", "resultats_palette", "lien_wiki"]

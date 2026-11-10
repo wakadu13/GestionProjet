@@ -50,3 +50,26 @@ class WikiPdfText(db.Model):
     pages = db.Column(db.JSON, default=list)
     erreur = db.Column(db.String(300), default="")
     indexe_le = db.Column(db.DateTime, default=now, onupdate=now)
+
+
+class ErreurServeur(db.Model):
+    """Erreur du serveur (page en erreur 500, incident du fil des travaux de l'IA), regroupée par empreinte
+    (même type, même message, même endroit du code) : page ``/erreurs/`` des administrateurs.
+
+    Port du modèle ``ErreurServeur`` de Revision ; voir ``hangar.wiki.erreurs``."""
+
+    __tablename__ = "erreur_serveur"
+
+    id = db.Column(db.Integer, primary_key=True)
+    empreinte = db.Column(db.String(40), unique=True, nullable=False)
+    type = db.Column(db.String(200), default="")
+    message = db.Column(db.Text, default="")
+    lieu = db.Column(db.String(500), default="")         # fichier:ligne du code
+    chemin = db.Column(db.String(500), default="")       # adresse demandée (dernière occurrence)
+    methode = db.Column(db.String(10), default="")
+    utilisateur = db.Column(db.String(150), default="")
+    trace = db.Column(db.Text, default="")
+    nombre = db.Column(db.Integer, default=1)
+    premiere = db.Column(db.DateTime, default=now)
+    derniere = db.Column(db.DateTime, default=now, index=True)
+    reglee = db.Column(db.Boolean, default=False, index=True)

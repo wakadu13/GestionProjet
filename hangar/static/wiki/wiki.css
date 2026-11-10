@@ -462,17 +462,131 @@ body.pdf-embedded-body { margin: 0; height: 100vh; overflow: hidden; background:
 .graphe-legende { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--text-3); }
 .graphe-pastille { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 
-/* ---------- Plein écran : il ne reste que le texte ---------- */
-html.wiki-focus .topbar, html.wiki-focus .rail, html.wiki-focus .ai-panel, html.wiki-focus .page-header { display: none !important; }
-html.wiki-focus .sidebar { display: none; }
-html.wiki-focus.pe-gauche .sidebar { display: flex; position: fixed; inset: 0 auto 0 0; z-index: 160; box-shadow: var(--shadow); transform: none; }
-html.wiki-focus .app { grid-template-columns: minmax(0, 1fr) !important; }
-html.wiki-focus .shell { padding-bottom: 0; }
-html.wiki-focus .main { border-radius: 0; }
+/* ---------- Lecture et plein écran (plein_ecran.js, comme dans Revision) ---------- */
+.main .content:focus { outline: none; }
+/* Plein écran : il ne reste que le texte. Le menu (bord gauche), le panneau de droite (bord droit) et la barre
+   d'outils de l'éditeur (bord haut) glissent depuis le bord que la souris touche (classes pe-gauche, pe-droite, pe-haut). */
+body.plein-ecran .topbar, body.plein-ecran .rail, body.plein-ecran .ai-panel, body.plein-ecran .page-header { display: none !important; }
+body.plein-ecran .shell { padding-bottom: 0; }
+body.plein-ecran .app { grid-template-columns: minmax(0, 1fr) !important; }
+body.plein-ecran .main { border-radius: 0; }
+body.plein-ecran .sidebar {
+  display: flex !important; position: fixed; top: 0; bottom: 0; left: 0; z-index: 160; width: min(300px, 85vw);
+  visibility: hidden; transform: translateX(-100%); box-shadow: none;
+  transition: transform .2s ease, box-shadow .2s ease, visibility 0s linear .2s;
+}
+body.plein-ecran.pe-gauche .sidebar { transform: none; visibility: visible; box-shadow: 0 0 28px rgba(0, 0, 0, .18); transition: transform .2s ease, box-shadow .2s ease; }
+body.plein-ecran .wiki-doc-layout, body.plein-ecran .wiki-pdf-layout, body.plein-ecran .wiki-edit-layout { grid-template-columns: minmax(0, 1fr); }
+body.plein-ecran :is(.wiki-doc-aside, .wiki-edit-aside, .wiki-pdf-aside) {
+  display: block !important; position: fixed; top: 0; bottom: 0; right: 0; left: auto; z-index: 150; width: min(300px, 85vw); align-self: stretch; height: auto;
+  max-height: none; overflow-y: auto; margin: 0; padding: 28px 18px; background: var(--surface); border-left: 1px solid var(--border);
+  visibility: hidden; transform: translateX(100%); transition: transform .2s ease, visibility 0s linear .2s;
+}
+body.plein-ecran.pe-droite :is(.wiki-doc-aside, .wiki-edit-aside, .wiki-pdf-aside) {
+  transform: none; visibility: visible; box-shadow: 0 0 28px rgba(0, 0, 0, .18); transition: transform .2s ease;
+}
+body.plein-ecran.editing .toolbar {
+  position: fixed; top: 0; left: 50%; z-index: 155; width: min(60rem, calc(100vw - 2rem));
+  border-top: 0; border-radius: 0 0 10px 10px; visibility: hidden; transform: translate(-50%, -110%);
+  transition: transform .2s ease, visibility 0s linear .2s;
+}
+body.plein-ecran.editing.pe-haut .toolbar { visibility: visible; transform: translate(-50%, 0); box-shadow: 0 6px 24px rgba(0, 0, 0, .15); transition: transform .2s ease; }
+body.plein-ecran .wiki-doc { padding-top: 48px; }
+body.plein-ecran .wiki-editor { max-width: 58rem; width: 100%; margin: 0 auto; }
 .pe-sortie { position: fixed; top: 10px; right: 14px; z-index: 170; opacity: .35; transition: opacity .15s; }
-.pe-sortie:hover { opacity: 1; }
-.pe-astuce { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 170; padding: 8px 16px; border-radius: 999px; background: rgba(24, 24, 27, .9); color: #fff; font-size: 13px; transition: opacity .8s; max-width: calc(100vw - 32px); text-align: center; }
+.pe-sortie:hover, .pe-sortie:focus-visible { opacity: 1; }
+@media (hover: hover) and (pointer: fine) { .pe-sortie { opacity: 0; } }
+.pe-astuce { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 170; padding: 8px 16px; border-radius: 999px; background: rgba(24, 24, 27, .9); color: #fff; font-size: 13px; transition: opacity .8s; max-width: calc(100vw - 32px); text-align: center; pointer-events: none; }
 .pe-astuce.pe-astuce-fin { opacity: 0; }
+
+/* Pages de lecture (une page, un PDF) : le menu de gauche est caché pour lire ; il revient au bord gauche (souris,
+   appui, glissement) ou par la languette ›. « Garder le menu affiché » (▯, cookie wiki_menu=epingle) le remet. */
+.menu-poignee { display: none; }
+@media (min-width: 821px) {
+  body.menu-cache .app { grid-template-columns: var(--rail-w) minmax(0, 1fr) auto; }
+  body.menu-cache .sidebar {
+    display: flex !important; position: fixed; top: var(--topbar-h); bottom: 0; left: var(--rail-w); z-index: 130; width: var(--sidebar-w);
+    visibility: hidden; opacity: 0; transform: translateX(-14px); box-shadow: none;
+    transition: transform .18s ease, opacity .18s ease, box-shadow .18s ease, visibility 0s linear .18s;
+  }
+  body.menu-cache.pe-gauche .sidebar {
+    visibility: visible; opacity: 1; transform: none; box-shadow: 10px 0 30px rgba(0, 0, 0, .14);
+    transition: transform .18s ease, opacity .18s ease, box-shadow .18s ease;
+  }
+  body.menu-cache .menu-poignee, body.plein-ecran .menu-poignee {
+    display: flex; align-items: center; justify-content: center; position: fixed; left: var(--rail-w); top: 50%; z-index: 120;
+    width: 18px; height: 64px; padding: 0; transform: translateY(-50%); cursor: pointer;
+    border: 1px solid var(--border); border-left: 0; border-radius: 0 10px 10px 0;
+    background: var(--surface); color: var(--text-3); box-shadow: var(--shadow-sm);
+  }
+  body.plein-ecran .menu-poignee { left: 0; }
+  .menu-poignee:hover { color: var(--accent-text); background: var(--accent-bg); }
+  body.pe-gauche .menu-poignee { display: none; }
+}
+.menu-poignee svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+/* Plein écran à la souris : pas de languette, le bord suffit. */
+@media (hover: hover) and (pointer: fine) { body.plein-ecran .menu-poignee { display: none !important; } }
+/* Écran tactile : voile sur le texte quand le menu est ouvert (un appui dessus le referme). */
+@media (hover: none) {
+  body.menu-cache.pe-gauche::before, body.plein-ecran.pe-gauche::before { content: ""; position: fixed; inset: 0; z-index: 125; background: rgba(0, 0, 0, .3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.plein-ecran .sidebar, body.menu-cache .sidebar, body.plein-ecran.editing .toolbar,
+  body.plein-ecran :is(.wiki-doc-aside, .wiki-edit-aside, .wiki-pdf-aside) { transition: none; }
+}
+.wiki-sb-boutons { display: inline-flex; align-items: center; gap: 1px; }
+.wiki-epingle[aria-pressed="true"] { color: var(--accent-text); background: var(--accent-bg); }
+@media (max-width: 820px) { .wiki-epingle { display: none; } }
+
+/* ---------- Sous la page : « Réviser ce cours » et tuteur ---------- */
+.wiki-reviser, .wiki-tuteur { margin: 30px 0 0; }
+.wiki-reviser .panel-h, .wiki-tuteur .panel-h { display: flex; align-items: center; gap: 8px; }
+.wiki-reviser .panel-h b, .wiki-tuteur .panel-h b { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.wiki-qcm-page { padding: 4px 0 12px; margin-bottom: 10px; border-bottom: 1px solid var(--border-2); }
+.wiki-qcm-t { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
+.wiki-qcm-page .progress { margin: 7px 0 8px; max-width: 360px; }
+.wiki-qcm-boutons, .wiki-reviser-actions { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.wiki-reviser-actions form { display: inline-flex; }
+.tuteur-echanges { display: flex; flex-direction: column; gap: 14px; margin-bottom: 12px; max-height: 60vh; overflow: auto; }
+.tuteur-echanges:empty { display: none; }
+.tuteur-echange { border-left: 3px solid var(--accent); padding-left: 12px; }
+.tuteur-question { font-weight: 600; margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tuteur-reponse { font-size: 14px; }
+.tuteur-reponse > :first-child { margin-top: 0; }
+.tuteur-reponse > :last-child { margin-bottom: 0; }
+.tuteur-reponse.tuteur-erreur { color: var(--danger); }
+.tuteur-form textarea { width: 100%; resize: vertical; min-height: 58px; font: inherit; }
+.tuteur-pied { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.tuteur-pied .tuteur-aide { flex: 1; min-width: 0; }
+.tuteur-copie { margin: 12px 0 0; }
+
+/* ---------- Hors ligne : sommaire, page « hors connexion » ---------- */
+.wiki-hl-aide { margin: 2px 0 12px; }
+.sommaire-hors-ligne { margin-left: 8px; font-weight: 400; flex: none; }
+.sommaire-hors-ligne.is-garde { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+.hl-body { background: var(--bg); color: var(--text); }
+.hl { max-width: 760px; margin: 0 auto; padding: 22px 16px 60px; font-family: var(--font); }
+.hl-entete { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 22px; }
+.hl-reseau { font-size: 13px; color: var(--success); }
+.hl-reseau.hors-ligne { color: var(--text-3); }
+.hl-logo img { display: block; border-radius: 14px; margin-bottom: 14px; }
+.hl-liste { padding: 10px 16px; margin: 16px 0; }
+.hl-pages { list-style: none; margin: 0; padding: 0; columns: 2 220px; column-gap: 24px; }
+.hl-pages li { padding: 4px 0; break-inside: avoid; overflow-wrap: anywhere; }
+
+/* ---------- Documentation, erreurs du serveur ---------- */
+.wiki-doc-tabs { margin: 0 0 26px; }
+.erreurs-page { padding-bottom: 60px; }
+.erreur { margin: 10px 0; padding: 0; overflow: hidden; }
+.erreur > summary { cursor: pointer; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; list-style: none; }
+.erreur > summary::-webkit-details-marker { display: none; }
+.erreur-t { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.erreur-message { font-family: var(--mono); font-size: 12.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.erreur-detail { padding: 0 16px 14px; }
+.erreur-trace { max-height: 360px; overflow: auto; font-size: 12px; background: var(--code-bg); padding: 10px 12px; border-radius: 8px; white-space: pre; margin: 0 0 10px; }
+.erreurs-reglees { margin-top: 26px; }
+.erreurs-reglees > summary { cursor: pointer; color: var(--text-2); margin-bottom: 8px; }
+.erreurs-reglees .wiki-row form { display: inline-flex; }
 
 /* ---------- Petits écrans ---------- */
 @media (max-width: 1100px) {
@@ -514,7 +628,11 @@ html.wiki-focus .main { border-radius: 0; }
   :root, :root[data-theme="dark"], :root[data-theme="system"] { --bg: #fff; --bg-2: #f6f6f6; --bg-3: #eee; --surface: #fff; --text: #000; --text-2: #222; --text-3: #555; --border: #bbb; --border-2: #ddd; --accent-text: #1d4ed8; --code-bg: #f3f3f3; --mark: #fff3a3; color-scheme: light; }
   body { background: #fff !important; color: #000 !important; }
   .sidebar, .page-header, .wiki-doc-aside, .wiki-doc-foot, .toolbar, .pdf-toolbar, .editor-footer, .pe-astuce, .pe-sortie,
-  .graphe-outils, .graphe-info, #toasts, .wiki-edit-aside { display: none !important; }
+  .graphe-outils, .graphe-info, #toasts, .wiki-edit-aside, .topbar, .rail, .ai-panel, .menu-poignee, .wiki-reviser,
+  .wiki-tuteur, .wiki-doc-icon, .wiki-doc-tabs, dialog { display: none !important; }
+  .shell { display: block !important; height: auto !important; padding: 0 !important; }
+  .main { border-radius: 0 !important; }
+  body.menu-cache .sidebar { display: none !important; }
   .app, .main, .content, .wiki-doc-layout { display: block !important; height: auto !important; overflow: visible !important; }
   .wiki-doc { padding: 0 !important; max-width: none !important; }
   a { color: inherit; text-decoration: underline; }
@@ -524,3 +642,8 @@ html.wiki-focus .main { border-radius: 0; }
   pre, code { white-space: pre-wrap; word-break: break-word; }
   @page { margin: 1.6cm 1.4cm; }
 }
+
+/* Les formules (KaTeX) cachent un double MathML en position absolue : sans ancêtre positionné, il débordait de
+   la zone de contenu et rendait toute la fenêtre défilante (la barre du haut partait avec le texte). */
+.wiki, .markdown { position: relative; }
+@media (max-width: 820px) { .wiki-som-tags { display: none; } }
