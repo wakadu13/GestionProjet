@@ -43,6 +43,14 @@ def ai_dispo() -> bool:
         return False
 
 
+COOKIE_MENU = "wiki_menu"
+
+
+def menu_epingle() -> bool:
+    """Menu de gauche gardé affiché pendant la lecture (bouton ▯ du menu du wiki, choix retenu par cookie)."""
+    return request.cookies.get(COOKIE_MENU) == "epingle"
+
+
 def render(template, **context):
     vault = context.pop("vault", None) or get_vault()
     return render_template(template, vault=vault, can_edit=can_edit(), ai_dispo=ai_dispo(), **context)
@@ -138,6 +146,9 @@ def sidebar_data():
         "home": home,
         "total": len(vault.notes),
         "can_edit": can_edit(),
+        "ai": ai_dispo(),
+        # Pages de lecture : menu caché, sauf s'il a été épinglé (cookie posé par plein_ecran.js).
+        "menu_epingle": menu_epingle(),
     }
     return g.wiki_sidebar
 

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{# Page des administrateurs, rangée dans la section Réglages #}
+{% set nav_section = "reglages" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Erreurs du serveur{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}">{% endblock %}
+{% block header %}
+<div class="page-header">{{ ui.mobile_toggle() }}
+  <div class="crumbs"><span>{{ icon('settings', 15) }} Réglages</span><span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">Erreurs du serveur</span></div>
+  <div class="header-actions">
+    {% if ouvertes %}
+    <form method="post">{{ ui.csrf() }}<button class="btn btn-sm" name="action" value="tout_regle">{{ icon('check', 14) }} Tout marquer comme réglé</button></form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow erreurs-page">
+  <h1 class="wiki-doc-title">Erreurs du serveur</h1>
+  <p class="text-2">Pages en erreur (500) et incidents du fil des travaux de l’IA, regroupés quand ils se répètent : adresse,
+    compte, endroit du code et trace complète. Le même détail est écrit dans le journal du serveur (la fenêtre où Hangar tourne).</p>
+  {% if not ouvertes %}
+  <div class="callout" data-callout="success"><div class="callout-title">Aucune erreur à regarder ✓</div></div>
+  {% endif %}
+  {% for e in ouvertes %}
+  <details class="panel erreur">
+    <summary>
+      <span class="erreur-t"><b>{{ e.type }}</b> <span class="badge">{{ e.nombre }} fois</span> <span class="muted small">dernière {{ e.derniere|ago }}</span></span>
+      <span class="erreur-message">{{ e.message|truncate(200) }}</span>
+    </summary>
+    <div class="erreur-detail">
+      <p class="muted small">{% if e.methode %}{{ e.methode }} {% endif %}<code>{{ e.chemin }}</code>{% if e.utilisateur %} · @{{ e.utilisateur }}{% endif %}
+        · première le {{ e.premiere|datetime }}{% if e.lieu %} · <code>{{ e.lieu }}</code>{% endif %}</p>
+      <pre class="erreur-trace">{{ e.trace }}</pre>
+      <form method="post">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ e.id }}">
+        <button class="btn btn-sm" name="action" value="reglee">{{ icon('check', 14) }} Marquer comme réglée</button></form>
+    </div>
+  </details>
+  {% endfor %}
+  {% if reglees %}
+  <details class="erreurs-reglees">
+    <summary>Réglées ({{ reglees|length }})</summary>
+    <div class="panel wiki-list">
+      {% for e in reglees %}
+      <div class="wiki-row"><span class="grow ellipsis">{{ e.type }} · {{ e.message|truncate(90) }}</span><span class="muted small nowrap">{{ e.nombre }} fois</span>
+        <form method="post">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ e.id }}"><button class="btn btn-xs btn-ghost" name="action" value="rouvrir">Rouvrir</button></form></div>
+      {% endfor %}
+    </div>
+    <form method="post" data-confirm="Effacer définitivement les erreurs réglées ?">{{ ui.csrf() }}<button class="btn btn-sm btn-ghost" name="action" value="effacer">{{ icon('trash', 14) }} Effacer les erreurs réglées</button></form>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

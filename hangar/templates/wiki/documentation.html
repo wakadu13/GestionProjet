@@ -1,18 +1,23 @@
 {% extends "wiki/_base.html" %}
 {% import "macros.html" as ui with context %}
 {% import "wiki/_macros.html" as wk with context %}
-{% block title %}Syntaxe · Wiki{% endblock %}
-{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Syntaxe du wiki') }}
-  <div class="header-actions">{% if can_edit %}<a class="btn btn-sm" href="{{ url_for('wiki.new') }}">{{ icon('plus', 14) }} Nouvelle page</a>{% endif %}</div></div>{% endblock %}
+{% block title %}{{ titre }} · Documentation{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([('Documentation', url_for('wiki.documentation'))] if doc else [], titre if doc else 'Documentation') }}
+  <div class="header-actions">
+    <button class="btn btn-sm btn-ghost wiki-hide-sm" type="button" data-imprimer title="Imprimer ou enregistrer en PDF">{{ icon('printer', 14) }} Imprimer</button>
+    {% if can_edit %}<a class="btn btn-sm" href="{{ url_for('wiki.new') }}">{{ icon('plus', 14) }} Nouvelle page</a>{% endif %}
+  </div></div>{% endblock %}
 {% block content_class %}flush{% endblock %}
 {% block content %}
 <div class="wiki wiki-doc-layout{% if not toc %} no-toc{% endif %}">
   <article class="wiki-doc">
-    <div class="wiki-doc-icon">{{ icon('help', 34, stroke=1.4) }}</div>
-    <h1 class="wiki-doc-title">Syntaxe du wiki</h1>
-    <p class="muted">Ce que le wiki sait afficher : la syntaxe d’Obsidian (liens <code>[[…]]</code>, intégrations, encadrés,
-      propriétés, formules, diagrammes…). Le texte source de cette page est le guide <code>Guide/Syntaxe Obsidian.md</code> livré avec Hangar.</p>
+    <nav class="tabs wiki-doc-tabs" aria-label="Documentation">
+      {% for cle, t, actif in onglets %}
+      <a class="{{ 'active' if actif }}" href="{{ url_for('wiki.documentation', doc=cle) }}"{% if actif %} aria-current="page"{% endif %}>{{ t }}</a>
+      {% endfor %}
+    </nav>
     <div class="markdown wiki-markdown">{{ content|safe }}</div>
+    <footer class="wiki-doc-foot"><p class="muted small">Modifié le {{ note.modified|datetime }} · <code>{{ note.path }}</code> (livré avec Hangar)</p></footer>
   </article>
   {% if toc %}
   <aside class="wiki-doc-aside"><div class="wiki-aside-h">Sur cette page</div><nav class="wiki-toc">{{ toc|safe }}</nav></aside>

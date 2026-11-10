@@ -80,21 +80,25 @@
   });
 
   // Plan de la page : défilement doux dans la zone de contenu, titre courant mis en valeur.
-  const toc = document.querySelector(".wiki-toc");
-  if (toc) {
+  let planObservateur = null;
+  function plan() {
+    planObservateur?.disconnect();
+    const toc = document.querySelector(".wiki-toc");
+    if (!toc) return;
     const liens = [...toc.querySelectorAll("a[href^='#']")];
     const cibles = liens.map((a) => document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)))).filter(Boolean);
     const scroller = document.querySelector(".main > .content");
     if (cibles.length && scroller && "IntersectionObserver" in window) {
-      const io = new IntersectionObserver((entries) => {
+      planObservateur = new IntersectionObserver((entries) => {
         entries.forEach((en) => {
           if (!en.isIntersecting) return;
           liens.forEach((a) => a.classList.toggle("active", decodeURIComponent(a.getAttribute("href").slice(1)) === en.target.id));
         });
       }, { root: scroller, rootMargin: "0px 0px -70% 0px" });
-      cibles.forEach((c) => io.observe(c));
+      cibles.forEach((c) => planObservateur.observe(c));
     }
   }
+  plan();
 
   // Diagrammes, coloration du code et formules d'un morceau de page : appelé au
   // chargement, et par l'éditeur pour son mode « Lecture ».
@@ -147,6 +151,23 @@
   }
   window.wikiKatex = loadKatex;
   window.wikiEnhance = enhance;
-  window.wikiInitPage = enhance;
+  // Préparation d'une page : au chargement, et après un changement de page sans rechargement (plein écran).
+  window.wikiInitPage = (root) => { enhance(root); plan(); };
   enhance(document);
+
+  // Lecture hors ligne : service worker du wiki (/sw.js, portée « / » ; il ne s'occupe que des adresses de
+  // lecture du wiki et des fichiers statiques). Il faut HTTPS, ou l'adresse localhost.
+  const W = window.WIKI || {};
+  if ("serviceWorker" in navigator && W.sw && window.isSecureContext) {
+    navigator.serviceWorker.register(W.sw, { scope: "/" })
+      .then(() => navigator.serviceWorker.ready)
+      .then(() => {
+        // La page qui a enregistré le service worker n'est pas passée par lui : on la garde aussi.
+        if (!navigator.serviceWorker.controller && window.caches && W.cache
+            && /^\/(wiki|pdf|sommaire|tags|documentation)\//.test(location.pathname)) {
+          caches.open(W.cache).then((c) => c.add(location.href)).catch(() => {});
+        }
+      })
+      .catch(() => { /* navigateur sans service worker, ou refusé : pas de lecture hors ligne */ });
+  }
 })();

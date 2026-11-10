@@ -2,7 +2,8 @@
 {% import "macros.html" as ui with context %}
 {% import "wiki/_macros.html" as wk with context %}
 {% block title %}{{ note.title }} · Wiki{% endblock %}
-{% block body_class %}wiki-lecture{% endblock %}
+{# Lecture : le menu de gauche est caché (il revient au bord gauche), sauf s'il a été épinglé (bouton ▯). #}
+{% block body_class %}wiki-lecture{% if request.cookies.get('wiki_menu') != 'epingle' %} menu-cache{% endif %}{% endblock %}
 
 {% block header %}
 <div class="page-header wiki-header">
@@ -18,6 +19,7 @@
       <button class="btn btn-sm" name="nombre" value="20" title="L’IA écrit 20 questions sur cette page, à relire avant publication">{{ icon('sparkle', 14) }} <span class="wiki-hide-sm">Générer un QCM</span></button>
     </form>
     {% endif %}
+    <button class="btn btn-sm btn-ghost btn-icon wiki-hide-sm" type="button" data-imprimer title="Imprimer la page ou l’enregistrer en PDF (Ctrl+P)">{{ icon('printer', 15) }}</button>
     <a class="btn btn-sm btn-ghost wiki-hide-sm" href="{{ url_for('wiki.historique', path=note.key) }}" title="Historique des versions">{{ icon('history', 14) }} Historique</a>
     <div class="dd">
       <button class="btn btn-sm btn-ghost btn-icon" type="button" data-menu title="Plus d’actions">{{ icon('more', 16) }}</button>
@@ -83,6 +85,72 @@
       {{ content|safe }}
     </div>
 
+    {% if fiche or qcm_page or cartes or (can_edit and ai_dispo) %}
+    <section class="panel wiki-reviser" aria-labelledby="wiki-reviser-h">
+      <div class="panel-h"><b id="wiki-reviser-h">{{ icon('graduation', 15) }} Réviser ce cours</b></div>
+      <div class="panel-b">
+        {% for entry in qcm_page %}
+        {% set pct = entry.summary.pct_maitrise|round|int %}
+        <div class="wiki-qcm-page">
+          <div class="wiki-qcm-t"><a href="{{ url_for('qcm.index') }}#{{ entry.ancre }}"><b>{{ entry.set.titre }}</b></a>
+            <span class="muted small">· {{ entry.summary.total }} question{{ 's' if entry.summary.total > 1 }} · maîtrise {{ pct }} %</span></div>
+          <div class="progress accent" title="Maîtrise {{ pct }} %"><span style="width: {{ pct }}%"></span></div>
+          <div class="wiki-qcm-boutons">
+            {% if entry.summary.a_reviser %}<a class="btn btn-xs btn-primary" href="{{ url_for('qcm.play', set=entry.set.id, mode='review') }}">{{ icon('play', 12) }} Réviser ({{ entry.summary.a_reviser }})</a>{% else %}<span class="muted small">à jour ✓</span>{% endif %}
+            <a class="btn btn-xs" href="{{ url_for('qcm.play', set=entry.set.id, mode='all') }}">Tout</a>
+            <a class="btn btn-xs" href="{{ url_for('qcm.play', set=entry.set.id, mode='examen') }}" title="Questions chronométrées, note sur 20">Examen</a>
+          </div>
+        </div>
+        {% endfor %}
+        <div class="wiki-reviser-actions">
+          {% if fiche %}<a class="btn btn-sm" href="{{ fiche.url }}">📄 Fiche de révision</a>{% endif %}
+          {% if cartes %}
+          <form method="post" action="{{ url_for('ai.cartes_page') }}">{{ ui.csrf() }}<input type="hidden" name="page" value="{{ note.key }}">
+            <button class="btn btn-sm" title="Sans IA : une carte par encadré (définition, théorème, méthode…) et un texte à trous par surlignage ==texte==">🃏 {{ 'Mettre à jour les cartes de la page' if cartes.existe else 'Créer les cartes de la page' }} ({{ cartes.nombre }})</button></form>
+          {% endif %}
+          {% if can_edit and ai_dispo %}
+          <form method="post" action="{{ url_for('ai.generer_qcm') }}">{{ ui.csrf() }}<input type="hidden" name="genre" value="qcm"><input type="hidden" name="page" value="{{ note.key }}">
+            <button class="btn btn-sm" name="nombre" value="20" title="L’IA écrit 20 questions sur cette page ; à relire puis publier depuis les travaux de l’IA">{{ icon('sparkle', 13) }} Générer un QCM (20 questions)</button></form>
+          {% if not fiche %}
+          {% if fiche_en_cours %}<span class="muted small">⏳ Fiche de révision en préparation…</span>
+          {% else %}<form method="post" action="{{ url_for('ai.transformations') }}">{{ ui.csrf() }}<input type="hidden" name="fiche" value="{{ note.key }}">
+            <button class="btn btn-sm" title="L’IA résume la page en une fiche : définitions, formules, méthodes, pièges">{{ icon('sparkle', 13) }} Fiche de révision</button></form>{% endif %}
+          {% endif %}
+          {% endif %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if tuteur %}
+    <section class="panel wiki-tuteur" id="tuteur" data-tuteur-url="{{ url_for('ai.tuteur') }}" data-page="{{ note.key }}" aria-labelledby="wiki-tuteur-h">
+      <div class="panel-h"><b id="wiki-tuteur-h">{{ icon('sparkle', 15) }} Demander au tuteur</b>
+        <button class="btn btn-xs btn-ghost" type="button" data-ai-ask="tuteur" title="Le tuteur t’interroge sur cette page, dans le panneau de l’assistant">{{ icon('graduation', 13) }} Interroge-moi</button></div>
+      <div class="panel-b">
+        <div class="tuteur-echanges" data-tuteur-echanges>
+          {% for e in tuteur.echanges %}
+          <div class="tuteur-echange">
+            <p class="tuteur-question">{{ e.question }}</p>
+            <div class="tuteur-reponse markdown">{{ e.html|safe }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% if tuteur.plafond %}
+        <p class="muted small">Plafond mensuel de l’IA atteint : le tuteur reviendra le mois prochain.</p>
+        {% else %}
+        <form class="tuteur-form" data-tuteur-form>
+          <textarea class="input" name="question" rows="2" required maxlength="2000" placeholder="Une question sur ce cours ? (Ctrl+Entrée pour envoyer)"></textarea>
+          <div class="tuteur-pied">
+            <span class="muted small tuteur-aide">L’IA répond d’après cette page ; elle dit quand la réponse n’y est pas. Les échanges restent ici.</span>
+            <button type="submit" class="btn btn-sm btn-primary">Demander</button>
+          </div>
+        </form>
+        {% endif %}
+        <p class="tuteur-copie"><a class="btn btn-sm" href="{{ url_for('ai.copie', page=note.key) }}">📷 Corriger ma copie sur ce cours</a></p>
+      </div>
+    </section>
+    {% endif %}
+
     <footer class="wiki-doc-foot">
       <div class="wiki-backlinks">
         <h3>{{ icon('link', 14) }} Rétroliens <span class="muted">{{ backlinks|length }}</span></h3>
@@ -104,3 +172,4 @@
   {% endif %}
 </div>
 {% endblock %}
+{% block scripts %}{% if tuteur %}<script src="{{ url_for('static', filename='wiki/tuteur.js') }}?v={{ version }}" defer></script>{% endif %}{% endblock %}

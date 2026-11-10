@@ -8,7 +8,7 @@
   {% for folder in node.folders %}
   <li class="wiki-som-folder">
     <details open>
-      <summary>{{ icon('chevron-right', 13, 'wiki-chev') }}{{ icon('folder', 15) }} <span>{{ folder.name }}</span> <span class="wiki-count">{{ folder.count }}</span>
+      <summary data-dossier="{{ folder.path.rstrip('/') }}">{{ icon('chevron-right', 13, 'wiki-chev') }}{{ icon('folder', 15) }} <span>{{ folder.name }}</span> <span class="wiki-count">{{ folder.count }}</span>
         <a class="wiki-som-open" href="{{ url_for('wiki.sommaire', dossier=folder.path.rstrip('/')) }}" title="Ouvrir ce dossier seul">{{ icon('arrow-right', 13) }}</a></summary>
       {{ arbre(folder) }}
     </details>
@@ -40,7 +40,9 @@
     {{ icon('search', 16) }}<input class="input" type="search" name="q" placeholder="Rechercher dans toutes les pages et les PDF…" aria-label="Rechercher">
     <button type="submit" class="btn btn-primary">Rechercher</button>
   </form>
-  <div class="wiki-sommaire">
+  <p class="muted small wiki-hl-aide">« ⤓ Hors ligne » sur un dossier garde ses pages, images et PDF sur cet appareil,
+    pour les lire sans connexion (les pages déjà ouvertes le sont aussi).</p>
+  <div class="wiki-sommaire" data-dossier-url="{{ url_for('wiki.dossier_hors_ligne') }}" data-cache="{{ cache_hors_ligne }}">
     {% if root.folders or root.notes or root.files %}{{ arbre(root) }}{% else %}{{ ui.empty('folder', 'Dossier vide') }}{% endif %}
   </div>
   {% if recent and not dossier %}
@@ -51,3 +53,4 @@
   {% endif %}
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='wiki/hors_ligne_wiki.js') }}?v={{ version }}" defer></script>{% endblock %}
