@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}Planning · QCM{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}medium{% endblock %}
+{% block header %}{{ qm.header('Planning et examens') }}{% endblock %}
+{% block content %}
+<div class="inner">
+  <div class="qcm-hero">
+    <div>
+      <h1>{{ icon('target', 20) }} Planning et examens</h1>
+      <div class="sub">Quotas journaliers (nouvelles questions, révisions) et date d’examen de chaque set, avec l’estimation de la durée.</div>
+    </div>
+  </div>
+  <div class="qcm-callout">{{ icon('help', 16) }}<div class="small">Conseil : limite surtout les <b>nouvelles</b> questions (10 à 30 par jour) et laisse les révisions sans limite, sinon elles s’accumulent.
+    Dans les 30 jours avant l’examen, les révisions visent 95 % de rappel au lieu de 90 % (intervalles plus serrés). « Ajuster automatiquement » passe les nouvelles par jour au nombre conseillé si l’estimation dit « en retard ».</div></div>
+
+  {% if examens %}
+  <div class="panel mb">
+    <div class="panel-h">{{ icon('calendar', 16) }}<h3>Examens à venir</h3></div>
+    <ul class="qcm-list">
+      {% for x in examens %}
+      <li style="flex-wrap:wrap"><span class="t">{{ x.categorie }}</span><span class="m">{{ x.date|date_long }} · {% if x.jours == 0 %}aujourd’hui{% elif x.jours == 1 %}demain{% else %}dans {{ x.jours }} jours{% endif %} · {{ x.sets|length }} set{{ 's' if x.sets|length > 1 }}</span>
+        <span class="r">{% if x.pret %}<span class="qcm-plan-badge ok">prêt ✓</span>{% elif x.retard %}<span class="qcm-plan-badge retard">en retard</span>{% elif x.a_commencer %}<span class="qcm-plan-badge urgent">à commencer</span>{% else %}<span class="qcm-plan-badge">dans les temps</span>{% endif %}
+          <a class="btn btn-sm" href="#cat-{{ x.categorie|qcm_slug }}">Voir</a></span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% for c in categories %}
+  <div class="panel mb" id="cat-{{ c.nom|qcm_slug }}">
+    <div class="panel-h" style="flex-wrap:wrap">{{ icon('folder', 16) }}<h3>{% if c.langue %}{{ c.langue }} · {% endif %}{{ c.nom }}</h3>
+      <span class="muted small">{{ c.sets|length }} set{{ 's' if c.sets|length > 1 }}{% if c.configures %} · {{ c.configures }} planifié{{ 's' if c.configures > 1 }}{% endif %}</span>
+      <form method="post" class="flex gap right wrap" title="La même date d’examen pour tous les sets de la catégorie ; chaque set garde ses quotas">
+        {{ ui.csrf() }}<input type="hidden" name="categorie" value="{{ c.nom }}"><input type="hidden" name="langue" value="{{ c.langue }}">
+        <input type="hidden" name="next" value="{{ url_for('qcm.planning_page') }}#cat-{{ c.nom|qcm_slug }}">
+        <label class="qcm-inline-label nowrap">Examen de la catégorie <input class="input input-sm" type="date" name="date_objectif" value="{{ c.date_objectif.isoformat() if c.date_objectif else '' }}"></label>
+        <button class="btn btn-sm">OK</button>
+      </form>
+    </div>
+    <div class="qcm-plan-rows">
+      {% for x in c.sets %}{% set d = x.deck %}{% set e = x.e %}
+      <div class="qcm-plan-row" id="{{ x.ancre }}">
+        <div>
+          <div class="flex gap" style="align-items:flex-start">{{ qm.ring(x.summary.pct_maitrise, 'sm') }}<div class="grow"><b>{{ x.set.titre }}</b>
+            <div class="muted small">{{ x.summary.total }} questions · {{ x.summary.rencontrees }} vues · {{ x.summary.a_reviser }} à réviser aujourd’hui</div>
+            <div class="mt-0" style="margin-top:4px">{{ qm.plan_badge(e) }}</div></div></div>
+        </div>
+        <div>
+          <form method="post" class="qcm-plan-form">
+            {{ ui.csrf() }}<input type="hidden" name="set" value="{{ x.set.id }}">
+            <input type="hidden" name="next" value="{{ url_for('qcm.planning_page') }}">
+            <label title="Questions jamais vues découvertes chaque jour">Nouvelles / jour<input class="input input-sm" type="number" name="nouvelles_jour" min="1" max="9999" value="{{ d.nouvelles_jour or '' }}" placeholder="illimité"></label>
+            <label title="Questions déjà vues revenues à échéance, revues chaque jour">Révisions / jour<input class="input input-sm" type="number" name="revisions_jour" min="1" max="9999" value="{{ d.revisions_jour or '' }}" placeholder="illimité"></label>
+            <label>Date d’examen<input class="input input-sm" type="date" name="date_objectif" value="{{ d.date_objectif.isoformat() if d.date_objectif else '' }}"></label>
+            <label class="chk" title="Si l’estimation dit « en retard », les nouvelles questions par jour passent au nombre conseillé et les révisions ne sont plus limitées"><input type="checkbox" name="auto" value="1"{% if d.auto_quota %} checked{% endif %}> Ajuster auto.</label>
+            <button class="btn btn-sm btn-primary" type="submit">OK</button>
+          </form>
+          {% if e %}
+          <div class="qcm-plan-est">
+            {% if e.su %}<p>Au moins {{ e.part_objectif }} % des questions sont déjà sues ✓. Il ne reste qu’à suivre les révisions du jour.</p>
+            {% else %}
+            <p>{% if e.jours %}Avec ces réglages : environ <b>{{ e.jours }} jour{{ 's' if e.jours > 1 }}</b> pour savoir {{ e.part_objectif }} % des questions (vers le {{ e.fin|date }}), soit ~{{ e.questions_jour }} questions et ~{{ e.minutes_jour }} min par jour.
+              {% else %}Avec ces réglages, il faudrait plus d’un an : augmente les quotas.{% endif %}</p>
+            {% if e.statut == "ok" %}<p>Pour être prêt le {{ e.objectif|date }} : {% if e.commencer_maintenant %}<b>commence dès aujourd’hui</b>{% if e.marge %} ({{ e.marge }} jour{{ 's' if e.marge > 1 }} de marge){% endif %}.{% else %}commence <b>au plus tard le {{ e.debut|date_long }}</b> ({{ e.marge }} jours de marge si tu commences aujourd’hui).{% endif %}</p>
+            {% elif e.statut == "retard" %}<p class="qcm-plan-alert">Il ne reste que {{ e.jours_dispo }} jour{{ 's' if e.jours_dispo > 1 }} avant le {{ e.objectif|date }} : passe à <b>{{ e.nouvelles_conseillees }} nouvelle{{ 's' if e.nouvelles_conseillees > 1 }} par jour</b>{% if e.revisions_limitees %}, <b>sans limite de révisions</b>{% endif %} (~{{ e.questions_conseillees }} questions et ~{{ e.minutes_conseillees }} min par jour) pour être prêt à temps.</p>
+            {% elif e.statut == "impossible" %}<p class="qcm-plan-alert">Il ne reste que {{ e.jours_dispo }} jour{{ 's' if e.jours_dispo > 1 }} avant le {{ e.objectif|date }} : même sans limite, la révision espacée demande {% if e.jours_min %}au moins {{ e.jours_min }} jours{% else %}plus d’un an{% endif %}. Le mode « Intensif » permet de rattraper une partie du retard.</p>
+            {% elif e.statut == "passee" %}<p class="muted">La date d’examen est passée.</p>{% endif %}
+            <p class="muted small">Hypothèses : {{ e.precision }} % de bonnes réponses{% if not e.precision_mesuree %} (valeur par défaut){% endif %}, {{ e.secondes }} s par question{% if not e.secondes_mesurees %} (valeur par défaut, mesurée au fil des réponses){% endif %} ; une question est « sue » quand sa stabilité FSRS atteint {{ e.stabilite_objectif }} jours.{% if e.retention > 90 %} Examen proche : les révisions visent {{ e.retention }} % de rappel.{% endif %}{% if e.auto and e.statut == "retard" %} Ajustement automatique : {{ e.nouvelles_conseillees }} nouvelles par jour appliquées.{% endif %}</p>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  {{ ui.empty('target', 'Aucun set de QCM', 'Ajoute des sets pour planifier tes révisions.') }}
+  {% endfor %}
+</div>
+{% endblock %}
