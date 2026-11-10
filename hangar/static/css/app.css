@@ -1172,3 +1172,14 @@ html.ai-open .ai-panel { display: flex; }
 .em-link-pick { display: flex; gap: 6px; align-items: center; }
 .em-link-pick .input { width: auto; max-width: 240px; }
 .em-link-exam { margin-top: 2px; }
+/* Le contenu s'adapte à la place réellement disponible (panneau IA ouvert, menu replié…) */
+.content { container-type: inline-size; container-name: content; }
+@container content (max-width: 1060px) {
+  .ag-grid { grid-template-columns: minmax(0, 1fr); }
+  .ag-side { order: -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+}
+@container content (max-width: 700px) {
+  .ag-top { grid-template-columns: minmax(0, 1fr); }
+  .ag-side { display: flex; align-items: stretch; }
+  .home-grid { grid-template-columns: minmax(0, 1fr); }
+}
