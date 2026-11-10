@@ -46,6 +46,10 @@ Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaqu
 - Syntaxe Obsidian : liens `[[…]]` et alias, intégrations `![[…]]` (images, PDF, notes, sections), encadrés `> [!note]`, propriétés YAML, tags, formules `$…$` / `$$…$$`, diagrammes Mermaid, surlignage, notes de bas de page…
 - Menu façon Plane : collections (les dossiers), favoris, pages récentes, sommaire, tags, graphe, recherche (pages **et texte des PDF**).
 - Éditeur CodeMirror (aperçu en direct, côte à côte, Ctrl+S, collage d'images, liens suggérés, brouillon de secours), historique des versions avec différences et restauration, import de fichiers (.md, PDF, images, LaTeX), lecteur PDF avec annotations, conversion LaTeX → page.
+- **Lecture** comme dans Revision : le menu se cache pendant la lecture (languette ›, bord de l'écran, ou bouton ▯ pour le garder), plein écran, impression propre (Ctrl+P), palette de commandes intégrée à Ctrl+K (pages, PDF, sets de QCM, sessions de langue, commandes).
+- **Hors ligne et installable** : le wiki s'installe sur téléphone (« Ajouter à l'écran d'accueil ») ; les pages lues restent lisibles sans réseau, et « ⤓ Hors ligne » sur un dossier du sommaire garde d'un coup ses pages, images et PDF.
+- Sous chaque page : « Réviser ce cours » (QCM écrits d'après la page, cartes, QCM et fiche par l'IA) et le **tuteur** (questions sur la page, « 📷 Corriger ma copie »). Le menu du wiki donne aussi accès à tout Revision : Aujourd'hui, QCM, Langues, Demander au wiki, Corriger ma copie, Transformer un cours, Travaux de l'IA, Documentation.
+- Documentation intégrée (`/documentation/`), page des erreurs du serveur pour les administrateurs, anciennes adresses de Revision redirigées.
 
 ## QCM et révision espacée
 
@@ -54,6 +58,10 @@ Section séparée du wiki. Tout fichier `.json` du coffre contenant une clé `qu
 - Algorithme **FSRS** : chaque carte revient juste avant d'être oubliée ; « Réviser tout ce qui est dû » ; quotas par set, **date d'examen** avec quotas ajustés automatiquement.
 - Statistiques (calendrier d'activité, série de jours, temps par matière), espace personnel, import/export JSON, CSV et Anki (`.apkg`), signalements.
 - Les cartes dues apparaissent sur le tableau de bord et dans le résumé quotidien. `uv run hangar qcm-verifier` contrôle les fichiers.
+- **QCM hors ligne** (`/qcm/hors-ligne/`, installable) : télécharge des sets et des paquets de langue, révise sans réseau ; les réponses rejoignent ta progression au retour de la connexion.
+- **Rappel quotidien par notification** du navigateur, à l'heure choisie (page « Aujourd'hui ») : ce qu'il reste à réviser et ta série de jours.
+- **Appli Android de Revision** : Hangar répond aux mêmes adresses (connexion par jeton d'appareil, QCM hors ligne, rappel, widget, partage vers le wiki) ; il suffit d'indiquer l'adresse de Hangar dans les réglages de l'appli. Les appareils connectés se révoquent depuis *Mon profil*.
+- Connexion protégée : blocage de 30 minutes après 5 mauvais mots de passe (déblocage par un administrateur ou `uv run hangar connexions-debloquer`).
 
 ## Assistant IA (Claude ou IA open source)
 
@@ -160,6 +168,8 @@ uv run hangar mail-send             # envoie la file d'e-mails, les rappels de l
 uv run hangar wiki-import <dossier|url git> [--remplacer]   # importe un coffre Obsidian (cours) dans le wiki
 uv run hangar wiki-indexer-pdf      # lit le texte de tous les PDF du wiki (recherche)
 uv run hangar qcm-verifier          # vérifie les fichiers de QCM et de langue
+uv run hangar qcm-rappels           # envoie maintenant les rappels de révision dus (notifications)
+uv run hangar connexions-debloquer  # lève les blocages de connexion
 uv run hangar ia-ajouter ollama     # ajoute un fournisseur d'IA (anthropic, ollama, lmstudio, vllm, openrouter, mistral…)
 uv run hangar ia-tester             # teste la connexion aux fournisseurs d'IA
 uv run hangar ia-usage              # dépense et jetons de l'IA ce mois-ci

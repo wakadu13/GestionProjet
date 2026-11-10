@@ -298,7 +298,7 @@ class ErreursTests(PariteTestCase):
 class AliasTests(PariteTestCase):
     def test_anciennes_adresses_de_revision(self):
         for ancienne, nouvelle in (("/claude/reglages/", "/ia/reglages/"), ("/aujourdhui/", "/qcm/aujourdhui/"),
-                                   ("/compte/", "/settings/profile"), ("/compte/mot-de-passe/", "/settings/profile"),
+                                   ("/compte/", "/settings/profile"), ("/compte/mot-de-passe/", "/settings/profile#password"),
                                    ("/utilisateurs/", "/team/")):
             r = self.client.get(ancienne)
             self.assertEqual(r.status_code, 302, ancienne)

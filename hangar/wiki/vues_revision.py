@@ -224,13 +224,10 @@ def erreurs():
 # Anciennes adresses de Revision : les liens écrits dans les notes du coffre mènent au bon endroit
 # ---------------------------------------------------------------------------
 
+# /aujourdhui/, /connexion/, /compte/…, /utilisateurs/ sont définis par hangar/appareils.py (l'appli Android
+# intercepte /connexion/ pour rouvrir sa session avec son jeton) : seules les adresses propres au wiki ici.
 ALIAS = {
     "/claude/reglages/": "ai.reglages",
-    "/aujourdhui/": "qcm.aujourdhui",
-    "/compte/": "settings.profile",
-    "/compte/mot-de-passe/": "settings.profile",
-    "/utilisateurs/": "team.index",
-    "/connexion/": "auth.login",
 }
 
 
@@ -245,4 +242,3 @@ def _alias():
 
 for _regle in ALIAS:
     bp.add_url_rule(_regle, "alias_" + _regle.strip("/").replace("/", "_").replace("-", "_"), _alias)
-PUBLICS.add("wiki.alias_connexion")  # page de connexion : accessible sans compte
