@@ -1421,9 +1421,36 @@
     $('[data-em-reminders]', emModal).innerHTML = ev.reminders.map((r) => `<div class="em-rem">${ICON.bell}<span class="grow">${esc(r.label)}${r.auto ? ' <span class="muted">(automatique)</span>' : ''} <span class="muted">· ${esc(r.when)} · ${r.channel === 'email' ? 'e-mail' : 'appli'}</span></span><span class="badge ${r.status === 'pending' ? 'badge-accent' : ''}">${esc(r.statusLabel)}</span><button type="button" class="btn btn-ghost btn-icon btn-xs" data-rem-del="${r.id}" title="Supprimer">${ICON.x}</button></div>`).join('');
     $('[data-em-tasks]', emModal).innerHTML = ev.tasks.map((t) => `<button type="button" class="em-rem" data-edit-task="${t.id}" style="border:0;font:inherit;color:inherit;cursor:pointer;text-align:left">${t.done ? ICON.check : ICON.calendar}<span class="grow ${t.done ? 'muted' : ''}" style="${t.done ? 'text-decoration:line-through' : ''}">${esc(t.title)}</span><span class="muted small">${esc(t.date)}</span></button>`).join('');
     $('[data-em-add-task]', emModal).onclick = () => { emModal.close(); openTask({ date: ev.date, event: ev.id, start: '', title: '' }); };
+    renderEventLinks(ev);
     emModal.showModal();
   }
   H.openEvent = openEvent;
+  // Liens de la matière : collection du wiki et catégorie de QCM (+ date d'examen pour un contrôle)
+  function renderEventLinks(ev) {
+    const sec = $('[data-em-links-section]', emModal);
+    const box = $('[data-em-links]', emModal);
+    const L = ev.links || {};
+    const hasWiki = L.wiki || (L.wikiAll || []).length;
+    const hasQcm = L.qcm || (L.qcmAll || []).length;
+    sec.hidden = !(hasWiki || hasQcm);
+    if (sec.hidden) { box.innerHTML = ''; return; }
+    const next = esc(location.pathname + location.search);
+    const form = (field, value, label, cls = 'btn btn-xs') => `<form method="post" action="${esc(ev.urls.link)}" class="inline-form"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><input type="hidden" name="${field}" value="${esc(value)}"><button class="${cls}">${label}</button></form>`;
+    const picker = (field, all, placeholder) => `<form method="post" action="${esc(ev.urls.link)}" class="em-link-pick"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><select class="input input-sm" name="${field}" aria-label="${esc(placeholder)}"><option value="">${esc(placeholder)}</option>${all.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select><button class="btn btn-xs">Relier</button></form>`;
+    let html = '';
+    if (L.wiki) {
+      html += `<div class="em-link"><span class="em-link-k">Cours</span><a class="em-link-v" href="${esc(L.wiki.url)}">${esc(L.wiki.label)}</a>${form('wiki_path', '', 'Délier', 'btn btn-ghost btn-xs')}</div>`;
+    } else if (hasWiki) {
+      html += `<div class="em-link"><span class="em-link-k">Cours</span><span class="em-link-sug">${(L.wikiSuggest || []).map((p) => form('wiki_path', p, `${esc(p.split('/').pop())} ?`, 'btn btn-xs em-sug')).join('')}${picker('wiki_path', L.wikiAll || [], 'Choisir une collection du wiki…')}</span></div>`;
+    }
+    if (L.qcm) {
+      html += `<div class="em-link"><span class="em-link-k">QCM</span><a class="em-link-v" href="${esc(L.qcm.url)}">${esc(L.qcm.label)}</a>${L.qcm.due ? `<span class="badge badge-accent">${L.qcm.due} à revoir</span>` : ''}${form('qcm_category', '', 'Délier', 'btn btn-ghost btn-xs')}</div>`;
+      if (ev.exam && !ev.removed) html += `<form method="post" action="${esc(ev.urls.exam)}" class="em-link-exam"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><button class="btn btn-sm btn-primary">Préparer ce contrôle : date d’examen des QCM au ${esc(ev.date.split('-').reverse().join('/'))}</button></form>`;
+    } else if (hasQcm) {
+      html += `<div class="em-link"><span class="em-link-k">QCM</span><span class="em-link-sug">${(L.qcmSuggest || []).map((c) => form('qcm_category', c, `${esc(c)} ?`, 'btn btn-xs em-sug')).join('')}${picker('qcm_category', L.qcmAll || [], 'Choisir une catégorie de QCM…')}</span></div>`;
+    }
+    box.innerHTML = html;
+  }
   document.addEventListener('click', async (e) => {
     const ev = e.target.closest('[data-ev]');
     if (ev && !e.target.closest('[data-task-toggle]')) { e.preventDefault(); openEvent(ev.dataset.ev); return; }

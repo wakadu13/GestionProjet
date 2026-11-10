@@ -415,6 +415,36 @@ def event_reminder(eid):
     return redirect(back_url(url_for("agenda.dashboard")))
 
 
+@bp.route("/agenda/events/<int:eid>/link", methods=["POST"])
+@login_required
+def subject_link(eid):
+    """Relie la matière d'une séance à une collection du wiki et/ou à une catégorie de QCM."""
+    ev = _own_event(eid)
+    f = request.form
+    A.set_subject_link(current_user, ev.title,
+                       wiki_path=f.get("wiki_path") if "wiki_path" in f else None,
+                       qcm_category=f.get("qcm_category") if "qcm_category" in f else None)
+    db.session.commit()
+    if _fetch():
+        return jsonify(ok=True)
+    flash(f"Liens de « {ev.title} » enregistrés (pour toutes ses séances).", "success")
+    return redirect(back_url(url_for("agenda.calendar", date=ev.start.date().isoformat())))
+
+
+@bp.route("/agenda/events/<int:eid>/exam", methods=["POST"])
+@login_required
+def event_exam(eid):
+    """Fixe la date d'examen des QCM liés à la matière au jour de ce contrôle."""
+    ev = _own_event(eid)
+    n = A.set_exam_objective(current_user, ev)
+    if n:
+        flash(f"Date d’examen fixée au {ev.start:%d/%m/%Y} pour {n} set(s) de QCM : les révisions s’organisent "
+              "pour être prêt à temps.", "success")
+    else:
+        flash("Relie d’abord cette matière à une catégorie de QCM.", "info")
+    return redirect(back_url(url_for("agenda.dashboard")))
+
+
 @bp.route("/agenda/reminders/<int:rid>/delete", methods=["POST"])
 @login_required
 def reminder_delete(rid):

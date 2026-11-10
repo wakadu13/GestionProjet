@@ -23,7 +23,7 @@ from . import ics
 from .extensions import db
 from .models import (
     PRIORITY_ORDER, RECURRENCES, REMINDER_OFFSETS, AgendaEvent, AgendaImport, AgendaReminder, AgendaSettings,
-    AgendaTask, Notification, User, now,
+    AgendaSubjectLink, AgendaTask, Notification, User, now,
 )
 from .utils import DAYS, DAYS_FULL, MONTHS, MONTHS_FULL, normalize
 
@@ -1122,8 +1122,18 @@ def event_payload(ev: AgendaEvent, recent: set[int], url_for) -> dict:
         "reminders": [reminder_payload(r) for r in ev.reminders],
         "tasks": [{"id": t.id, "title": t.title, "done": t.is_done, "date": t.due_date.isoformat() if t.due_date else ""}
                   for t in tasks],
-        "urls": {"note": url_for("agenda.event_note", eid=ev.id), "reminder": url_for("agenda.event_reminder", eid=ev.id)},
+        "urls": {"note": url_for("agenda.event_note", eid=ev.id), "reminder": url_for("agenda.event_reminder", eid=ev.id),
+                 "link": url_for("agenda.subject_link", eid=ev.id), "exam": url_for("agenda.event_exam", eid=ev.id)},
+        "links": _safe_links(ev),
     }
+
+
+def _safe_links(ev: AgendaEvent) -> dict:
+    try:
+        from flask_login import current_user as _cu
+        return subject_links(_cu, ev) if _cu and _cu.is_authenticated else {}
+    except Exception:  # noqa: BLE001 - la fenêtre de détail reste utilisable sans les liens
+        return {}
 
 
 def task_payload(t: AgendaTask, url_for) -> dict:
@@ -1233,3 +1243,174 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
 
 __all__ = ["IMPORT_MODES", "RECURRENCES", "REMINDER_OFFSETS", "import_calendar", "undo_import", "week_view",
            "month_view", "list_view", "dashboard", "run_jobs", "export_ics"]
+
+
+# ---------------------------------------------------------------------------
+# Matières : séance de l'emploi du temps ↔ collection du wiki ↔ catégorie de QCM
+# ---------------------------------------------------------------------------
+
+_STOP = {"de", "du", "des", "la", "le", "les", "et", "en", "sur", "aux", "au", "un", "une", "a", "l", "d", "niveau"}
+_IGNORED_FOLDERS = {"qcm", "image", "images", "fichiers", "guide", "attachments", "assets"}
+
+
+def subject_key(title: str) -> str:
+    return normalize(title)[:300]
+
+
+def _words(text: str) -> list[str]:
+    out = []
+    for w in normalize(re.sub(r"([a-z])([A-Z])", r"\1 \2", text or "")).split():
+        if w not in _STOP and not w.isdigit():
+            out.append(w[:-1] if len(w) > 4 and w.endswith("s") else w)
+    return out
+
+
+def _similarity(title: str, candidate: str) -> int:
+    """Score 0–100 de ressemblance entre un intitulé de cours et un nom de dossier / catégorie."""
+    a, b = _words(title), _words(candidate)
+    if not a or not b:
+        return 0
+    ca, cb = "".join(a), "".join(b)
+    if ca == cb:
+        return 100
+    score = 0
+    inter = set(a) & set(b)
+    if inter:
+        score = max(score, int(80 * len(inter) / len(set(a) | set(b))) + 20)
+    acronym = "".join(w[0] for w in a if len(w) > 2)
+    for tok in b:
+        if len(tok) >= 2 and len(acronym) >= 2 and (acronym.startswith(tok) or tok.startswith(acronym)):
+            score = max(score, 65)
+    if len(cb) >= 4 and (cb in ca or ca in cb):
+        score = max(score, 55)
+    return min(score, 99)
+
+
+def wiki_collections() -> list[dict]:
+    """Dossiers du coffre proposés comme « cours » : [{path, label, url}] (vide si le wiki est indisponible)."""
+    from flask import g
+    if "_wiki_collections" in g:
+        return g.get("_wiki_collections")
+    g._wiki_collections = _wiki_collections()
+    return g._wiki_collections
+
+
+def _wiki_collections() -> list[dict]:
+    try:
+        from flask import url_for as _url
+        from .wiki.vault import get_vault
+        vault = get_vault()
+    except Exception:  # noqa: BLE001 - wiki absent ou coffre illisible
+        return []
+    out = []
+    for path in sorted(vault.folders(), key=lambda p: p.lower()):
+        parts = [p for p in str(path).split("/") if p]
+        if not parts or len(parts) > 3 or parts[0].lower() in _IGNORED_FOLDERS or any(p.startswith(".") for p in parts):
+            continue
+        out.append({"path": "/".join(parts), "label": parts[-1], "group": "/".join(parts[:-1]),
+                    "url": _url("wiki.sommaire", dossier="/".join(parts))})
+    return out
+
+
+def _wiki_target(path: str) -> dict | None:
+    """Lien vers une collection : sa page « 00 - Sommaire … » si elle existe, sinon le sommaire du dossier."""
+    if not path:
+        return None
+    try:
+        from flask import url_for as _url
+        from .wiki.vault import get_vault
+        vault = get_vault()
+    except Exception:  # noqa: BLE001
+        return None
+    prefix = path.strip("/").lower() + "/"
+    notes = [n for n in vault.notes.values() if str(n.path).lower().startswith(prefix)
+             and str(n.path).count("/") == path.count("/") + 1]
+    home = next((n for n in sorted(notes, key=lambda n: str(n.path).lower()) if "sommaire" in n.name.lower()), None)
+    label = path.rsplit("/", 1)[-1]
+    if home is not None:
+        return {"label": label, "url": home.url, "path": path}
+    return {"label": label, "url": _url("wiki.sommaire", dossier=path), "path": path}
+
+
+def qcm_categories(user) -> dict[str, int]:
+    """{catégorie de sets : cartes dues aujourd'hui} pour un compte (vide si le module QCM est indisponible)."""
+    from flask import g
+    key = f"_qcm_cats_{user.id}"
+    if key in g:
+        return g.get(key)
+    cats: dict[str, int] = {}
+    try:
+        from .qcm.services import bibliotheque, resume_du_jour
+        for cat in bibliotheque(user.id).categories():
+            cats.setdefault(cat, 0)
+        for st in resume_du_jour(user).get("par_set", []):
+            cats[st.get("categorie", "")] = cats.get(st.get("categorie", ""), 0) + int(st.get("cartes") or 0)
+    except Exception:  # noqa: BLE001
+        cats = {}
+    setattr(g, key, cats)
+    return cats
+
+
+def subject_links(user, ev: AgendaEvent) -> dict:
+    """Liens et suggestions d'une séance pour la fenêtre de détail."""
+    link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=subject_key(ev.title)).first()
+    out = {"subject": ev.title, "wiki": None, "qcm": None, "wikiSuggest": [], "qcmSuggest": [], "wikiAll": [],
+           "qcmAll": []}
+    cols = wiki_collections()
+    cats = qcm_categories(user)
+    if link and link.wiki_path:
+        out["wiki"] = _wiki_target(link.wiki_path)
+    if link and link.qcm_category:
+        from flask import url_for as _url
+        out["qcm"] = {"label": link.qcm_category, "due": cats.get(link.qcm_category, 0),
+                      "url": _url("qcm.index") + "#cat-" + re.sub(r"[^a-z0-9]+", "-", normalize(link.qcm_category)).strip("-")}
+    teachers = [w for w in _words(ev.teachers or "") if len(w) > 3]
+
+    def score(cand: str) -> int:
+        sc = _similarity(ev.title, cand)
+        cw = "".join(_words(cand))
+        if any(t in cw for t in teachers):  # « TELECOM_SANTORI » pour un cours de M. Santori
+            sc = max(sc, 60)
+        return sc
+
+    if out["wiki"] is None and cols:
+        scored = sorted(((max(score(c["label"]), score(c["path"])), c) for c in cols), key=lambda x: -x[0])
+        out["wikiSuggest"] = [c["path"] for s, c in scored[:3] if s >= 45]
+        out["wikiAll"] = [c["path"] for c in cols]
+    if out["qcm"] is None and cats:
+        scored = sorted(((score(c), c) for c in cats), key=lambda x: -x[0])
+        out["qcmSuggest"] = [c for s, c in scored[:3] if s >= 45]
+        out["qcmAll"] = sorted(cats, key=str.lower)
+    return out
+
+
+def set_subject_link(user, title: str, wiki_path: str | None = None, qcm_category: str | None = None) -> AgendaSubjectLink:
+    key = subject_key(title)
+    link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=key).first()
+    if link is None:
+        link = AgendaSubjectLink(user_id=user.id, subject=key, title=title[:300], created_at=now())
+        db.session.add(link)
+    if wiki_path is not None:
+        link.wiki_path = wiki_path.strip("/")[:500]
+    if qcm_category is not None:
+        link.qcm_category = qcm_category[:300]
+    link.updated_at = now()
+    return link
+
+
+def set_exam_objective(user, ev: AgendaEvent) -> int:
+    """Date d'examen des sets de la catégorie de QCM liée = jour du contrôle. Retourne le nombre de sets."""
+    link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=subject_key(ev.title)).first()
+    if link is None or not link.qcm_category:
+        return 0
+    from .qcm.models import QuizDeck
+    from .qcm.services import bibliotheque
+    sets = bibliotheque(user.id).categories().get(link.qcm_category, [])
+    for s in sets:
+        deck = QuizDeck.query.filter_by(user_id=user.id, set_id=s.id).first()
+        if deck is None:
+            deck = QuizDeck(user_id=user.id, set_id=s.id)
+            db.session.add(deck)
+        deck.date_objectif = ev.start.date()
+    db.session.commit()
+    return len(sets)

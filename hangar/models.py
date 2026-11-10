@@ -1248,3 +1248,19 @@ class InitiativeUpdate(db.Model):
     @property
     def health_color(self):
         return HEALTH_COLORS.get(self.health, "#a3a3a3")
+
+
+class AgendaSubjectLink(db.Model):
+    """Matière de l'emploi du temps reliée à une collection du wiki et à une catégorie de QCM (par compte).
+
+    La clé est le titre normalisé de la séance : le lien vaut pour toutes les séances de la matière."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    subject = db.Column(db.String(300), nullable=False)   # titre normalisé
+    title = db.Column(db.String(300), default="")         # titre affiché
+    wiki_path = db.Column(db.String(500), default="")     # dossier (collection) ou page du coffre
+    qcm_category = db.Column(db.String(300), default="")  # catégorie de sets de QCM
+    created_at = db.Column(db.DateTime, default=now)
+    updated_at = db.Column(db.DateTime, default=now)
+
+    __table_args__ = (db.UniqueConstraint("user_id", "subject"),)
