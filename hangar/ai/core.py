@@ -38,6 +38,7 @@ log = logging.getLogger(__name__)
 EFFORT_BY_ROLE = {"rapide": "low"}
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 CLAUDE_MAX_TOKENS = 16000
+LOCAL_MAX_TOKENS = 32000
 MAX_TOOL_ROUNDS = 6
 
 
@@ -355,6 +356,8 @@ def prepare(messages, *, system: str | None = None, role: str = "chat", model: s
     if model and not (model.startswith("claude-") and row.kind != "anthropic"):
         mdl = model
     eff = effort or row.effort or EFFORT_BY_ROLE.get(role, "medium")
+    if row.kind != "anthropic" and max_tokens and max_tokens > LOCAL_MAX_TOKENS:
+        max_tokens = None  # un serveur local refuse un plafond plus grand que sa mémoire : il choisit lui-même
     req = Request(messages=msgs, model=mdl, system=system, max_tokens=max_tokens or
                   (CLAUDE_MAX_TOKENS if row.kind == "anthropic" else None), effort=eff if eff in EFFORTS else "medium",
                   json_schema=json_schema, tools=tools or None, cache_system=cache_system,

@@ -1,0 +1,16 @@
+<details class="panel ai-copie-bloc" data-copie="{{ b.c.id }}"{% if ouvert %} open{% endif %}>
+  <summary>
+    {{ icon('image', 15) }}<b>{{ b.c.cree_le|datetime }}</b>
+    {% if b.page %}<span class="help">· {{ b.page.title }}</span>{% endif %}
+    {% if b.c.enonce %}<span class="help ellipsis">· {{ b.c.enonce|truncate(70) }}</span>{% endif %}
+  </summary>
+  <div class="panel-b">
+    <div class="ai-copie-photos">
+      {% for n in b.photos %}<a href="{{ url_for('ai.copie_photo', pk=b.c.id, n=n) }}" target="_blank" rel="noopener"><img src="{{ url_for('ai.copie_photo', pk=b.c.id, n=n) }}" alt="Photo {{ loop.index }} de la copie" loading="lazy"></a>{% endfor %}
+    </div>
+    {% if b.c.enonce %}<p class="ai-copie-enonce"><b>Énoncé :</b> {{ b.c.enonce|nl2br }}</p>{% endif %}
+    {% if b.page %}<p class="help">Cours de référence : <a href="{{ b.page.url }}">{{ b.page.title }}</a></p>{% endif %}
+    <div class="markdown wiki-markdown ai-copie-texte">{{ b.html|safe }}</div>
+    <div class="flex gap mt"><span class="help grow">{{ b.c.modele }}</span><button type="button" class="btn btn-danger-ghost btn-xs" data-copie-supprimer>{{ icon('trash', 12) }} Supprimer cette correction</button></div>
+  </div>
+</details>

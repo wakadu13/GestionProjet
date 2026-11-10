@@ -70,7 +70,7 @@
           <div class="field"><label>Titre <span class="muted">(facultatif)</span></label><input class="input" name="titre"></div>
         </div>
         <div class="flex gap wrap mt"><label class="qcm-check"><input type="checkbox" name="publier" value="1"> Publier directement, sans relecture</label>
-          <label class="qcm-check" title="Traitement différé à moitié prix (Claude)"><input type="checkbox" name="lot" value="1"> Sans urgence (en lot)</label>
+          {% if ai_lots() %}<label class="qcm-check" title="Traitement différé à moitié prix (Claude)"><input type="checkbox" name="lot" value="1"> Sans urgence (en lot)</label>{% endif %}
           <button type="submit" class="btn btn-primary right">{{ icon('sparkle', 14) }} Générer le QCM</button></div>
       </form>
       <hr>

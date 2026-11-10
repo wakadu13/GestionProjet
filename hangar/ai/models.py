@@ -271,7 +271,7 @@ class AIJob(db.Model):
     __tablename__ = "ai_job"
     id = db.Column(db.Integer, primary_key=True)
     kind = db.Column(db.String(60), nullable=False, index=True)
-    status = db.Column(db.String(12), default="pending", index=True)  # pending | running | batch | done | error
+    status = db.Column(db.String(12), default="pending", index=True)  # pending|running|batch|draft|done|error
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"), index=True)
     feature = db.Column(db.String(60), default="")
     title = db.Column(db.String(300), default="")
@@ -322,3 +322,54 @@ class AIJob(db.Model):
     @result.setter
     def result(self, v) -> None:
         self.result_json = _dumps(v) if v is not None else ""
+
+    def totaux(self) -> dict:
+        """Résumé des appels faits par le travail (rejoués depuis `calls`) : modèle, jetons, coût estimé."""
+        calls = [c for c in self.calls if isinstance(c, dict) and "usage" in c]
+        u = [c.get("usage") or {} for c in calls]
+        return {"model": calls[-1].get("model", "") if calls else "",
+                "input": sum(x.get("input_tokens", 0) + x.get("cache_read_tokens", 0) + x.get("cache_write_tokens", 0)
+                             for x in u),
+                "output": sum(x.get("output_tokens", 0) for x in u),
+                "cost": sum(float(c.get("cost") or 0) for c in calls) if calls else None}
+
+
+class AITutorExchange(db.Model):
+    """Question posée au tuteur sur une page du wiki, ou à tout le wiki (« Demander au wiki », page = "*"),
+    et la réponse : l'historique du compte nourrit la question suivante (EchangeTuteur de Revision)."""
+    __tablename__ = "ai_echange_tuteur"
+    PAGE_WIKI = "*"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    page = db.Column(db.String(500), nullable=False)        # clé de la note, ou "*" pour tout le wiki
+    question = db.Column(db.Text, nullable=False)
+    reponse = db.Column(db.Text, nullable=False)
+    sources_json = db.Column(db.Text, default="[]")         # « Demander au wiki » : extraits [{titre, url, type}]
+    modele = db.Column(db.String(200), default="")
+    jetons_entree = db.Column(db.Integer, default=0)
+    jetons_sortie = db.Column(db.Integer, default=0)
+    cree_le = db.Column(db.DateTime, default=now, index=True)
+
+    @property
+    def sources(self) -> list:
+        return _loads(self.sources_json, [])
+
+    @sources.setter
+    def sources(self, v) -> None:
+        self.sources_json = _dumps(v or [])
+
+
+class AICopie(db.Model):
+    """Copie manuscrite photographiée et sa correction (CorrectionCopie de Revision). Les photos, allégées, sont
+    gardées hors du coffre : DATA_DIR/copies/<user_id>/<id>-<n>.jpg, visibles de leur seul auteur."""
+    __tablename__ = "ai_copie"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    enonce = db.Column(db.Text, default="")
+    page = db.Column(db.String(500), default="")             # page du cours donnée comme référence
+    photos = db.Column(db.Integer, default=0)
+    correction = db.Column(db.Text, default="")
+    modele = db.Column(db.String(200), default="")
+    jetons_entree = db.Column(db.Integer, default=0)
+    jetons_sortie = db.Column(db.Integer, default=0)
+    cree_le = db.Column(db.DateTime, default=now, index=True)

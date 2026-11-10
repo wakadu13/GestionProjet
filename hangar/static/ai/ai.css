@@ -126,6 +126,15 @@ html.ai-fullpage .ai-panel { display: none !important; }
 .ai-chip .ic { flex: none; }
 .ai-chip.page { background: var(--accent-bg); color: var(--accent-text); }
 .ai-chip.off { background: transparent; border: 1px dashed var(--border); color: var(--text-3); cursor: pointer; padding-right: 7px; }
+.ai-chip.mode { background: color-mix(in srgb, #8b5cf6 14%, transparent); color: #7c3aed; }
+:root[data-theme="dark"] .ai-chip.mode { color: #c4b5fd; }
+.ai-sources { margin-top: 8px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--bg-2); }
+.ai-sources summary { cursor: pointer; color: var(--text-2); display: flex; align-items: center; gap: 6px; font-weight: 500; }
+.ai-sources ol { margin: 6px 0 2px; padding-left: 22px; }
+.ai-sources li { margin: 2px 0; color: var(--text-3); }
+.ai-sources li.cite a { font-weight: 600; }
+.ai-sources a, .ai-md a.citation { color: var(--accent-text); }
+.ai-md a.citation { font-size: .82em; vertical-align: super; text-decoration: none; padding: 0 1px; }
 .ai-chip.mini { height: 20px; font-size: 11px; padding: 0 6px; background: transparent; border-color: var(--border); color: var(--text-3); }
 .ai-chip.mini > span { max-width: 160px; }
 .ai-chip button { border: 0; background: none; color: inherit; opacity: .55; cursor: pointer; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; padding: 0; flex: none; }
@@ -218,7 +227,57 @@ html.ai-fullpage .ai-panel { display: none !important; }
 .ai-pm-help:empty { display: none; }
 #ai-prov-modal .ai-test-res { margin-top: 10px; }
 
+/* ---------- Travaux, relecture, « Demander au wiki », copies ---------- */
+.ai-tr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.ai-tr-grid h3, .ai-help h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.ai-tr-grid .input[type=file] { padding: 5px; height: auto; }
+.ai-help ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; color: var(--text-2); }
+.ai-lots { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ai-jobs { overflow: hidden; }
+.ai-job { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border-2); flex-wrap: wrap; }
+.ai-job:last-child { border-bottom: 0; }
+.ai-job-ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; background: var(--bg-3); color: var(--text-2); }
+.ai-job-ic.st-done { background: var(--success-bg); color: var(--success); }
+.ai-job-ic.st-error { background: var(--danger-bg); color: var(--danger); }
+.ai-job-ic.st-draft { background: var(--warning-bg); color: var(--warning); }
+.ai-job-ic.st-running .ic { animation: ai-spin 1.2s linear infinite; }
+.ai-job-ic.st-running, .ai-job-ic.st-batch { background: var(--accent-bg); color: var(--accent-text); }
+.ai-job-main { display: flex; flex-direction: column; gap: 3px; min-width: 200px; }
+.ai-job-t { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ai-job-t b { overflow-wrap: anywhere; }
+.ai-job-b { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ai-rl-liste { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ai-rl-item > .input, .ai-rl-item textarea.input { width: 100%; }
+.ai-rl-h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ai-rl-choix { list-style: none; margin: 8px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ai-rl-choix li { display: flex; align-items: center; gap: 8px; }
+.ai-rl-choix input[type=radio], .ai-rl-choix input[type=checkbox] { accent-color: var(--success); width: 16px; height: 16px; flex: none; }
+.ai-rl-item .field { margin: 8px 0 0; }
+.ai-rl-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: sticky; bottom: 0; box-shadow: var(--shadow); }
+.ai-rl-actions .help { flex: 1 1 260px; }
+.ai-dm { max-width: 820px; margin: 0 auto; }
+.ai-dm-hero { text-align: center; padding: 12px 0 18px; }
+.ai-dm-hero h1 { font-size: 20px; margin-bottom: 6px; }
+.ai-dm-hero p { color: var(--text-2); max-width: 560px; margin: 0 auto; }
+.ai-dm-form { margin-bottom: 22px; background: var(--surface); }
+.ai-dm-echanges { display: flex; flex-direction: column; gap: 26px; }
+.ai-dm-echange { display: flex; flex-direction: column; gap: 10px; }
+.ai-dm-rep { font-size: 13.5px; }
+.ai-copie { max-width: 900px; }
+.ai-copie-ajouter { cursor: pointer; margin-bottom: 10px; }
+.ai-copie-apercu { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ai-copie-apercu figure { margin: 0; width: 110px; }
+.ai-copie-apercu img { width: 110px; height: 140px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.ai-copie-apercu figcaption { font-size: 11.5px; color: var(--text-3); display: flex; align-items: center; justify-content: space-between; }
+.ai-copie-bloc { margin-bottom: 10px; overflow: hidden; }
+.ai-copie-bloc > summary { display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer; min-width: 0; }
+.ai-copie-photos { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ai-copie-photos img { height: 150px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border); object-fit: cover; }
+.ai-copie-enonce { background: var(--bg-2); border-radius: 8px; padding: 8px 10px; }
+
 @media (max-width: 820px) {
+  .ai-hide-sm { display: none; }
+  .ai-job-b { margin-left: 42px; }
   html.ai-open:not(.ai-ready) .ai-panel { display: none; }
   .ai-compose { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
   .ai-sugg, .ai-chat-page .ai-sugg { grid-template-columns: 1fr; }
@@ -234,4 +293,5 @@ html.ai-fullpage .ai-panel { display: none !important; }
   .ai-prov-h > .grow { flex: 1 1 calc(100% - 42px); }
   .ai-prov-actions { margin-left: 42px; }
   #ai-prov-modal .grid-2 { grid-template-columns: 1fr; }
+  .ai-rl-actions { padding: 10px 12px; }
 }

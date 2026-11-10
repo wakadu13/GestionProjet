@@ -69,19 +69,29 @@ def client_config() -> dict:
             "dismiss": _url_template("ai.action_dismiss", aid=1),
             "katex": url_for("static", filename="vendor/katex/"),
             "highlight": url_for("static", filename="vendor/highlight/"),
+            "demander": url_for("ai.demander"),
         },
     }
     if not rows:
         return cfg
-    from .chat import COMMANDS
     from .core import cap_reached, model_label
 
     row = next((p for p in rows if "chat" in p.role_list), rows[0])
     model = row.model_for("chat")
     cfg.update(model=model, modelLabel=model_label(model), provider=row.name, kind=row.kind, local=row.is_local,
                tools=P.get(row).tools_supported(model), capReached=cap_reached(),
-               commands=[{k: c[k] for k in ("id", "label", "icon", "prompt")} for c in COMMANDS])
+               commands=commandes())
     return cfg
+
+
+def commandes() -> list[dict]:
+    """Commandes « / » du panneau ; « Demander au wiki » seulement si le wiki est là."""
+    from .chat import COMMANDS
+    from .tools import wiki_available
+
+    wiki = wiki_available()
+    return [{k: c.get(k, "") for k in ("id", "label", "icon", "prompt", "mode", "aide")} | {"wiki": bool(c.get("wiki"))}
+            for c in COMMANDS if wiki or c.get("mode") != "wiki"]
 
 
 def generate(*args, **kwargs):
@@ -100,6 +110,24 @@ def plafond_atteint() -> bool:
     """Vrai si la dépense du mois a atteint le plafond des réglages (0 = pas de plafond)."""
     from .core import cap_reached
     return cap_reached()
+
+
+def lots_possibles() -> bool:
+    """Vrai si les travaux de fond peuvent partir en lot à moitié prix (fournisseur Claude) : sinon, la case
+    « Sans urgence » n'a pas lieu d'être."""
+    try:
+        from .core import pick
+        from .providers import get
+        return get(pick("chat")).supports_batch
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def corriger_question(qset, question, commentaires):
+    """Correction d'une question de QCM signalée (page des signalements) :
+    (question JSON corrigée, note de modification, usage, modèle). Voir demandes.corriger_question."""
+    from .demandes import corriger_question as _corriger
+    return _corriger(qset, question, commentaires)
 
 
 def register_mention_source(fn):

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Travaux de l’IA{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% if en_cours %}<meta http-equiv="refresh" content="8">{% endif %}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><a href="{{ url_for('ai.index') }}">{{ icon('sparkle', 15) }} Assistant IA</a><span class="sep">/</span><span class="current">Travaux</span></div>
+  <div class="header-actions">{% if dispo %}<a class="btn btn-sm" href="{{ url_for('qcm.importer') }}#generer">{{ icon('graduation', 14) }} <span class="ai-hide-sm">Générer un QCM</span></a>{% endif %}</div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner ai-settings ai-travaux">
+  {% if not dispo %}
+  <div class="panel panel-b ai-none mb">{{ icon('alert', 16) }}<div><b>Aucun fournisseur d’IA n’est configuré.</b> {% if current_user.is_admin %}<a href="{{ url_for('ai.reglages') }}">Ajoute Claude ou un modèle local</a> pour transformer des cours et générer des QCM.{% else %}Demande à un administrateur d’en ajouter un.{% endif %}</div></div>
+  {% endif %}
+
+  <section id="transformer" class="mb-lg">
+    <div class="ai-sec-h"><h2>{{ icon('book', 17) }} Transformer un cours en page</h2><span class="help">L’IA lit le PDF ou le LaTeX et en fait une page du wiki (plan, formules, encadrés), en quelques minutes.</span></div>
+    <div class="ai-tr-grid">
+      <form method="post" enctype="multipart/form-data" class="panel panel-b">
+        {{ ui.csrf() }}
+        <h3>{{ icon('upload', 15) }} Depuis un fichier</h3>
+        <div class="field"><label for="tr-fichier">PDF ou fichier .tex</label><input class="input" id="tr-fichier" type="file" name="fichier" accept=".pdf,.tex,.latex,application/pdf" required></div>
+        <div class="field"><label for="tr-dossier">Dossier du wiki <span class="muted">(facultatif)</span></label><input class="input" id="tr-dossier" name="dossier" list="tr-dossiers" placeholder="Cours/Matière" autocomplete="off"></div>
+        {% if ai_lots() %}<label class="checkbox help mb"><input type="checkbox" name="lot" value="1"> Sans urgence (lot à moitié prix, résultat sous 24 h — Claude)</label>{% endif %}
+        <button class="btn btn-primary btn-sm" {% if not dispo %}disabled{% endif %}>{{ icon('sparkle', 14) }} Importer et transformer</button>
+      </form>
+      <form method="post" class="panel panel-b">
+        {{ ui.csrf() }}
+        <h3>{{ icon('page', 15) }} Un PDF déjà dans le wiki</h3>
+        <div class="field"><label for="tr-pdf">PDF du coffre</label><input class="input" id="tr-pdf" name="pdf" list="tr-pdfs" placeholder="Cours/…/cours.pdf" required autocomplete="off"></div>
+        {% if ai_lots() %}<label class="checkbox help mb"><input type="checkbox" name="lot" value="1"> Sans urgence (lot à moitié prix)</label>{% endif %}
+        <button class="btn btn-primary btn-sm" {% if not dispo %}disabled{% endif %}>{{ icon('sparkle', 14) }} Transformer</button>
+      </form>
+      <form method="post" class="panel panel-b">
+        {{ ui.csrf() }}
+        <h3>{{ icon('list-check', 15) }} Fiche de révision d’une page</h3>
+        <div class="field"><label for="tr-fiche">Page du wiki</label><input class="input" id="tr-fiche" name="fiche" list="tr-pages" placeholder="Rechercher une page…" required autocomplete="off"></div>
+        <p class="help">L’essentiel de la page sur une fiche, écrite à côté : « Page (Fiche) ».</p>
+        <button class="btn btn-primary btn-sm" {% if not dispo %}disabled{% endif %}>{{ icon('sparkle', 14) }} Rédiger la fiche</button>
+      </form>
+    </div>
+    <datalist id="tr-pdfs">{% for p in pdfs %}<option value="{{ p }}">{% endfor %}</datalist>
+    <datalist id="tr-pages">{% for p in pages %}<option value="{{ p }}">{% endfor %}</datalist>
+    <datalist id="tr-dossiers">{% for d in dossiers %}<option value="{{ d }}">{% endfor %}</datalist>
+  </section>
+
+  <section class="mb-lg" id="travaux">
+    <div class="ai-sec-h"><h2>{{ icon('timer', 17) }} Travaux</h2>
+      {% if en_cours %}<span class="badge badge-accent">{{ icon('refresh', 12) }} En cours : la page se met à jour toute seule</span>{% endif %}</div>
+    {% if lots %}
+    <form method="post" class="panel panel-b ai-lots mb">{{ ui.csrf() }}
+      {{ icon('timer', 16) }}<span class="grow">Des travaux attendent dans un <b>lot</b> (moitié prix) : traités sous 24 heures, souvent bien moins ; vérifiés toutes les 10 minutes.</span>
+      <button class="btn btn-sm" name="verifier_lots" value="1">Vérifier maintenant</button>
+    </form>
+    {% endif %}
+    {% if lignes %}
+    <div class="panel ai-jobs">
+      {% for x in lignes %}{% set j = x.job %}
+      <div class="ai-job" data-statut="{{ j.status }}">
+        <span class="ai-job-ic st-{{ j.status }}">{{ icon({'pending': 'clock', 'running': 'refresh', 'batch': 'timer', 'draft': 'edit', 'done': 'check-circle', 'error': 'alert'}.get(j.status, 'clock'), 15) }}</span>
+        <div class="grow ai-job-main">
+          <div class="ai-job-t"><span class="badge">{{ x.genre }}</span><b>{{ x.nom }}</b><span class="help">· {{ x.statut }}{% if j.status == 'running' and j.started_at %} depuis {{ j.started_at|ago }}{% endif %}</span></div>
+          {% if j.message %}<div class="small {% if j.status == 'error' %}danger-text{% else %}text-2{% endif %}">{{ j.message }}</div>{% endif %}
+          <div class="help small">{{ j.created_at|datetime }}{% if j.user %} · {{ j.user.display_name }}{% endif %}{% if x.totaux.cost is not none %} · {{ x.totaux.model }} · ≈ {{ '%.2f'|format(x.totaux.cost) }} $ ({{ x.totaux.input }} jetons lus, {{ x.totaux.output }} écrits{% if x.lot %}, lot à moitié prix{% endif %}){% endif %}{% if x.page_ecrite %} · <span class="mono">{{ x.page_ecrite }}</span>{% endif %}</div>
+        </div>
+        <div class="ai-job-b">
+          {% if x.url %}<a class="btn btn-primary btn-xs" href="{{ x.url }}">{{ x.lien }}</a>{% endif %}
+          {% if j.status == 'draft' %}
+          <a class="btn btn-primary btn-xs" href="{{ url_for('ai.relire', jid=j.id) }}">{{ icon('edit', 12) }} Relire et publier</a>
+          <form method="post" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs" name="publier" value="{{ j.id }}">Publier tel quel</button></form>
+          <form method="post" class="inline-form" data-confirm="Supprimer ce brouillon ?">{{ ui.csrf() }}<button class="btn btn-danger-ghost btn-xs" name="supprimer" value="{{ j.id }}">Supprimer</button></form>
+          {% endif %}
+          {% if j.status == 'error' and dispo %}<form method="post" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs" name="relancer" value="{{ j.id }}">{{ icon('refresh', 12) }} Relancer</button></form>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="panel">{{ ui.empty('timer', 'Aucun travail pour l’instant', 'Transforme un cours ci-dessus, ou génère un QCM depuis une page du wiki (bouton « Générer un QCM ») ou depuis la page d’import des QCM.') }}</div>
+    {% endif %}
+  </section>
+
+  <section class="ai-help">
+    <div class="panel panel-b">
+      <h3>{{ icon('help', 15) }} Bon à savoir</h3>
+      <ul>
+        <li>Les QCM et paquets de vocabulaire arrivent en <b>brouillon</b> : relis, corrige, puis publie (dans <code>QCM/…</code> du coffre).</li>
+        <li>Une page déjà modifiée à la main n’est jamais écrasée : la version de l’IA est enregistrée à côté, avec « (IA) » dans son nom ; une page remplacée garde l’ancienne version dans son historique.</li>
+        <li>Le PDF d’origine reste en bas de la page créée. Vérifie la page avant de réviser : l’IA peut se tromper, surtout sur un PDF scanné ou des schémas.</li>
+        <li>Avec un modèle local (Ollama…), seul le texte du PDF est lu ; un long cours peut dépasser sa mémoire. Le coût de chaque travail s’affiche ici (Claude).</li>
+        <li>Une notification te prévient quand un travail se termine.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+{% endblock %}

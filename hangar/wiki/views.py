@@ -417,6 +417,10 @@ def importer():
         for i, upload in enumerate(files)
     ]
     results = uploads.finish(get_vault(), results)
+    if request.form.get("claude") == "1" and not rename and commun.ai_dispo():
+        # Cours importés (PDF, LaTeX) transformés en pages par l'IA, en arrière-plan (module hangar.ai).
+        from ..ai import travaux
+        travaux.transformer_cours(results, current_user, lot=request.form.get("lot") == "1")
     if wants_json():
         return jsonify(ok=True, results=[r.as_dict() for r in results])
 

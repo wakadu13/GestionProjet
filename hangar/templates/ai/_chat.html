@@ -10,8 +10,11 @@
     {% if aicfg.enabled %}
     <h3>Bonjour {{ current_user.short_name }}, que puis-je faire pour toi ?</h3>
     <p>Je vois la page ouverte, ton agenda, tes tâches et tes tickets, et je peux te proposer des actions.</p>
+    {% set cmds = aicfg.commands or [] %}
+    {% set wiki_d_abord = nav is defined and nav == 'wiki' %}
+    {% set ordre = (cmds|selectattr('wiki')|list + cmds|rejectattr('wiki')|list) if wiki_d_abord else (cmds|rejectattr('wiki')|list + cmds|selectattr('wiki')|list) %}
     <div class="ai-sugg">
-      {% for c in (aicfg.commands or [])[:6] %}
+      {% for c in ordre[:6] %}
       <button type="button" class="ai-sugg-b" data-ai-cmd="{{ c.id }}">{{ icon(c.icon, 14) }}<span>{{ c.label }}</span></button>
       {% endfor %}
     </div>
