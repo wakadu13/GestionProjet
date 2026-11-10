@@ -260,5 +260,9 @@ def load_documents(project: Project, actor: User, data: dict | None = None, atta
     say(f"✓ {report['tickets']} tickets créés d’après les documents, {report['attachments']} documents joints, "
         f"{report['relations']} dépendances")
     if report["missing_docs"]:
-        say(f"  ! {len(report['missing_docs'])} document(s) introuvable(s) : {', '.join(report['missing_docs'][:5])}")
+        absents = sorted(set(report["missing_docs"]))
+        say(f"  ! {len(absents)} document(s) source non joint(s) : les fichiers du dossier « Projet Pluri » "
+            f"ne sont pas dans le dépôt (cherchés dans {ROOT}). Les tickets sont créés quand même ; pour joindre "
+            f"les documents, place ce dossier à côté de hangar/ puis relance « hangar rebuild-docs ». "
+            f"Exemples : {', '.join(absents[:3])}")
     return report

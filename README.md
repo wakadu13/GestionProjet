@@ -168,6 +168,7 @@ uv run hangar backup                # sauvegarde dans data/backups/
 uv run hangar reset                 # efface toutes les données (sauvegarde de sécurité avant)
 uv run hangar create-admin          # crée ou répare un compte administrateur
 uv run hangar --data /chemin run    # utiliser un autre dossier de données
+uv run python -m unittest discover -s tests   # tests (lancés aussi par GitHub Actions sous Linux et Windows)
 ```
 
 ## Où sont les données ?

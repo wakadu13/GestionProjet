@@ -219,9 +219,10 @@ def cmd_agenda_import(args):
         except (OSError, ICSError) as exc:
             print(f"✗ {exc}")
             sys.exit(1)
-    print(f"Import pour @{user.username} : {imp.total} séances dans le fichier ({imp.range_start:%d/%m} → "
-          f"{imp.range_end:%d/%m}) — {imp.added} ajoutée(s), {imp.modified} modifiée(s), {imp.removed} retirée(s), "
-          f"{imp.unchanged} inchangée(s).")
+        # Message construit tant que la session est ouverte (les objets sont expirés après sa fermeture)
+        print(f"✓ Import pour @{user.username} : {imp.total} séances dans le fichier ({imp.range_start:%d/%m} → "
+              f"{imp.range_end:%d/%m}) — {imp.added} ajoutée(s), {imp.modified} modifiée(s), "
+              f"{imp.removed} retirée(s), {imp.unchanged} inchangée(s).")
 
 
 def cmd_mail_test(args):
@@ -238,7 +239,19 @@ def cmd_mail_test(args):
         print(f"Statut : {m.status}" + (f" — {m.error}" if m.error else ""))
 
 
+def _utf8_output() -> None:
+    """Sorties en UTF-8 : sous Windows, une sortie redirigée (fichier, tube) est en cp1252 par défaut et les
+    symboles affichés par les commandes (✓, ✗, →…) y provoqueraient une UnicodeEncodeError."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):  # flux déjà fermé ou non reconfigurable
+                pass
+
+
 def main(argv=None):
+    _utf8_output()
     parser = argparse.ArgumentParser(prog="hangar", description="Hangar : agenda, cours, QCM, assistant IA et gestion de projet, en local.")
     parser.add_argument("--data", help="dossier des données (défaut : ./data)")
     sub = parser.add_subparsers(dest="cmd")

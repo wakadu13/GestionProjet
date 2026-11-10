@@ -1,0 +1,54 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: ${{ matrix.os }} · Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.11"   # version minimale déclarée dans pyproject.toml
+          - os: ubuntu-latest
+            python: "3.13"
+          - os: windows-latest
+            python: "3.13"   # sortie en cp1252, chemins Windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Dépendances
+        run: uv sync --locked
+
+      - name: Tests unitaires
+        run: uv run python -m unittest discover -s tests -v
+
+      # Les commandes affichent des symboles (✓ ✗ →) : elles doivent marcher quand leur sortie est
+      # redirigée vers un fichier (encodage cp1252 par défaut sous Windows), sans PYTHONUTF8.
+      - name: Commandes avec sortie redirigée
+        shell: bash
+        run: |
+          uv run hangar --data ci-data demo > demo.log
+          uv run hangar --data ci-data mail-send > mail.log
+          uv run hangar --data ci-data backup > backup.log
+          printf 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:1\nDTSTART:20261112T080000\nDTEND:20261112T100000\nSUMMARY:Cours  CM\nEND:VEVENT\nEND:VCALENDAR\n' > planning.ics
+          uv run hangar --data ci-data agenda-import planning.ics > import.log
+          cat demo.log import.log
