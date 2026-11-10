@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "workgraph/_ui.html" as wg with context %}
+{% block title %}Initiatives{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}?v={{ version }}">{% endblock %}
+{% set base = {'layout': layout if layout != 'list' else None, 'sort': sort if sort != 'status' else None, 'q': q or None, 'mine': 1 if mine else None} %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('target', 15) }} Initiatives</span><span class="badge">{{ total }}</span></div>
+  <div class="header-actions">
+    <form method="get" class="inline-form wg-search">
+      {% for k, v in base.items() if v and k != 'q' %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+      {% if health %}<input type="hidden" name="health" value="{{ health }}">{% endif %}
+      <span class="wg-search-box">{{ icon('search', 14) }}<input class="input input-sm" type="search" name="q" value="{{ q }}" placeholder="Rechercher…"></span>
+    </form>
+    <div class="seg" title="Disposition">
+      <a href="{{ url_for('workgraph.initiatives', **dict(base, layout=None, status=status, health=health)) }}" class="{% if layout == 'list' %}active{% endif %}" title="Liste">{{ icon('list', 15) }}</a>
+      <a href="{{ url_for('workgraph.initiatives', **dict(base, layout='cards', status=status, health=health)) }}" class="{% if layout == 'cards' %}active{% endif %}" title="Cartes">{{ icon('kanban', 15) }}</a>
+    </div>
+    <form method="get" class="inline-form">
+      {% for k, v in base.items() if v and k != 'sort' %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+      {% if health %}<input type="hidden" name="health" value="{{ health }}">{% endif %}
+      <select class="input input-sm" name="sort" data-autosubmit style="width:auto" title="Tri">
+        {% for k, lab in [('status', 'Trier par statut'), ('health', 'Trier par santé'), ('progress', 'Trier par avancement'), ('target', 'Trier par échéance'), ('name', 'Trier par nom')] %}<option value="{{ k }}" {% if sort == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+      </select>
+    </form>
+    <a class="btn btn-sm btn-ghost wg-hide-sm" href="{{ url_for('workgraph.index') }}">{{ icon('workgraph', 14) }} Workgraph</a>
+    {% if can_edit %}<button class="btn btn-sm btn-primary" type="button" data-open="new-initiative-modal">{{ icon('plus', 14) }} Nouvelle initiative</button>{% endif %}
+  </div>
+</div>
+<div class="subbar wg-subbar">
+  <a class="chip wg-chip {% if not status %}on{% endif %}" href="{{ url_for('workgraph.initiatives', **dict(base, health=health)) }}">Toutes</a>
+  {% for k, lab, col in statuses %}
+  <a class="chip wg-chip {% if status == k %}on{% endif %}" style="--c: {{ col }}" href="{{ url_for('workgraph.initiatives', **dict(base, status=None if status == k else k, health=health)) }}"><span class="dot" style="background:{{ col }}"></span>{{ lab }}{% if status_counts[k] %}<span class="n">{{ status_counts[k] }}</span>{% endif %}</a>
+  {% endfor %}
+  <span class="wg-subbar-sep"></span>
+  {% for k, lab, col in healths %}
+  <a class="chip wg-chip {% if health == k %}on{% endif %}" style="--c: {{ col }}" href="{{ url_for('workgraph.initiatives', **dict(base, status=status, health=None if health == k else k)) }}" title="Santé : {{ lab }}">{{ icon('activity', 12) }}{{ lab }}<span class="n">{{ health_counts[k] }}</span></a>
+  {% endfor %}
+  <a class="chip wg-chip {% if mine %}on{% endif %}" href="{{ url_for('workgraph.initiatives', **dict(base, mine=None if mine else 1, status=status, health=health)) }}">{{ icon('user', 12) }}Mes initiatives</a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="inner">
+{% if not inis %}
+  {% if total %}
+    {{ ui.empty('target', 'Aucune initiative', 'Aucune initiative ne correspond à ces filtres.') }}
+    <div class="center-text"><a class="btn btn-sm" href="{{ url_for('workgraph.initiatives') }}">Effacer les filtres</a></div>
+  {% else %}
+    {{ ui.empty('target', 'Aucune initiative pour le moment', 'Une initiative regroupe plusieurs projets et modules autour d’un même objectif : son avancement et sa santé sont calculés à partir de leurs tickets.') }}
+    {% if can_edit %}<div class="center-text"><button class="btn btn-primary" type="button" data-open="new-initiative-modal">{{ icon('plus', 14) }} Créer une initiative</button></div>{% endif %}
+  {% endif %}
+{% elif layout == 'cards' %}
+<div class="grid-cards wg-cards">
+  {% for ini in inis %}{% set s = S[ini.id] %}{% set projs = wg_projects_of(ini, visible) %}
+  <div class="wg-icard {% if s.health %}h-{{ s.health }}{% endif %}">
+    <div class="wg-icard-top">
+      {{ wg.type_badge('initiative') }}
+      <span class="right wg-prog">{{ wg.ring(s.pct, 22) }}<b>{{ s.pct }} %</b></span>
+    </div>
+    <a class="wg-icard-title" href="{{ url_for('workgraph.initiative_detail', iid=ini.id) }}"><span class="wg-emoji">{{ ini.emoji or '💡' }}</span><span>{{ ini.name }}</span></a>
+    {% if ini.description %}<p class="small text-2 wg-clamp">{{ ini.description|excerpt(150) }}</p>{% endif %}
+    <div class="flex wrap gap-4">
+      {{ wg.health_pill(s.health_info, s.forced, s.reasons|join(' · ')) }}
+      {{ wg.status_pill(ini.status_label, ini.status_color) }}
+      {% if s.blocked_open %}<span class="wg-pill" style="--c: var(--danger)" title="Tickets bloqués par un ticket encore ouvert">{{ icon('ban', 11) }}{{ s.blocked_open }} bloqué{{ 's' if s.blocked_open > 1 }}</span>{% endif %}
+    </div>
+    {% if projs %}
+    <div class="wg-proj-chips">{% for p in projs[:4] %}<a class="wg-proj-chip" href="{{ url_for('issues.index', pid=p.id) }}" title="{{ p.name }}"><span>{{ p.emoji }}</span>{{ p.identifier }}</a>{% endfor %}{% if projs|length > 4 %}<span class="muted tiny">+{{ projs|length - 4 }}</span>{% endif %}{% if ini.modules %}<span class="muted tiny">· {{ ini.modules|length }} module{{ 's' if ini.modules|length > 1 }}</span>{% endif %}</div>
+    {% endif %}
+    <div class="wg-icard-foot">
+      {% if ini.lead %}<span class="flex gap-4 small" title="Responsable">{{ ui.avatar(ini.lead, 20) }}<span class="ellipsis">{{ ini.lead.display_name }}</span></span>{% else %}<span class="small muted">Sans responsable</span>{% endif %}
+      {% if s.target %}<span class="right small nowrap {% if s.late %}danger-text{% else %}muted{% endif %}" title="Échéance cible">{{ icon('calendar', 13) }} {{ s.target|date }}</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="panel wg-scroll-x">
+  <table class="table wg-ini-table">
+    <thead><tr><th>Initiative</th><th>Avancement</th><th>Santé</th><th>Statut</th><th class="wg-hide-sm">Responsable</th><th class="wg-hide-sm">Projets</th><th>Échéance</th><th></th></tr></thead>
+    <tbody>
+    {% for ini in inis %}{% set s = S[ini.id] %}{% set projs = wg_projects_of(ini, visible) %}
+    <tr>
+      <td class="wg-name-cell">
+        <div class="wg-name-wrap"><a class="wg-name" href="{{ url_for('workgraph.initiative_detail', iid=ini.id) }}"><span class="wg-emoji">{{ ini.emoji or '💡' }}</span><span class="ellipsis">{{ ini.name }}</span></a>
+        {% if s.blocked_open %}<span class="wg-mini-danger" title="{{ s.blocked_open }} ticket(s) bloqué(s) par un ticket encore ouvert">{{ icon('ban', 12) }}{{ s.blocked_open }}</span>{% endif %}</div>
+      </td>
+      <td>{{ wg.progress_cell(s.pct) }}</td>
+      <td>{{ wg.health_pill(s.health_info, s.forced, s.reasons|join(' · ')) or '—' }}</td>
+      <td>{{ wg.status_pill(ini.status_label, ini.status_color) }}</td>
+      <td class="wg-hide-sm">{% if ini.lead %}{{ ui.user_chip(ini.lead, 20) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="wg-hide-sm nowrap">{% if projs %}<span class="wg-proj-stack" title="{{ projs|map(attribute='name')|join(', ') }}">{% for p in projs[:4] %}<span class="wg-proj-dot">{{ p.emoji }}</span>{% endfor %}<span class="small muted nowrap">{{ projs|length }}{% if ini.modules %} · {{ ini.modules|length }} mod.{% endif %}</span></span>{% elif ini.modules %}<span class="small muted nowrap">{{ ini.modules|length }} module{{ 's' if ini.modules|length > 1 }}</span>{% else %}<span class="muted small">—</span>{% endif %}</td>
+      <td class="nowrap small {% if s.late %}danger-text{% else %}text-2{% endif %}">{{ s.target|date if s.target else '—' }}</td>
+      <td class="wg-row-actions">
+        {% if can_edit %}
+        <div class="dd">
+          <button class="btn btn-ghost btn-icon btn-xs" type="button" data-menu title="Actions">{{ icon('more', 14) }}</button>
+          <div class="menu" style="width:210px">
+            <a class="menu-item" href="{{ url_for('workgraph.initiative_detail', iid=ini.id) }}">{{ icon('eye') }} Ouvrir</a>
+            <a class="menu-item" href="{{ url_for('workgraph.index', sel='i:%d' % ini.id) }}">{{ icon('workgraph') }} Voir dans le Workgraph</a>
+            <div class="menu-sep"></div>
+            {% for k, lab, col in statuses if k != ini.status %}
+            <form method="post" action="{{ url_for('workgraph.initiative_edit', iid=ini.id) }}">{{ ui.csrf() }}<input type="hidden" name="field" value="status"><input type="hidden" name="value" value="{{ k }}"><input type="hidden" name="next" value="{{ request.full_path }}"><button class="menu-item"><span class="dot" style="background:{{ col }}"></span> Passer en « {{ lab }} »</button></form>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+</div>
+
+{% if can_edit %}
+<dialog class="modal" id="new-initiative-modal">
+  {{ wg.initiative_form(url_for('workgraph.initiative_create'), 'Nouvelle initiative', 'Créer l’initiative', users, statuses, projects=projects) }}
+</dialog>
+{% endif %}
+{% endblock %}

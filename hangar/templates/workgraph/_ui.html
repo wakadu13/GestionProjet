@@ -1,0 +1,63 @@
+{# Composants des initiatives et du Workgraph : {% import "workgraph/_ui.html" as wg with context %} #}
+{% import "macros.html" as ui with context %}
+
+{% macro health_pill(h, forced=False, title=None) -%}
+{%- if h -%}<span class="wg-pill" style="--c: {{ h.color }}" {% if title %}title="{{ title }}"{% endif %}><span class="dot"></span>{{ h.label }}{% if forced %}{{ icon('lock', 11) }}{% endif %}</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro status_pill(label, color) -%}
+<span class="wg-pill ghost" style="--c: {{ color }}"><span class="dot"></span>{{ label }}</span>
+{%- endmacro %}
+
+{% macro ring(pct, size=26) -%}
+<span class="wg-ring" style="--p: {{ pct }}; --s: {{ size }}px" title="{{ pct }} % terminé"></span>
+{%- endmacro %}
+
+{% macro progress_cell(pct) -%}
+<span class="wg-prog">{{ ring(pct, 20) }}<span>{{ pct }} %</span></span>
+{%- endmacro %}
+
+{% macro type_badge(kind, extra='') -%}
+<span class="wg-type {{ kind }}">{% if kind == 'initiative' %}{{ icon('lightbulb', 12) }} Initiative{% elif kind == 'project' %}{{ icon('briefcase', 12) }} Projet{% elif kind == 'module' %}{{ icon('module', 12) }} Module{% else %}{{ kind }}{% endif %}{% if extra %}<span class="k">{{ extra }}</span>{% endif %}</span>
+{%- endmacro %}
+
+{# Formulaire de création / modification (contenu d'une fenêtre modale) #}
+{% macro initiative_form(action, title, submit, users, statuses, healths=None, ini=None, projects=None, next=None) %}
+<form method="post" action="{{ action }}">
+  {{ ui.csrf() }}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+  <div class="modal-h"><h2>{{ title }}</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+  <div class="modal-b">
+    <div class="wg-name-row">
+      <div class="field"><label>Emoji</label><input class="input wg-emoji-input" name="emoji" value="{{ ini.emoji if ini else '💡' }}" maxlength="16" list="wg-emojis"></div>
+      <div class="field grow"><label>Nom</label><input class="input" name="name" required maxlength="200" value="{{ ini.name if ini else '' }}" placeholder="Ex. Dématérialiser les dossiers d’intégration"></div>
+    </div>
+    <datalist id="wg-emojis">{% for e in ['💡', '🎯', '🚀', '🛫', '📦', '🧭', '🛡️', '📊', '🔒', '🌱', '🏁', '⚙️'] %}<option value="{{ e }}">{% endfor %}</datalist>
+    <div class="field"><label>Description <span class="muted tiny">(markdown)</span></label><textarea class="input" name="description" rows="4" placeholder="Objectif, périmètre, critères de réussite…">{{ ini.description if ini else '' }}</textarea></div>
+    <div class="grid-2">
+      <div class="field"><label>Statut</label><select class="input" name="status">{% for k, lab, col in statuses %}<option value="{{ k }}" {% if (ini.status if ini else 'planned') == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Responsable</label><select class="input" name="lead_id"><option value="">Aucun</option>{% for u in users %}<option value="{{ u.id }}" {% if (ini.lead_id if ini else current_user.id) == u.id %}selected{% endif %}>{{ u.display_name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Début</label><input class="input" type="date" name="start_date" value="{{ ini.start_date.isoformat() if ini and ini.start_date else '' }}"></div>
+      <div class="field"><label>Échéance cible</label><input class="input" type="date" name="target_date" value="{{ ini.target_date.isoformat() if ini and ini.target_date else '' }}"></div>
+    </div>
+    {% if healths %}
+    <div class="field"><label>Santé</label>
+      <select class="input" name="health_override">
+        <option value="">Automatique (calculée d’après les échéances et l’avancement)</option>
+        {% for k, lab, col in healths %}<option value="{{ k }}" {% if ini and ini.health_override == k %}selected{% endif %}>Forcée : {{ lab }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    {% if projects is not none %}
+    <div class="field"><label>Projets liés</label>
+      {% if projects %}
+      <div class="wg-checks">
+        {% for p in projects %}<label class="checkbox small"><input type="checkbox" name="project_ids" value="{{ p.id }}"><span>{{ p.emoji }}</span><span class="ellipsis">{{ p.name }}</span><span class="muted tiny">{{ p.identifier }}</span></label>{% endfor %}
+      </div>
+      {% else %}<span class="muted small">Aucun projet visible pour le moment.</span>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">{{ submit }}</button></div></div>
+</form>
+{% endmacro %}

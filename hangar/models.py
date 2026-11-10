@@ -1156,3 +1156,95 @@ class AgendaSettings(db.Model):
             db.session.add(s)
             db.session.commit()
         return s
+
+
+# ---------------------------------------------------------------------------
+# Initiatives (Workgraph) : objectifs transverses qui regroupent projets et modules (épopées)
+# ---------------------------------------------------------------------------
+
+INITIATIVE_STATUSES = [
+    ("draft", "Brouillon", "#a3a3a3"),
+    ("planned", "Planifiée", "#3f76ff"),
+    ("active", "Active", "#f59e0b"),
+    ("completed", "Terminée", "#16a34a"),
+    ("cancelled", "Annulée", "#dc2626"),
+]
+INITIATIVE_STATUS_LABELS = {k: v for k, v, _ in INITIATIVE_STATUSES}
+INITIATIVE_STATUS_COLORS = {k: c for k, _, c in INITIATIVE_STATUSES}
+
+HEALTHS = [
+    ("on_track", "Dans les temps", "#16a34a"),
+    ("at_risk", "À risque", "#f59e0b"),
+    ("off_track", "En retard", "#dc2626"),
+]
+HEALTH_LABELS = {k: v for k, v, _ in HEALTHS}
+HEALTH_COLORS = {k: c for k, _, c in HEALTHS}
+HEALTH_RANK = {"on_track": 0, "at_risk": 1, "off_track": 2}
+
+initiative_projects = _assoc("initiative_projects", "initiative", "project")
+initiative_modules = _assoc("initiative_modules", "initiative", "module")
+
+
+class Initiative(db.Model):
+    """Initiative : objectif de l'espace de travail suivi à travers plusieurs projets et modules.
+
+    L'avancement et la santé sont calculés (voir hangar/workgraph.py) ; la santé peut être forcée.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, default="")                 # markdown
+    emoji = db.Column(db.String(16), default="💡")
+    lead_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
+    status = db.Column(db.String(12), default="planned")        # voir INITIATIVE_STATUSES
+    health_override = db.Column(db.String(12))                   # None = santé calculée
+    health_seen = db.Column(db.String(12))                       # dernière santé constatée (résumé quotidien)
+    health_since = db.Column(db.DateTime)                        # … et depuis quand
+    start_date = db.Column(db.Date)
+    target_date = db.Column(db.Date)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
+    created_at = db.Column(db.DateTime, default=now)
+    updated_at = db.Column(db.DateTime, default=now, onupdate=now)
+
+    lead = db.relationship("User", foreign_keys=[lead_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    projects = db.relationship("Project", secondary=initiative_projects, order_by="Project.name",
+                               backref=db.backref("initiatives", order_by="Initiative.name"))
+    modules = db.relationship("Module", secondary=initiative_modules, order_by="Module.name",
+                              backref=db.backref("initiatives", order_by="Initiative.name"))
+    updates = db.relationship("InitiativeUpdate", back_populates="initiative", cascade="all, delete-orphan",
+                              order_by="InitiativeUpdate.created_at.desc()")
+
+    @property
+    def status_label(self):
+        return INITIATIVE_STATUS_LABELS.get(self.status, self.status)
+
+    @property
+    def status_color(self):
+        return INITIATIVE_STATUS_COLORS.get(self.status, "#a3a3a3")
+
+    @property
+    def is_closed(self) -> bool:
+        return self.status in ("completed", "cancelled")
+
+
+class InitiativeUpdate(db.Model):
+    """Point d'avancement daté (« update » de Plane) : santé constatée et note en markdown."""
+    id = db.Column(db.Integer, primary_key=True)
+    initiative_id = db.Column(db.Integer, db.ForeignKey("initiative.id", ondelete="CASCADE"), nullable=False,
+                              index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
+    health = db.Column(db.String(12), default="on_track")
+    body = db.Column(db.Text, default="")
+    progress = db.Column(db.Integer)                             # avancement (%) au moment de la note
+    created_at = db.Column(db.DateTime, default=now)
+
+    initiative = db.relationship("Initiative", back_populates="updates")
+    author = db.relationship("User")
+
+    @property
+    def health_label(self):
+        return HEALTH_LABELS.get(self.health, self.health)
+
+    @property
+    def health_color(self):
+        return HEALTH_COLORS.get(self.health, "#a3a3a3")

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "workgraph/_ui.html" as wg with context %}
+{% block title %}Workgraph{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}?v={{ version }}">{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% set keep = {'tab': tab if tab != 'initiative' else None, 'group': group if tab == 'team' and group != 'lead' else None, 'status': f.status or None, 'health': f.health or None, 'hide_closed': 1 if f.hide_closed else None, 'mine': 1 if f.mine else None} %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('workgraph', 15) }} Workgraph</span></div>
+  <div class="header-actions">
+    <div class="seg wg-viewseg" title="Affichage">
+      <a href="{{ url_for('workgraph.index', **keep) }}" class="{% if view == 'graph' %}active{% endif %}">{{ icon('workgraph', 14) }}<span>Graphe</span></a>
+      <a href="{{ url_for('workgraph.index', view='table', **keep) }}" class="{% if view == 'table' %}active{% endif %}">{{ icon('table', 14) }}<span>Tableau</span></a>
+    </div>
+    <div class="dd">
+      <button class="btn btn-sm {% if n_filters %}active{% endif %}" type="button" data-menu>{{ icon('filter', 14) }} Filtres{% if n_filters %} <span class="badge badge-accent">{{ n_filters }}</span>{% endif %}</button>
+      <form method="get" class="menu panel-menu wg-filter-menu">
+        {% if view == 'table' %}<input type="hidden" name="view" value="table">{% endif %}
+        {% if tab != 'initiative' %}<input type="hidden" name="tab" value="{{ tab }}">{% endif %}
+        {% if tab == 'team' %}<input type="hidden" name="group" value="{{ group }}">{% endif %}
+        {% if tab == 'initiative' %}
+        <div class="pm-section"><div class="pm-h">Statut de l’initiative</div>
+          {% for k, lab, col in statuses %}<label class="opt"><input type="checkbox" name="status" value="{{ k }}" {% if k in f.status %}checked{% endif %}><span class="dot" style="background:{{ col }}"></span>{{ lab }}</label>{% endfor %}
+        </div>
+        <div class="pm-section"><div class="pm-h">Santé</div>
+          {% for k, lab, col in healths %}<label class="opt"><input type="checkbox" name="health" value="{{ k }}" {% if k in f.health %}checked{% endif %}><span class="dot" style="background:{{ col }}"></span>{{ lab }}</label>{% endfor %}
+        </div>
+        {% endif %}
+        <div class="pm-section">
+          {% if tab == 'initiative' %}<label class="opt"><input type="checkbox" name="mine" value="1" {% if f.mine %}checked{% endif %}>Dont je suis responsable</label>{% endif %}
+          <label class="opt"><input type="checkbox" name="hide_closed" value="1" {% if f.hide_closed %}checked{% endif %}>Masquer les éléments terminés ou annulés</label>
+        </div>
+        <div class="pm-foot"><a class="btn btn-sm btn-ghost" href="{{ url_for('workgraph.index', view='table' if view == 'table' else None, tab=keep.tab, group=keep.group) }}">Effacer</a><button class="btn btn-sm btn-primary">Appliquer</button></div>
+      </form>
+    </div>
+    {% if view == 'graph' %}
+    <div class="dd">
+      <button class="btn btn-sm" type="button" data-menu>{{ icon('sliders', 14) }} Affichage</button>
+      <div class="menu panel-menu wg-display-menu" style="width:280px">
+        <div class="pm-section"><div class="pm-h">Dépendances</div>
+          {% for k, lab in [('all', 'Toutes (ouvertes et résolues)'), ('open', 'Ouvertes seulement'), ('none', 'Masquées')] %}
+          <label class="opt"><input type="radio" name="wg-deps" value="{{ k }}" data-wg-pref="deps">{{ lab }}</label>
+          {% endfor %}
+        </div>
+        <div class="pm-section">
+          <label class="opt"><input type="checkbox" data-wg-pref="modules">Afficher les modules</label>
+          <label class="opt"><input type="checkbox" data-wg-pref="compact">Cartes compactes</label>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% if can_edit %}<button class="btn btn-sm btn-primary" type="button" data-open="new-initiative-modal">{{ icon('plus', 14) }}<span class="wg-hide-sm"> Nouvelle initiative</span></button>{% endif %}
+  </div>
+</div>
+<div class="subbar wg-tabsbar">
+  <nav class="tabs in-header wg-tabs">
+    {% for k, lab in tabs.items() %}
+    <a href="{{ url_for('workgraph.index', view='table' if view == 'table' else None, tab=k if k != 'initiative' else None) }}" class="{% if tab == k %}active{% endif %}">{{ icon({'initiative': 'lightbulb', 'project': 'briefcase', 'team': 'users'}[k], 14) }}{{ lab }}</a>
+    {% endfor %}
+  </nav>
+  {% if tab == 'team' %}
+  <div class="seg wg-groupseg" title="Regrouper">
+    <a href="{{ url_for('workgraph.index', **dict(keep, group=None, view='table' if view == 'table' else None)) }}" class="{% if group == 'lead' %}active{% endif %}">Par responsable</a>
+    <a href="{{ url_for('workgraph.index', **dict(keep, group='members', view='table' if view == 'table' else None)) }}" class="{% if group == 'members' %}active{% endif %}">Par membres</a>
+  </div>
+  {% endif %}
+  {% if f.status or f.health or f.mine or f.hide_closed %}
+  <div class="wg-active-filters">
+    {% for k in f.status %}<span class="chip"><span class="k">Statut</span>{{ M.INITIATIVE_STATUS_LABELS[k] }}</span>{% endfor %}
+    {% for k in f.health %}<span class="chip"><span class="k">Santé</span>{{ M.HEALTH_LABELS[k] }}</span>{% endfor %}
+    {% if f.mine %}<span class="chip">Mes initiatives</span>{% endif %}
+    {% if f.hide_closed %}<span class="chip">Sans les terminés</span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+{% set real_nodes = graph.nodes|rejectattr('kind', 'in', ['workspace', 'group'])|list %}
+{% if not real_nodes %}
+<div class="inner" style="padding:22px 28px">
+  {{ ui.empty('workgraph', 'Rien à afficher', 'Le Workgraph relie l’espace de travail à ses initiatives, projets et modules, avec les dépendances entre tickets. Crée une initiative ou un projet pour commencer.' if not n_filters else 'Aucun élément ne correspond à ces filtres.') }}
+  {% if can_edit and not n_filters %}<div class="center-text"><button class="btn btn-primary" type="button" data-open="new-initiative-modal">{{ icon('plus', 14) }} Créer une initiative</button></div>{% endif %}
+</div>
+{% elif view == 'table' %}
+<div class="wg-table-page">
+  <div class="wg-table-tools">
+    <button class="btn btn-xs btn-ghost" type="button" data-wg-expand="1">{{ icon('chevron-down', 13) }} Tout déplier</button>
+    <button class="btn btn-xs btn-ghost" type="button" data-wg-expand="0">{{ icon('chevron-right', 13) }} Tout replier</button>
+    <span class="tiny muted right">{{ graph.columns|map(attribute='count')|list|sum - 1 }} éléments · {{ graph.deps|selectattr('open')|list|length }} dépendance(s) ouverte(s)</span>
+  </div>
+  <div class="panel wg-scroll-x">
+    <table class="table wg-tree" data-wg-table>
+      <thead><tr><th>Nom</th><th>Santé</th><th>Statut</th><th>Avancement</th><th class="wg-hide-sm">Responsable</th><th>Échéance</th><th class="num" title="Dépendances ouvertes : ce que l’élément bloque / ce qui le bloque">Dépendances</th></tr></thead>
+      <tbody>
+      {% for r in rows %}{% set n = r.node %}
+      <tr class="wg-tr k-{{ n.kind }} d-{{ r.depth }}" data-path="{{ r.path }}" data-parent="{{ r.parent }}">
+        <td>
+          <div class="wg-tree-name" style="--d: {{ r.depth }}">
+            {% if r.has_children %}<button class="wg-twisty" type="button" data-wg-toggle aria-expanded="true" title="Replier / déplier">{{ icon('chevron-down', 13) }}</button>{% else %}<span class="wg-twisty-sp"></span>{% endif %}
+            {% if n.kind == 'initiative' or n.kind == 'project' %}<span class="wg-emoji">{{ n.emoji }}</span>{% elif n.kind == 'module' %}<span style="color: {{ n.status.color }}">{{ icon('module', 15) }}</span>{% elif n.kind == 'person' %}{% if n.person %}<span class="avatar" style="--av:{{ n.person.color }};width:20px;height:20px;font-size:8.5px">{{ n.person.initials }}</span>{% else %}<span class="avatar none" style="width:20px;height:20px">{{ icon('user', 12) }}</span>{% endif %}{% else %}{{ icon('layers', 15) }}{% endif %}
+            {% if n.url %}<a class="ellipsis" href="{{ n.url }}">{{ n.title }}</a>{% else %}<span class="ellipsis muted">{{ n.title }}</span>{% endif %}
+            {% if n.identifier %}<span class="wg-key">{{ n.identifier }}</span>{% endif %}
+            {% if n.sub %}<span class="tiny muted">{{ n.sub }}</span>{% endif %}
+          </div>
+        </td>
+        <td>{{ wg.health_pill(n.health, n.forced, (n.reasons or [])|join(' · ')) }}</td>
+        <td>{% if n.status %}{{ wg.status_pill(n.status.label, n.status.color) }}{% endif %}</td>
+        <td>{% if n.pct is defined %}<span class="wg-row-prog">{{ ui.progress(n.pct) }}<span class="small">{{ n.pct }} %</span></span>{% endif %}</td>
+        <td class="wg-hide-sm">{% if n.lead %}<span class="flex gap-4 small"><span class="avatar" style="--av:{{ n.lead.color }};width:18px;height:18px;font-size:8px">{{ n.lead.initials }}</span><span class="ellipsis">{{ n.lead.name }}</span></span>{% endif %}</td>
+        <td class="nowrap small {% if n.late %}danger-text{% else %}text-2{% endif %}">{{ n.target_label or '' }}</td>
+        <td class="num nowrap">
+          {% if n.blocks %}<span class="wg-dep-n out" title="Bloque {{ n.blocks }} ticket(s) d’autres éléments">{{ icon('arrow-right', 11) }}{{ n.blocks }}</span>{% endif %}
+          {% if n.blocked_by %}<span class="wg-dep-n in" title="Bloqué par {{ n.blocked_by }} ticket(s) d’autres éléments">{{ icon('ban', 11) }}{{ n.blocked_by }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="wg-canvas" data-wg-graph data-sel="{{ sel }}" data-can-edit="{{ 1 if can_edit else 0 }}">
+  <div class="wg-viewport" tabindex="0" aria-label="Graphe des initiatives, projets et modules : glisser ou molette pour se déplacer, Ctrl + molette ou pincement pour zoomer">
+    <div class="wg-world">
+      <svg class="wg-links" aria-hidden="true">
+        <defs>
+          {% for k in ['open', 'done', 'out', 'in', 'hl'] %}
+          <marker id="wg-ah-{{ k }}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="wg-ah {{ k }}" d="M0 1 L9 5 L0 9 z"/></marker>
+          {% endfor %}
+        </defs>
+        <g class="wg-edges"></g>
+        <g class="wg-deps"></g>
+      </svg>
+      <div class="wg-heads"></div>
+      <div class="wg-nodes"></div>
+    </div>
+  </div>
+  <div class="wg-controls">
+    <button class="btn btn-icon btn-sm" type="button" data-wg-zoom="out" title="Dézoomer (− ou Ctrl + molette)">{{ icon('zoom-out', 15) }}</button>
+    <span class="wg-zoom-val" data-wg-zoom-val>100 %</span>
+    <button class="btn btn-icon btn-sm" type="button" data-wg-zoom="in" title="Zoomer (+)">{{ icon('zoom-in', 15) }}</button>
+    <button class="btn btn-sm" type="button" data-wg-fit title="Recentrer sur la sélection ou sur tout le graphe (0)">{{ icon('fit', 15) }}<span class="wg-hide-sm"> Recentrer</span></button>
+  </div>
+  <div class="wg-legend">
+    <span><i class="l tree"></i>Lien</span>
+    <span><i class="l open"></i>Dépendance ouverte</span>
+    <span><i class="l done"></i>Résolue</span>
+    <span class="wg-legend-sel"><i class="l out"></i>Bloque</span>
+    <span class="wg-legend-sel"><i class="l in"></i>Bloqué par</span>
+  </div>
+  <aside class="wg-detail" hidden></aside>
+  <div class="wg-tip" hidden></div>
+</div>
+<script type="application/json" id="wg-data">{{ graph|tojson }}</script>
+{% set wg_icons = {} %}{% for k in ['lightbulb', 'briefcase', 'module', 'calendar', 'ban', 'arrow-right', 'x', 'link', 'layers', 'user', 'plus'] %}{% do wg_icons.update({k: icon(k, 12 if k not in ('x', 'plus', 'layers', 'user') else 15)|string}) %}{% endfor %}
+<script type="application/json" id="wg-icons">{{ wg_icons|tojson }}</script>
+{% if can_edit and tab == 'initiative' %}
+<dialog class="modal" id="wg-link-modal">
+  <form method="post" action="">
+    {{ ui.csrf() }}
+    <input type="hidden" name="next" value="">
+    <div class="modal-h"><h2>Lier à <span data-wg-link-name></span></h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
+    <div class="modal-b panel-menu" style="width:auto;max-height:62vh">
+      <div class="pm-search"><input class="input input-sm" type="search" placeholder="Filtrer…" data-opt-filter></div>
+      <div class="pm-section">
+        <div class="pm-h">Projets</div>
+        {% for p in projects %}<label class="opt" data-opt-text="{{ (p.identifier ~ ' ' ~ p.name)|lower }}" data-wg-cand="p:{{ p.id }}"><input type="checkbox" name="project_ids" value="{{ p.id }}"><span>{{ p.emoji }}</span><span class="ellipsis">{{ p.name }}</span><span class="muted tiny right mono">{{ p.identifier }}</span></label>{% endfor %}
+      </div>
+      {% for p in projects %}{% set ms = p.modules|selectattr('archived_at', 'none')|list %}{% if ms %}
+      <div class="pm-section">
+        <div class="pm-h">Modules · {{ p.emoji }} {{ p.name }}</div>
+        {% for m in ms %}<label class="opt" data-opt-text="{{ (p.identifier ~ ' ' ~ m.name)|lower }}" data-wg-cand="m:{{ m.id }}"><input type="checkbox" name="module_ids" value="{{ m.id }}"><span style="color:{{ m.status_color }}">{{ icon('module', 14) }}</span><span class="ellipsis">{{ m.name }}</span></label>{% endfor %}
+      </div>
+      {% endif %}{% endfor %}
+    </div>
+    <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">Lier la sélection</button></div></div>
+  </form>
+</dialog>
+{% endif %}
+{% endif %}
+
+{% if can_edit %}
+<dialog class="modal" id="new-initiative-modal">
+  {{ wg.initiative_form(url_for('workgraph.initiative_create'), 'Nouvelle initiative', 'Créer l’initiative', users, statuses, projects=projects) }}
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='workgraph/workgraph.js') }}?v={{ version }}"></script>{% endblock %}
