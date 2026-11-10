@@ -1,0 +1,46 @@
+{# Composant de conversation (panneau latéral et page plein écran), animé par static/ai/ai.js #}
+<template class="ai-icons">{% for n in ['sparkle', 'copy', 'thumb-up', 'thumb-down', 'check', 'x', 'alert', 'zap', 'quote', 'plus', 'page', 'calendar', 'target', 'list', 'briefcase', 'cycle', 'module', 'book', 'home', 'workgraph', 'list-check', 'graduation', 'help', 'edit', 'message', 'trash', 'square', 'arrow-up', 'user', 'layers', 'check-circle'] %}<span data-i="{{ n }}">{{ icon(n, 14) }}</span>{% endfor %}</template>
+<div class="ai-scroll" data-ai-scroll>
+  <div class="ai-hist" data-ai-hist hidden>
+    <div class="ai-hist-h"><span>Conversations récentes</span><a href="{{ url_for('ai.index') }}">Tout voir</a></div>
+    <div class="ai-hist-list" data-ai-hist-list><div class="ai-hist-empty">Chargement…</div></div>
+  </div>
+  <div class="ai-welcome" data-ai-welcome>
+    <div class="ai-hello-ic">{{ icon('sparkle', 22) }}</div>
+    {% if aicfg.enabled %}
+    <h3>Bonjour {{ current_user.short_name }}, que puis-je faire pour toi ?</h3>
+    <p>Je vois la page ouverte, ton agenda, tes tâches et tes tickets, et je peux te proposer des actions.</p>
+    <div class="ai-sugg">
+      {% for c in (aicfg.commands or [])[:6] %}
+      <button type="button" class="ai-sugg-b" data-ai-cmd="{{ c.id }}">{{ icon(c.icon, 14) }}<span>{{ c.label }}</span></button>
+      {% endfor %}
+    </div>
+    {% if aicfg.capReached %}<div class="ai-note warn">{{ icon('alert', 14) }} Le plafond mensuel de dépense est atteint.</div>{% endif %}
+    {% else %}
+    <h3>L’assistant n’est pas encore configuré</h3>
+    {% if current_user.is_admin %}
+    <p>Ajoute Claude (clé d’API Anthropic) ou un modèle open source qui tourne sur ton ordinateur (Ollama, LM Studio…).</p>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('ai.reglages') }}">{{ icon('settings', 14) }} Configurer un fournisseur</a>
+    {% else %}
+    <p>Demande à un administrateur d’ajouter Claude ou un modèle local (Ollama…) dans les <a href="{{ url_for('ai.reglages') }}">réglages de l’IA</a>.</p>
+    {% endif %}
+    {% endif %}
+  </div>
+  <div class="ai-thread" data-ai-thread></div>
+</div>
+{% if aicfg.enabled %}
+<form class="ai-compose" data-ai-form autocomplete="off">
+  <div class="ai-pop" data-ai-pop hidden></div>
+  <div class="ai-box">
+    <div class="ai-chips" data-ai-chips></div>
+    <textarea class="ai-input" data-ai-input rows="1" maxlength="12000" aria-label="Message à l’assistant" placeholder="Pose une question… « @ » pour ajouter du contexte, « / » pour les commandes"></textarea>
+    <div class="ai-bar">
+      <button type="button" class="ai-tool" data-ai-at title="Ajouter du contexte (@)">{{ icon('at', 15) }}</button>
+      <button type="button" class="ai-tool" data-ai-slash title="Commandes (/)">{{ icon('slash', 15) }}</button>
+      <span class="ai-hint">{{ aicfg.modelLabel }}{% if aicfg.local %} · local{% endif %}{% if not aicfg.tools %} · sans outils{% endif %}</span>
+      <button class="ai-send" type="submit" data-ai-send title="Envoyer (Entrée)" aria-label="Envoyer">{{ icon('arrow-up', 16) }}</button>
+    </div>
+  </div>
+  <div class="ai-foot">L’IA peut se tromper : vérifie l’essentiel. Rien n’est modifié sans ton clic.</div>
+</form>
+{% endif %}

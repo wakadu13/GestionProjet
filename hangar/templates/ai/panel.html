@@ -1,5 +1,18 @@
-{# Panneau latéral de l'assistant IA (façon Plane AI), ouvert avec le bouton « Assistant IA » #}
+{# Panneau latéral de l'assistant IA (façon Plane AI), ouvert avec le bouton « Assistant IA » ou Ctrl+J #}
+{% set aicfg = ai_client_config() %}
 <aside class="ai-panel" id="ai-panel" aria-label="Assistant IA">
-  <div class="ai-head"><b>{{ icon('sparkle', 15) }} Assistant IA</b><button class="btn btn-ghost btn-icon btn-sm" type="button" data-ai-toggle title="Fermer">{{ icon('x', 15) }}</button></div>
-  <div class="ai-body"><div class="empty sm">L’assistant IA arrive bientôt.</div></div>
+  <link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">
+  <div class="ai-head">
+    <b>{{ icon('sparkle', 15) }}<span class="ai-head-t">Assistant IA</span>{% if aicfg.enabled %}<span class="ai-model" title="{{ aicfg.provider }} · {{ aicfg.model }}">{{ aicfg.modelLabel }}</span>{% endif %}</b>
+    {% if aicfg.enabled %}
+    <button class="btn btn-ghost btn-icon btn-sm" type="button" data-ai-new title="Nouvelle conversation">{{ icon('message-plus', 15) }}</button>
+    <button class="btn btn-ghost btn-icon btn-sm" type="button" data-ai-history title="Historique des conversations">{{ icon('history', 15) }}</button>
+    {% endif %}
+    <a class="btn btn-ghost btn-icon btn-sm" href="{{ url_for('ai.index') }}" data-ai-full title="Ouvrir en plein écran">{{ icon('maximize', 15) }}</a>
+    <button class="btn btn-ghost btn-icon btn-sm" type="button" data-ai-toggle title="Fermer (Ctrl+J)">{{ icon('x', 15) }}</button>
+  </div>
+  <div class="ai-chat" data-ai-chat="panel">
+    {% include "ai/_chat.html" %}
+  </div>
 </aside>
+<script src="{{ url_for('static', filename='ai/ai.js') }}?v={{ version }}" defer></script>

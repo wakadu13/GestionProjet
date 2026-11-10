@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% set aicfg = ai_client_config() %}
+{% block title %}{{ conv.title if conv else 'Assistant IA' }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}"><script>document.documentElement.classList.add('ai-fullpage');</script>{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    <a href="{{ url_for('ai.index') }}">{{ icon('sparkle', 15) }} Assistant IA</a>
+    <span class="sep">/</span>
+    <span class="current ai-crumb" data-ai-title>{{ conv.title if conv else 'Nouvelle conversation' }}</span>
+  </div>
+  <div class="header-actions">
+    {% if aicfg.enabled %}<span class="badge ai-badge" title="{{ aicfg.provider }}">{{ icon('zap', 12) }} {{ aicfg.modelLabel }}</span>{% endif %}
+    <a class="btn btn-sm" href="{{ url_for('ai.index') }}?new=1" data-ai-new-page>{{ icon('message-plus', 14) }} <span>Nouvelle conversation</span></a>
+    {% if conv %}{{ ui.confirm_button(url_for('ai.conversation_delete', cid=conv.id), 'Supprimer', 'Supprimer cette conversation ?', icon_name='trash') }}{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block content %}
+<div class="ai-page">
+  <div class="ai-chat ai-chat-page" data-ai-chat="page" data-conv="{{ conv.id if conv else '' }}">
+    {% include "ai/_chat.html" %}
+  </div>
+</div>
+<script type="application/json" id="ai-conv-data">{{ conv_data|tojson }}</script>
+{% endblock %}
