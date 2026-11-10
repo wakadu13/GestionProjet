@@ -63,7 +63,7 @@
     const dest = destination();
     const cours = claudeBox && claudeBox.checked ? pending.filter((p) => COURS.test(p.path)).length : 0;
     summaryText.textContent = (parts.length ? `${parts.join(" et ")} à importer ${dest ? `dans « ${dest} »` : "à la racine du wiki"}.` : "Aucun fichier à importer.")
-      + (cours ? ` Claude en fera ${plural(cours, "page")} de cours.` : "")
+      + (cours ? ` L’IA en fera ${plural(cours, "page")} de cours.` : "")
       + (skipped ? ` ${plural(skipped, "fichier")} d'un autre type ${skipped > 1 ? "seront ignorés" : "sera ignoré"}.` : "");
     pendingList.replaceChildren(...pending.slice(0, 200).map((p) => {
       const li = document.createElement("li");

@@ -294,11 +294,11 @@
       b.type = "button";
       b.addEventListener("click", async () => {
         b.disabled = true;
-        b.textContent = "Claude réfléchit…";
+        b.textContent = "L’IA réfléchit…";
         try {
           const r = await options.expliquer(q);
           const box = el("div", "quiz-explication quiz-explication-claude markdown", r.html);
-          box.prepend(el("p", "muted quiz-explication-source", "✦ Explication de Claude" + (r.gardee ? "" : " (nouvelle)")));
+          box.prepend(el("p", "muted quiz-explication-source", "✦ Explication de l’IA" + (r.gardee ? "" : " (nouvelle)")));
           b.replaceWith(box);
           renderMath(box);
         } catch (e) {
@@ -360,7 +360,7 @@
     // sans Claude (plafond, panne), correction stricte.
     async function corrigerAvecClaude(q, input) {
       const { feedback } = state._els;
-      feedback.innerHTML = '<div class="quiz-verdict muted">✦ Claude lit ta réponse…</div>';
+      feedback.innerHTML = '<div class="quiz-verdict muted">✦ L’IA lit ta réponse…</div>';
       const attendu = '<p>Réponse attendue : <b>' + q.reponses_texte.map(escapeHtml).join(" / ") + "</b></p>";
       let r = null;
       try { r = await options.corrigerQrc(q, input.value.trim()); } catch (e) { r = null; }

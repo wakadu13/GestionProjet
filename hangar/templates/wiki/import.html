@@ -27,6 +27,10 @@
         </label>
         <datalist id="import-folders">{% for f in folders %}<option value="{{ f }}">{% endfor %}</datalist>
         <label class="checkbox small"><input type="checkbox" name="remplacer" value="1"> Remplacer les fichiers existants</label>
+        {% if ai_dispo %}
+        <label class="checkbox small" title="L’IA lit chaque PDF ou fichier .tex importé et en fait une page de cours (plan, formules, encadrés), en arrière-plan"><input type="checkbox" name="claude" value="1" data-claude> {{ icon('sparkle', 13) }} Transformer les cours (PDF, LaTeX) en pages avec l’IA</label>
+        {% if ai_lots() %}<label class="checkbox small" title="Traitement différé à moitié prix (Claude), résultat sous 24 heures"><input type="checkbox" name="lot" value="1" data-lot> sans urgence (lot, moitié prix)</label>{% endif %}
+        {% endif %}
       </div>
       <div class="md-import-summary" data-summary hidden>
         <p data-summary-text></p>

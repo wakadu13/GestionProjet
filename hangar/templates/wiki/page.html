@@ -28,6 +28,16 @@
         <a class="menu-item" href="{{ url_for('wiki.graphe', page=note.key) }}">{{ icon('wiki-graph') }} Voir dans le graphe</a>
         <button class="menu-item" type="button" data-copy="{{ request.url_root.rstrip('/') }}{{ note.url }}">{{ icon('link') }} Copier le lien</button>
         <button class="menu-item" type="button" data-copy="[[{{ vault.link_for(note) }}]]">{{ icon('copy') }} Copier le lien [[…]]</button>
+        {% if ai_dispo %}
+        <div class="menu-sep"></div>
+        <button class="menu-item" type="button" data-ai-ask="tuteur">{{ icon('graduation') }} Interroge-moi sur cette page</button>
+        <a class="menu-item" href="{{ url_for('ai.demander') }}">{{ icon('book') }} Demander au wiki</a>
+        <a class="menu-item" href="{{ url_for('ai.copie', page=note.key) }}">{{ icon('image') }} Corriger ma copie sur ce cours</a>
+        {% if can_edit %}<form method="post" action="{{ url_for('ai.transformations') }}">{{ ui.csrf() }}<input type="hidden" name="fiche" value="{{ note.key }}"><button class="menu-item">{{ icon('list-check') }} Fiche de révision (IA)</button></form>{% endif %}
+        {% endif %}
+        {% if can_edit %}
+        <form method="post" action="{{ url_for('ai.cartes_page') }}">{{ ui.csrf() }}<input type="hidden" name="page" value="{{ note.key }}"><button class="menu-item" title="Cartes tirées des encadrés (définitions, théorèmes…) et des ==surlignages==, sans IA">{{ icon('graduation') }} Cartes de révision de la page</button></form>
+        {% endif %}
         {% if can_edit %}
         <div class="menu-sep"></div>
         <form method="post" action="{{ url_for('wiki.supprimer', path=note.key) }}" data-confirm="Mettre « {{ note.title }} » à la corbeille du coffre (.trash) ? Son texte reste dans l’historique.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Mettre à la corbeille</button></form>

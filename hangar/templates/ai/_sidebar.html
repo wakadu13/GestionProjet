@@ -7,6 +7,17 @@
 <nav class="sb-scroll">
   <a class="sb-link {% if ep in ('ai.index', 'ai.conversation') %}active{% endif %}" href="{{ url_for('ai.index') }}">{{ icon('sparkle') }} Conversations</a>
   <a class="sb-link {% if ep == 'ai.reglages' %}active{% endif %}" href="{{ url_for('ai.reglages') }}">{{ icon('settings') }} Fournisseurs et usage</a>
+  {% if aisb.dispo or aisb.travaux or aisb.brouillons %}
+  <div class="sb-section">
+    <div class="sb-section-h"><span>Révision</span></div>
+    {% if aisb.dispo and aisb.wiki %}<a class="sb-link {% if ep == 'ai.demander' %}active{% endif %}" href="{{ url_for('ai.demander') }}">{{ icon('book') }} Demander au wiki</a>{% endif %}
+    {% if aisb.dispo %}<a class="sb-link {% if ep == 'ai.copie' %}active{% endif %}" href="{{ url_for('ai.copie') }}">{{ icon('image') }} Corriger ma copie</a>{% endif %}
+    {% if aisb.editeur %}
+    {% if aisb.dispo %}<a class="sb-link" href="{{ url_for('ai.transformations') }}#transformer">{{ icon('upload') }} Transformer un cours</a>{% endif %}
+    <a class="sb-link {% if ep in ('ai.transformations', 'ai.relire') %}active{% endif %}" href="{{ url_for('ai.transformations') }}">{{ icon('timer') }} Travaux {% if aisb.brouillons %}<span class="sb-badge" title="{{ aisb.brouillons }} brouillon(s) à relire">{{ aisb.brouillons }}</span>{% elif aisb.travaux %}<span class="sb-badge" title="En cours">{{ aisb.travaux }}</span>{% endif %}</a>
+    {% endif %}
+  </div>
+  {% endif %}
   <div class="sb-section">
     <div class="sb-section-h"><span>Récentes</span></div>
     {% set cur = request.view_args.get('cid') if request.view_args else None %}

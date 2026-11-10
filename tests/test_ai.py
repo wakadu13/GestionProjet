@@ -965,16 +965,18 @@ class PageTests(AITestCase):
         db.session.add(conv)
         db.session.commit()
         for url in ("/", "/ia/", "/ia/?new=1", f"/ia/c/{conv.id}", "/ia/reglages/", "/home", "/agenda/tasks",
-                    "/qcm/expliquer/", "/demander/", "/copie/", "/transformations/"):
+                    "/demander/", "/copie/", "/transformations/"):
             r = c.get(url)
             self.assertEqual(r.status_code, 200, url)
         page = c.get("/").get_data(as_text=True)
         self.assertIn("data-ai-form", page)
         self.assertIn("Claude Opus 5.5", page)
-        for url in ("/qcm/expliquer/", "/qcm/corriger-qrc/", "/claude/tuteur/", "/qcm/generer/", "/copie/"):
+        # Fonctions de Revision : requêtes invalides refusées proprement (JSON)
+        for url in ("/qcm/expliquer/", "/qcm/corriger-qrc/", "/claude/tuteur/"):
             r = c.post(url, json={}, headers={"X-CSRF-Token": c.token})
-            self.assertEqual(r.status_code, 503, url)
+            self.assertIn(r.status_code, (400, 404), url)
             self.assertFalse(r.json["ok"])
+        self.assertEqual(c.get("/qcm/expliquer/").status_code, 405)
         m = self.login("alice")
         self.assertEqual(m.get("/ia/reglages/").status_code, 200)
         self.assertEqual(m.get(f"/ia/c/{conv.id}").status_code, 404)

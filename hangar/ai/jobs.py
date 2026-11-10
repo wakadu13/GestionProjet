@@ -111,13 +111,15 @@ def run_job(job: AIJob) -> None:
         db.session.commit()
         return
     job.status, job.started_at = "running", job.started_at or now()
+    if (job.message or "").startswith("Dans un lot"):
+        job.message = ""
     db.session.commit()
     try:
         result = handler(job, _bound_ai(job))
-        job.result = result
-        job.status = "done"
-        if (job.message or "").startswith("Dans un lot"):
-            job.message = ""
+        if result is not None:
+            job.result = result
+        if job.status == "running":  # la fonction peut laisser un brouillon (« draft ») à relire
+            job.status = "done"
     except Deferred:
         return
     except AIError as e:
@@ -129,6 +131,32 @@ def run_job(job: AIJob) -> None:
         job.status, job.message = "error", "Erreur inattendue (détail dans le journal du serveur)."
     job.finished_at = now()
     db.session.commit()
+    notifier(job)
+
+
+def notifier(job: AIJob) -> None:
+    """Notification Hangar (badge et toast) quand un travail long se termine."""
+    if not job.user_id or job.options.get("silencieux"):
+        return
+    from flask import url_for
+
+    from ..models import Notification
+
+    titre = job.title or job.kind
+    message = {"done": f"Travail de l’IA terminé : {titre}", "draft": f"À relire avant publication : {titre}",
+               "error": f"Travail de l’IA en échec : {titre}"}.get(job.status)
+    if message is None:
+        return
+    try:
+        url = job.options.get("url") or url_for("ai.transformations")
+    except Exception:  # noqa: BLE001 - hors requête
+        url = "/transformations/"
+    try:
+        db.session.add(Notification(user_id=job.user_id, kind="ai", message=message[:500], url=url))
+        db.session.commit()
+    except Exception:  # noqa: BLE001 - la notification ne doit pas faire échouer le travail
+        db.session.rollback()
+        log.exception("Notification du travail %s", job.id)
 
 
 def run_pending(limit: int | None = None) -> int:
@@ -209,7 +237,7 @@ def resume(app=None) -> None:
 
 def _loop(app) -> None:
     global _worker
-    with app.app_context():
+    with app.test_request_context("/"):  # url_for (adresses des résultats, notifications) hors requête
         last_poll = 0.0
         try:
             while True:

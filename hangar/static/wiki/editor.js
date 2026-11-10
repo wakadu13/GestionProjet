@@ -1098,7 +1098,7 @@
     if (!source.trim()) return status("Rien à améliorer : sélectionnez un passage.", "error");
     if (source.length > 12000) return status("Passage trop long : sélectionnez une partie de la page (12 000 caractères au plus).", "error");
     amelioration = true;
-    status(whole ? "Claude relit toute la page…" : "Claude relit le passage…");
+    status(whole ? "L’IA relit toute la page…" : "L’IA relit le passage…");
     const data = new FormData();
     data.append("_csrf", csrf);
     data.append("texte", source);
@@ -1107,14 +1107,14 @@
       const response = await fetch(ameliorerUrl, { method: "POST", body: data, headers: { Accept: "application/json" } });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || typeof json.texte !== "string") throw new Error(json.error || "Relecture impossible (session expirée ?).");
-      if (json.texte.trim() === source.trim()) return status("Rien à changer : Claude trouve le texte correct.", "ok");
+      if (json.texte.trim() === source.trim()) return status("Rien à changer : l’IA trouve le texte correct.", "ok");
       view.dispatch({
         changes: whole ? { from: 0, to: view.state.doc.length, insert: json.texte } : { from, to, insert: json.texte },
         selection: whole ? { anchor: 0 } : { anchor: from, head: from + json.texte.length },
         scrollIntoView: true,
         userEvent: "input",
       });
-      status("Texte amélioré par Claude : relisez, Ctrl+Z pour annuler.", "dirty");
+      status("Texte amélioré par l’IA : relis-le, Ctrl+Z pour annuler.", "dirty");
     } catch (e) {
       status(e.message, "error");
     } finally {

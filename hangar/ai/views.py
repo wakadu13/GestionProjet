@@ -54,6 +54,13 @@ def _own_conversation(cid: int) -> AIConversation:
     return c
 
 
+@bp.app_template_global("ai_lots")
+def ai_lots() -> bool:
+    """Case « Sans urgence (lot à moitié prix) » : seulement quand les travaux partent chez Claude."""
+    from . import lots_possibles
+    return lots_possibles()
+
+
 @bp.app_template_global("ai_sidebar")
 def ai_sidebar() -> dict:
     """Données du menu de la section IA (conversations récentes, usage du mois)."""
@@ -63,8 +70,13 @@ def ai_sidebar() -> dict:
              .order_by(AIConversation.updated_at.desc()).limit(10).all())
     s = AISettings.get()
     total = core.month_cost()
+    from . import disponible
+    from .tools import wiki_available
     return {"conversations": convs, "mine": core.month_cost(user_id=current_user.id), "total": total,
-            "cap": s.monthly_cap or 0, "pct": min(100, round(100 * total / s.monthly_cap)) if s.monthly_cap else 0}
+            "cap": s.monthly_cap or 0, "pct": min(100, round(100 * total / s.monthly_cap)) if s.monthly_cap else 0,
+            "dispo": disponible(), "wiki": wiki_available(), "editeur": not current_user.is_guest,
+            "travaux": AIJob.query.filter(AIJob.status.in_(("pending", "running", "batch"))).count(),
+            "brouillons": AIJob.query.filter_by(status="draft").count()}
 
 
 # ---------------------------------------------------------------------------
@@ -473,18 +485,7 @@ def errors_clear():
 
 
 # ---------------------------------------------------------------------------
-# Fonctions d'IA de Revision (portées après l'intégration du wiki et des QCM)
+# Fonctions d'IA de Revision (explications, QCM générés, tuteur, « Demander au wiki », copies, travaux)
 # ---------------------------------------------------------------------------
 
-def _bientot():
-    if request.method == "POST":
-        return jsonify(ok=False, error="Cette fonction d’IA arrive avec l’intégration du wiki et des QCM."), 503
-    return render_template("ai/placeholder.html")
-
-
-for _rule, _name in [("/qcm/expliquer/", "expliquer"), ("/qcm/corriger-qrc/", "corriger_qrc"),
-                     ("/qcm/cartes-de-la-page/", "cartes_page"), ("/qcm/generer/", "generer_qcm"),
-                     ("/qcm/importer-vocabulaire/", "importer_vocabulaire"), ("/claude/ameliorer/", "ameliorer"),
-                     ("/claude/tuteur/", "tuteur"), ("/transformations/", "transformations"),
-                     ("/demander/", "demander"), ("/copie/", "copie")]:
-    bp.add_url_rule(_rule, _name, login_required(_bientot), methods=["GET", "POST"])
+from . import revision_views  # noqa: E402,F401 - ajoute ses routes au blueprint

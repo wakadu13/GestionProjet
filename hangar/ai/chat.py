@@ -59,6 +59,12 @@ Dans cette conversation, tu n’as pas d’outils : réponds avec le contexte fo
 (créer une tâche, un ticket…), décris-la précisément pour que l’utilisateur la fasse dans Hangar."""
 
 COMMANDS = [
+    {"id": "wiki", "label": "Demander au wiki", "icon": "book", "prompt": "", "mode": "wiki", "wiki": True,
+     "aide": "Réponses d’après tes pages et tes PDF, avec les sources citées [1], [2]…"},
+    {"id": "tuteur", "label": "Interroge-moi sur cette page", "icon": "graduation", "wiki": True,
+     "prompt": "Interroge-moi sur cette page : pose-moi une seule question à la fois, de plus en plus difficile. "
+               "Attends ma réponse, corrige-la en t’appuyant sur la page (ce qui est juste, ce qui manque, la bonne "
+               "réponse), puis pose la question suivante. Commence par la première question."},
     {"id": "resumer", "label": "Résumer la page", "icon": "list",
      "prompt": "Résume cette page en quelques points clés."},
     {"id": "expliquer", "label": "Expliquer la sélection", "icon": "help",
@@ -167,11 +173,25 @@ def chip(ctx: dict | None) -> dict | None:
     return {k: ctx.get(k) for k in ("type", "title", "url", "icon", "key")}
 
 
+def html_avec_sources(content: str, sources: list | None) -> tuple[str, list]:
+    """HTML d'une réponse ; avec des sources (« Demander au wiki »), les citations [n] deviennent des liens."""
+    html = str(render(content))
+    if not sources:
+        return html, []
+    try:
+        from ..wiki import demander as recherche
+        html, cites = recherche.lier_citations(html, sources)
+    except Exception:  # noqa: BLE001 - wiki indisponible : citations laissées en texte
+        cites = []
+    return html, [{**s, "n": i, "cite": i in cites} for i, s in enumerate(sources, 1)]
+
+
 def message_dict(m: AIMessage) -> dict:
     ctx = m.context
+    html, sources = html_avec_sources(m.content, ctx.get("sources")) if m.role == "assistant" and m.content else ("", [])
     return {
         "id": m.id, "role": m.role, "content": m.content, "status": m.status, "error": m.error,
-        "html": str(render(m.content)) if m.role == "assistant" and m.content else "",
+        "html": html, "sources": sources,
         "feedback": m.feedback or 0, "model": core.model_label(m.model) if m.model else "", "provider": m.provider_name,
         "command": m.command, "page": ctx.get("page"), "selection": len(ctx.get("selection") or ""),
         "mentions": ctx.get("mentions") or [], "tools": m.tools,
@@ -192,23 +212,42 @@ class Turn:
 
     def __init__(self, user, conv: AIConversation, text: str, *, page: dict | None, selection: str,
                  mentions: list[dict], command: str = ""):
+        from .tools import wiki_available
+
         self.user = user
         self.conv = conv
-        self.row = core.pick("chat")
+        # « Demander au wiki » : réponse d'après les extraits du coffre, citations [n] (rôle « rapide », sans outils).
+        self.mode = "wiki" if command == "wiki" and wiki_available() else "chat"
+        self.role = "rapide" if self.mode == "wiki" else "chat"
+        self.row = core.pick(self.role)
         prov = P.get(self.row)
-        model = self.row.model_for("chat")
-        self.use_tools = prov.tools_supported(model)
-        self.system = system_prompt(self.use_tools)
+        model = self.row.model_for(self.role)
         local = self.row.kind != "anthropic"
-        prompt = build_prompt(text, user, page=page, selection=selection, mentions=mentions,
-                              previous_page_key=last_page_key(conv), max_chars=LOCAL_PAGE_CHARS if local else None)
-        ctx = {"page": chip(page), "selection": selection,
+        self.sources: list = []
+        if self.mode == "wiki":
+            from ..wiki import demander as recherche
+            from ..wiki.vault import get_vault
+            from .demandes import consigne_wiki
+
+            prev = AIMessage.query.filter_by(conversation_id=conv.id, role="user").order_by(AIMessage.id.desc()).first()
+            self.sources = recherche.rassembler(get_vault(), text, [prev.content] if prev else [])
+            self.use_tools = False
+            self.system = consigne_wiki(self.sources)
+            prompt = text
+        else:
+            self.use_tools = prov.tools_supported(model)
+            self.system = system_prompt(self.use_tools)
+            prompt = build_prompt(text, user, page=page, selection=selection, mentions=mentions,
+                                  previous_page_key=last_page_key(conv), max_chars=LOCAL_PAGE_CHARS if local else None)
+        ctx = {"page": chip(page) if self.mode == "chat" else None, "selection": selection if self.mode == "chat" else "",
                "mentions": [{k: m.get(k) for k in ("type", "title", "url", "icon")} for m in mentions]}
         self.user_msg = AIMessage(conversation_id=conv.id, role="user", content=text, prompt=prompt,
                                   command=command if command in COMMAND_IDS else "", created_at=now())
         self.user_msg.context = ctx
         self.reply = AIMessage(conversation_id=conv.id, role="assistant", status="streaming", content="",
                                provider_name=self.row.name, model=model, created_at=now())
+        if self.sources:
+            self.reply.context = {"sources": [{k: s[k] for k in ("titre", "url", "type")} for s in self.sources]}
         if conv.title in ("", "Nouvelle conversation"):
             conv.title = title_from(text)
         conv.updated_at = now()
@@ -242,7 +281,8 @@ class Turn:
         buf, round_start, final, sent_actions, warned = "", 0, None, set(), False
         try:
             for ev in core.run_agent(self.messages, tools=self.box.definitions() if self.use_tools else None,
-                                     execute=self.box.execute, system=self.system, user=self.user, feature="chat"):
+                                     execute=self.box.execute, system=self.system, user=self.user, role=self.role,
+                                     feature="wiki" if self.mode == "wiki" else "chat"):
                 t = ev["type"]
                 if t == "text":
                     buf += ev["text"]
@@ -308,7 +348,8 @@ class Turn:
         m.tools = self.box.calls
         self.conv.updated_at, self.conv.last_model = now(), m.model
         db.session.commit()
-        return sse("done", {"message_id": m.id, "status": status, "text": content, "html": str(render(content)),
+        html, sources = html_avec_sources(content, m.context.get("sources"))
+        return sse("done", {"message_id": m.id, "status": status, "text": content, "html": html, "sources": sources,
                             "model": core.model_label(m.model), "provider": m.provider_name,
                             "actions": [action_dict(a) for a in m.actions],
                             "usage": {"input": m.input_tokens, "output": m.output_tokens, "cost": m.cost},

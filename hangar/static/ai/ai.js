@@ -235,7 +235,16 @@
         this.footer(m.model, m.feedback);
       }
       if (m.status === 'refusal') this.el.classList.add('refusal');
+      this.sources(m.sources);
       (m.actions || []).forEach((a) => this.action(a));
+    }
+    sources(list) {
+      if (!list || !list.length) return;
+      const d = document.createElement('details');
+      d.className = 'ai-sources';
+      d.open = true;
+      d.innerHTML = `<summary>${icon('book', 13)} Sources (${list.length})</summary><ol>${list.map((s) => `<li value="${s.n}"${s.cite ? ' class="cite"' : ''}><a href="${esc(s.url)}">${esc(s.titre)}</a>${s.type === 'pdf' ? ' <span class="muted">PDF</span>' : ''}</li>`).join('')}</ol>`;
+      this.notes.before(d);
     }
     append(t) { this.raw += t; this.render(); }
     truncate(n) { this.raw = this.raw.slice(0, n); this.render(); }
@@ -314,6 +323,7 @@
       this.body.innerHTML = d.html || md(this.raw);
       if (d.status === 'refusal') this.el.classList.add('refusal');
       typeset(this.body);
+      this.sources(d.sources);
       this.footer(d.model, 0);
       (d.actions || []).forEach((a) => this.action(a));
       this.chat.toBottom(true);
@@ -384,7 +394,8 @@
       if (hb) hb.addEventListener('click', () => this.toggleHistory());
       $$('[data-ai-cmd]', this.root).forEach((b) => b.addEventListener('click', () => {
         const c = (CFG.commands || []).find((x) => x.id === b.dataset.aiCmd);
-        if (c) { this.command = c.id; this.submit(c.prompt); }
+        if (c && c.mode) this.setAskMode(c.mode);
+        else if (c) { this.command = c.id; this.submit(c.prompt); }
       }));
       if (!this.form) return;
       this.form.addEventListener('submit', (e) => { e.preventDefault(); if (this.busy) this.stop(); else this.submit(); });
@@ -401,6 +412,7 @@
           const k = x.dataset.x;
           if (k === 'page') this.includePage = false;
           else if (k === 'sel') this.selection = '';
+          else if (k === 'mode') this.setAskMode(null);
           else this.mentions.splice(+k, 1);
           this.renderChips();
         } else if (chip && chip.classList.contains('off')) { this.includePage = true; this.renderChips(); }
@@ -435,9 +447,22 @@
       this.selection = t.slice(0, 8000);
       this.renderChips();
     }
+    setAskMode(mode) {
+      this.askMode = mode;
+      if (this.input) {
+        this.input.placeholder = mode === 'wiki' ? 'Ta question au wiki (réponse d’après tes pages et tes PDF, sources citées)…'
+          : 'Pose une question… « @ » pour ajouter du contexte, « / » pour les commandes';
+        this.input.focus();
+      }
+      this.renderChips();
+    }
     renderChips() {
       if (!this.chips) return;
       const parts = [];
+      if (this.askMode === 'wiki') {
+        this.chips.innerHTML = `<span class="ai-chip mode" title="Les réponses s’appuient sur les pages et les PDF du wiki, avec les sources">${icon('book', 13)}<span>Demander au wiki</span><button type="button" data-x="mode" title="Revenir à l’assistant">${icon('x', 11)}</button></span>`;
+        return;
+      }
       if (this.mode === 'panel' && this.page) {
         parts.push(this.includePage
           ? `<span class="ai-chip page" title="La page ouverte est transmise à l’assistant">${icon(this.page.icon || 'page', 13)}<span>${esc(this.page.title)}</span><button type="button" data-x="page" title="Ne pas transmettre la page">${icon('x', 11)}</button></span>`
@@ -502,7 +527,12 @@
       if (!it) return;
       const t = this.input;
       const pos = t.selectionStart ?? t.value.length;
-      if (this.popKind === 'cmd') {
+      if (this.popKind === 'cmd' && it.mode) {
+        t.value = '';
+        this.closePop();
+        this.setAskMode(it.mode);
+        return;
+      } else if (this.popKind === 'cmd') {
         t.value = it.prompt;
         this.command = it.id;
       } else {
@@ -615,12 +645,13 @@
       if (this.hist) this.hist.hidden = true;
       this.closePop();
       this.welcome.hidden = true;
-      const withPage = this.mode === 'panel' && this.includePage && !!this.page;
+      const wiki = this.askMode === 'wiki';
+      const withPage = !wiki && this.mode === 'panel' && this.includePage && !!this.page;
       const payload = {
         message: msg, conversation_id: this.convId, path: this.mode === 'panel' ? location.pathname : '',
         query: this.mode === 'panel' ? location.search : '', title: document.title, include_page: withPage,
-        selection: this.mode === 'panel' ? this.selection : '', command: this.command,
-        mentions: this.mentions.map((m) => ({ url: m.url, title: m.title, type: m.type })),
+        selection: !wiki && this.mode === 'panel' ? this.selection : '', command: wiki ? 'wiki' : this.command,
+        mentions: wiki ? [] : this.mentions.map((m) => ({ url: m.url, title: m.title, type: m.type })),
       };
       this.addUser({ content: msg, page: withPage ? this.page : null, selection: payload.selection.length, mentions: this.mentions });
       this.input.value = '';
@@ -672,6 +703,22 @@
   }
 
   /* ------------------------------------------------------------------ Démarrage */
+  function ask(id) {
+    const chat = $$('[data-ai-chat]').map((r) => r.aiChat).find(Boolean);
+    const c = (CFG.commands || []).find((x) => x.id === id);
+    if (!chat || !c) return;
+    if (chat.mode === 'panel' && H.toggleAI) H.toggleAI(true);
+    if (chat.mode === 'panel' && !chat.loaded) chat.onOpen();
+    if (c.mode) chat.setAskMode(c.mode);
+    else { chat.command = c.id; chat.submit(c.prompt); }
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ai-ask]');
+    if (b) { e.preventDefault(); ask(b.dataset.aiAsk); }
+  });
+  H.aiAsk = ask;
+  H.aiTypeset = typeset;
+
   function start() {
     // Sur téléphone, le panneau couvre tout l'écran : il ne reste pas ouvert d'une page à l'autre.
     if (document.documentElement.classList.contains('ai-open') && matchMedia('(max-width: 820px)').matches && H.toggleAI) H.toggleAI(false);

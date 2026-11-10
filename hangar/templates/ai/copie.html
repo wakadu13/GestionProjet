@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Corriger ma copie{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}"><link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><a href="{{ url_for('ai.index') }}">{{ icon('sparkle', 15) }} Assistant IA</a><span class="sep">/</span><span class="current">Corriger ma copie</span></div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner ai-settings ai-copie" id="copie" data-url="{{ url_for('ai.copie') }}" data-max="{{ max_photos }}">
+  <p class="help mb">Photographie ta copie (1 à {{ max_photos }} pages), ajoute l’énoncé si tu l’as : l’IA transcrit ta démarche et la corrige étape par étape (✅ juste, ⚠️ imprécis, ❌ faux), puis fait le bilan. Les photos sont gardées avec la correction, visibles de toi seul.</p>
+  {% if not dispo %}
+  <div class="panel panel-b ai-none">{{ icon('alert', 16) }}<div><b>Aucun fournisseur d’IA n’est configuré.</b> {% if current_user.is_admin %}<a href="{{ url_for('ai.reglages') }}">Ajoute Claude ou un modèle « vision » local</a>.{% else %}Demande à un administrateur d’en ajouter un.{% endif %}</div></div>
+  {% else %}
+  {% if plafond %}<div class="panel panel-b ai-none mb">{{ icon('alert', 16) }}<div>Plafond mensuel de l’IA atteint : réessaie le mois prochain.</div></div>{% endif %}
+  <form class="panel panel-b mb ai-copie-form" data-copie-form>
+    <label class="btn btn-primary ai-copie-ajouter">{{ icon('image', 14) }} Photos de la copie
+      <input type="file" name="photos" accept="image/*" multiple class="sr-only" data-copie-photos></label>
+    <div class="ai-copie-apercu" data-copie-apercu></div>
+    <div class="field"><label for="copie-enonce">Énoncé <span class="muted">(facultatif, mais la correction est meilleure avec)</span></label>
+      <textarea class="input" id="copie-enonce" name="enonce" rows="3" maxlength="4000" placeholder="Ex. : Calculer la transformée de Fourier de x(t) = e^{-a|t|}."></textarea></div>
+    <div class="field"><label for="copie-page">Page du cours <span class="muted">(facultatif : l’IA s’appuie dessus)</span></label>
+      <input class="input" id="copie-page" name="page" list="copie-pages" value="{{ page.key if page else '' }}" autocomplete="off"></div>
+    <datalist id="copie-pages">{% for p in pages %}<option value="{{ p }}">{% endfor %}</datalist>
+    <div class="flex gap wrap"><button type="submit" class="btn btn-primary">{{ icon('sparkle', 14) }} Corriger</button><span class="small" data-copie-etat role="status"></span></div>
+  </form>
+  {% endif %}
+  <section data-copie-historique>
+    {% if corrections %}<h2 class="ai-sub">Mes corrections</h2>{% endif %}
+    {% for b in corrections %}{% with ouvert = loop.first %}{% include "ai/_copie.html" %}{% endwith %}{% endfor %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ai/revision.js') }}?v={{ version }}" defer></script>{% endblock %}
