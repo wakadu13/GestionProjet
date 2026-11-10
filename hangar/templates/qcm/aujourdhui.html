@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}À réviser aujourd’hui · QCM{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}medium{% endblock %}
+{% block header %}
+{% set actions %}{% if etat.a_reviser %}<a class="btn btn-sm btn-primary" href="{{ url_for('qcm.play', revision=1) }}">{{ icon('play', 14) }} Révision intelligente ({{ etat.a_reviser if etat.a_reviser <= revision_max else revision_max ~ ' sur ' ~ etat.a_reviser }})</a>{% endif %}{% endset %}
+{{ qm.header('À réviser aujourd’hui', (), actions) }}
+{% endblock %}
+{% block content %}
+<div class="inner">
+  <div class="qcm-hero">
+    <div>
+      <h1>{{ icon('sun', 20) }} Aujourd’hui</h1>
+      <div class="sub">{{ jour|date_long|capitalize }}</div>
+    </div>
+  </div>
+
+  <div class="stats qcm-tiles">
+    <div class="stat flame">
+      <div class="v">🔥 {{ activite.serie }}</div>
+      <div class="l">Jour{{ 's' if activite.serie > 1 }} d’affilée</div>
+      <div class="sub">{% if activite.serie and not activite.aujourdhui %}à prolonger aujourd’hui{% else %}record : {{ activite.record }}{% endif %}</div>
+    </div>
+    <div class="stat {% if objectif and activite.aujourdhui >= objectif %}success{% endif %}">
+      <div class="v">{{ activite.aujourdhui }}{% if objectif %}<span class="muted" style="font-size:15px"> / {{ objectif }}</span>{% endif %}</div>
+      <div class="l">Réponse{{ 's' if activite.aujourdhui > 1 }} aujourd’hui{% if minutes %} · {{ minutes }} min{% endif %}</div>
+      {% if objectif %}{{ ui.progress(pct_objectif, 'accent') }}{% endif %}
+    </div>
+    <a class="stat accent" href="{{ url_for('qcm.play', revision=1) }}">
+      <div class="v">{{ etat.revisions }}</div>
+      <div class="l">{{ icon('cards', 13) }} Révisions de QCM dues</div>
+      <div class="sub">+ {{ etat.nouvelles }} nouvelle{{ 's' if etat.nouvelles > 1 }} question{{ 's' if etat.nouvelles > 1 }} du jour</div>
+    </a>
+    <a class="stat" href="{{ url_for('qcm.langues_index') }}">
+      <div class="v">{{ etat.langues_a_revoir }}</div>
+      <div class="l">{{ icon('languages', 13) }} Langues à revoir</div>
+      <div class="sub">{{ etat.langues_nouveaux }} nouveau{{ 'x' if etat.langues_nouveaux > 1 }} disponible{{ 's' if etat.langues_nouveaux > 1 }}</div>
+    </a>
+  </div>
+  {% if objectif and activite.aujourdhui >= objectif %}
+  <div class="qcm-callout success">{{ icon('check-circle', 16) }}<div><b>Objectif du jour atteint ✓</b> Bravo, tout ce qui suit est du bonus.</div></div>
+  {% endif %}
+
+  <div class="qcm-grid-side">
+    <div>
+      <div class="panel">
+        <div class="panel-h">{{ icon('cards', 16) }}<h3>À réviser maintenant</h3>
+          {% if etat.a_reviser %}<a class="btn btn-sm btn-primary right" href="{{ url_for('qcm.play', revision=1) }}">{{ icon('play', 13) }} Tout réviser</a>{% endif %}</div>
+        {% if sets_dus or langues %}
+        <ul class="qcm-list">
+          {% for l in langues %}{% if l.a_revoir or l.nouveaux %}
+          <li>{{ icon('languages', 15) }}<span class="t">{{ l.nom }}</span><span class="m">{{ l.a_revoir }} à revoir · {{ l.nouveaux }} nouveau{{ 'x' if l.nouveaux > 1 }}</span>
+            <span class="r"><a class="btn btn-sm" href="{{ url_for('qcm.langue_play', langue=l.nom, mode='quotidien') }}">Session du jour</a></span></li>
+          {% endif %}{% endfor %}
+          {% for x in sets_dus %}
+          <li>{{ qm.ring(x.summary.pct_maitrise, 'sm') }}<span class="t">{{ x.set.titre }}</span><span class="m">{{ x.set.categorie }}</span>
+            <span class="r">{% if x.revisions %}<span class="qcm-due" title="Révisions dues">{{ x.revisions }}</span>{% endif %}{% if x.summary.nouvelles %}<span class="badge" title="Nouvelles questions du jour">+{{ x.summary.nouvelles }}</span>{% endif %}
+              <a class="btn btn-sm" href="{{ url_for('qcm.play', set=x.set.id, mode='review') }}">Réviser</a></span></li>
+          {% endfor %}
+          {% if autres_sets %}<li class="muted small">et {{ autres_sets }} autre{{ 's' if autres_sets > 1 }} set{{ 's' if autres_sets > 1 }} : <a href="{{ url_for('qcm.index') }}">tous les QCM</a></li>{% endif %}
+        </ul>
+        {% else %}
+        {{ ui.empty('check-circle', 'Rien à réviser pour l’instant ✓', 'Les questions reviennent juste avant d’être oubliées.') }}
+        {% endif %}
+      </div>
+
+      <div class="panel mt">
+        <div class="panel-h">{{ icon('chart', 16) }}<h3>Les 7 prochains jours</h3></div>
+        <div class="panel-b">{{ qm.previsions(previsions, previsions_max) }}</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="panel-h">{{ icon('target', 16) }}<h3>Examens à venir</h3><a class="btn btn-ghost btn-sm right" href="{{ url_for('qcm.planning_page') }}">Planning</a></div>
+        {% if examens %}
+        <ul class="qcm-list">
+          {% for x in examens[:8] %}
+          <li style="flex-wrap:wrap"><span class="t">{{ x.set.titre }}</span>
+            <span class="m">{% if x.jours == 0 %}aujourd’hui{% elif x.jours == 1 %}demain{% else %}dans {{ x.jours }} j{% endif %} · {{ x.date|date }}</span>
+            <span class="r">{{ qm.plan_badge(x.e) }}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="panel-b muted small">Aucune date d’examen : fixe-la dans le <a href="{{ url_for('qcm.planning_page') }}">planning</a> d’un set ou de toute une catégorie.</div>
+        {% endif %}
+      </div>
+
+      <div class="panel mt">
+        <div class="panel-h">{{ icon('flag-check', 16) }}<h3>Objectif du jour</h3></div>
+        <div class="panel-b">
+          <form method="post" class="flex gap wrap">
+            {{ ui.csrf() }}
+            <label class="qcm-inline-label">Réponses par jour <input class="input input-sm" style="width:90px" type="number" name="objectif" min="1" max="2000" value="{{ objectif or '' }}" placeholder="aucun"></label>
+            <button type="submit" class="btn btn-sm">Enregistrer</button>
+          </form>
+          <p class="muted small mt">QCM et langues confondus. Vide : pas d’objectif. Le résumé quotidien par e-mail rappelle ce qu’il reste à réviser.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

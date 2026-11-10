@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}Langues · QCM{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}medium{% endblock %}
+{% block header %}{{ qm.header('Langues') }}{% endblock %}
+{% block content %}
+<div class="inner">
+  <div class="qcm-hero"><div><h1>{{ icon('languages', 20) }} Langues</h1>
+    <div class="sub">Vocabulaire, conjugaison et grammaire : répétition espacée FSRS, rappel actif (on tape la réponse), exercices entrelacés, réessai des erreurs dans la session.</div></div></div>
+
+  {% if langues %}
+  <div class="qcm-langs">
+    {% for l in langues %}
+    <div class="qcm-lang">
+      <h3>{{ icon('languages', 16) }} {{ l.nom }} <span class="badge">{{ l.fichiers|length }} paquet{{ 's' if l.fichiers|length > 1 }}</span></h3>
+      <div class="meta"><b class="text-2">{{ l.a_revoir }}</b> à revoir · {{ l.nouveaux }} nouveau{{ 'x' if l.nouveaux > 1 }} disponible{{ 's' if l.nouveaux > 1 }} aujourd’hui · {{ l.resume.sept_jours }} dans les 7 jours</div>
+      <div class="btns">
+        <a class="btn btn-sm btn-primary" href="{{ url_for('qcm.langue_play', langue=l.nom, mode='quotidien') }}">{{ icon('play', 13) }} Session du jour</a>
+        <a class="btn btn-sm" href="{{ url_for('qcm.langue_play', langue=l.nom, mode='intensif') }}">Révision intensive</a>
+        <a class="btn btn-sm" href="{{ url_for('qcm.langue_menu', langue=l.nom) }}">Modes et statistiques</a>
+      </div>
+      {% if l.dossiers %}
+      <ul class="qcm-list" style="margin: 2px -14px -13px; border-top: 1px solid var(--border-2)">
+        {% for d in l.dossiers %}
+        <li>{{ icon('folder', 14) }}<a class="t" href="{{ url_for('qcm.langue_menu', langue=l.nom, dossier=d.nom) }}">{{ d.nom }}</a><span class="m">{{ d.sets|length }} paquet{{ 's' if d.sets|length > 1 }}</span>
+          <span class="r">{% if d.resume.a_revoir %}<span class="qcm-due">{{ d.resume.a_revoir }}</span>{% endif %}<a class="btn btn-xs" href="{{ url_for('qcm.langue_play', langue=l.nom, mode='quotidien', dossier=d.nom) }}">Réviser</a></span></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">{{ icon('languages', 40) }}<h3>Aucune langue pour l’instant</h3>
+    <p>Un fichier de langue est un <code>.json</code> avec une clé <code>"langue"</code> (vocabulaire, conjugaison, grammaire). Le plus simple : importer une liste de mots.</p>
+    <div class="mt"><a class="btn btn-primary" href="{{ url_for('qcm.perso') }}">{{ icon('lock', 14) }} Importer une liste dans Mon espace</a></div></div>
+  {% endif %}
+</div>
+{% endblock %}

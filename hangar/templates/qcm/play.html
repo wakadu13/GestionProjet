@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}{{ titre }} · QCM{% endblock %}
+{% block head %}{{ qm.styles(katex=True) }}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    <a href="{{ url_for('qcm.index') }}">{{ icon('graduation', 15) }} QCM</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current ellipsis" style="max-width: 52vw">{{ titre }}</span>
+  </div>
+  <div class="header-actions"><a class="btn btn-sm" href="{{ back_url }}">{{ icon('x', 14) }} Quitter</a></div>
+</div>
+{% endblock %}
+{% block content %}
+<article class="quiz" id="quiz"
+         data-record-url="{{ url_for('qcm.record') }}"
+         data-back-url="{{ back_url }}"
+         data-mode="{% if examen %}examen{% elif intensif %}intensif{% else %}normal{% endif %}"{% if examen %} data-duree="{{ duree_s }}"{% endif %}
+         {% if expliquer_url %}data-expliquer-url="{{ expliquer_url }}"{% endif %}
+         data-signaler-url="{{ url_for('qcm.signaler') }}"{% if corriger_qrc_url %} data-corriger-qrc-url="{{ corriger_qrc_url }}"{% endif %}
+         data-joueur="{{ current_user.id }}">
+  <div class="quiz-topbar">
+    <span class="quiz-progress-text" id="quiz-progress"></span>
+    {% if reste %}<span class="muted small">+ {{ reste }} autre{{ 's' if reste > 1 }} ensuite</span>{% endif %}
+  </div>
+  <div class="quiz-bar"><div class="quiz-bar-fill" id="quiz-bar-fill"></div></div>
+  {% if intensif and count %}
+  <p class="quiz-intensif-info">Révision intensive : chaque question ratée revient plus loin dans la session,
+    jusqu’à être réussie <b>2 fois de suite</b>. Seule la première réponse compte pour la révision espacée.</p>
+  {% endif %}
+  {% if examen and count %}
+  <details class="quiz-examen-info">
+    <summary>Examen blanc : <b>{{ count }} question{{ 's' if count > 1 }}</b> en <b>{{ duree_min }} min</b>, sans correction avant la fin ; note sur 20. <span class="quiz-examen-regler">Régler…</span></summary>
+    <form method="get" class="quiz-examen-form">
+      <input type="hidden" name="mode" value="examen">
+      {% for k, v in examen_params.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <label>Questions <input class="input input-sm" type="number" name="n" min="1" max="{{ total_dispo }}" value="{{ count }}"></label>
+      <label>Durée (min) <input class="input input-sm" type="number" name="duree" min="1" max="180" value="{{ duree_min }}"></label>
+      <button type="submit" class="btn btn-sm">Relancer l’examen</button>
+    </form>
+  </details>
+  {% endif %}
+
+  {% if count %}
+  <div id="quiz-stage" class="quiz-stage"></div>
+  <p class="quiz-keys"><span><kbd>A</kbd>–<kbd>D</kbd> choisir</span><span><kbd>Entrée</kbd> valider / suivant</span><span><kbd>Espace</kbd> retourner la carte</span><span><kbd>1</kbd>–<kbd>4</kbd> noter une carte</span></p>
+  {% else %}
+  <div class="empty">
+    {{ icon('check-circle', 40) }}
+    <h3>Rien à réviser ici 🎉</h3>
+    <p>Toutes les questions sont à jour. Reviens plus tard, ou lance une session « Tout » depuis la liste des sets.</p>
+    <div class="mt"><a class="btn btn-primary" href="{{ back_url }}">Retour</a></div>
+  </div>
+  {% endif %}
+</article>
+<script type="application/json" id="quiz-data">{{ questions|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+{{ qm.katex_js() }}
+<script src="{{ url_for('static', filename='qcm/quiz.js') }}?v={{ version }}" defer></script>
+{% endblock %}

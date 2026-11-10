@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}Statistiques · QCM{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}medium{% endblock %}
+{% block header %}{{ qm.header('Statistiques') }}{% endblock %}
+{% block content %}
+<div class="inner">
+  <div class="qcm-hero"><div><h1>{{ icon('chart', 20) }} Statistiques</h1><div class="sub">QCM et langues confondus</div></div></div>
+
+  <div class="stats qcm-tiles">
+    <div class="stat flame"><div class="v">🔥 {{ activite.serie }}</div><div class="l">Jour{{ 's' if activite.serie > 1 }} d’affilée</div><div class="sub">record : {{ activite.record }} jour{{ 's' if activite.record > 1 }}</div></div>
+    <div class="stat"><div class="v">{{ activite.aujourdhui }}</div><div class="l">Réponse{{ 's' if activite.aujourdhui > 1 }} aujourd’hui</div><div class="sub">{{ activite.justes_aujourdhui }} juste{{ 's' if activite.justes_aujourdhui > 1 }}</div></div>
+    <div class="stat"><div class="v">{{ activite.trente_jours }}</div><div class="l">Réponses sur 30 jours</div><div class="sub">{{ activite.jours_actifs_trente }} jour{{ 's' if activite.jours_actifs_trente > 1 }} actif{{ 's' if activite.jours_actifs_trente > 1 }}</div></div>
+    <div class="stat {% if activite.trente_jours and activite.justes_trente_jours * 100 >= activite.trente_jours * 80 %}success{% endif %}"><div class="v">{% if activite.trente_jours %}{{ (100 * activite.justes_trente_jours / activite.trente_jours)|round|int }} %{% else %}—{% endif %}</div><div class="l">Réponses justes (30 j)</div><div class="sub">{{ activite.justes_trente_jours }} sur {{ activite.trente_jours }}</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-h">{{ icon('calendar', 16) }}<h3>Activité</h3><span class="muted small right">26 dernières semaines</span></div>
+    <div class="panel-b">
+      <div class="qcm-cal" role="img" aria-label="Calendrier d’activité des 26 dernières semaines">
+        <div class="qcm-cal-mois">{% for colonne, nom in mois %}<span style="grid-column: {{ colonne }}">{{ nom }}</span>{% endfor %}</div>
+        <div class="qcm-cal-grille">
+          {% for semaine in calendrier %}{% for j in semaine %}<span class="qcm-jour{% if j.futur %} futur{% endif %}" data-niveau="{{ j.niveau }}" title="{{ j.jour|date_long }} : {{ j.reponses }} réponse{{ 's' if j.reponses > 1 }}{% if j.reponses %}, {{ j.justes }} juste{{ 's' if j.justes > 1 }}{% endif %}"></span>{% endfor %}{% endfor %}
+        </div>
+      </div>
+      <p class="qcm-cal-legende">Moins <span class="qcm-jour" data-niveau="0"></span><span class="qcm-jour" data-niveau="1"></span><span class="qcm-jour" data-niveau="2"></span><span class="qcm-jour" data-niveau="3"></span><span class="qcm-jour" data-niveau="4"></span> Plus · une case par jour</p>
+    </div>
+  </div>
+
+  <div class="qcm-grid-2 mt">
+    <div class="panel">
+      <div class="panel-h">{{ icon('timer', 16) }}<h3>Temps de révision par matière</h3></div>
+      {% if temps %}
+      <div class="qcm-table-wrap">
+        <table class="qcm-table">
+          <thead><tr><th>Matière</th><th class="num">Cette sem.</th><th class="num">8 sem.</th><th></th></tr></thead>
+          <tbody>
+            {% for ligne in temps %}
+            <tr><td>{{ ligne.matiere }}</td><td class="num">{{ ligne.minutes[-1] }} min</td><td class="num"><b>{{ ligne.total }}</b> min</td>
+              <td style="width:35%"><span class="qcm-temps-bar" style="width: {{ (100 * ligne.total / temps_max)|round|int }}%"></span></td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot><tr><th>Toutes</th><th class="num">{{ temps_totaux[-1] }} min</th><th class="num">{{ temps_totaux|sum }} min</th><th></th></tr></tfoot>
+        </table>
+      </div>
+      <div class="panel-b muted small">Mesuré de l’affichage de chaque question à la suivante, 2 minutes au plus par question ; matière = catégorie de QCM ou langue.</div>
+      {% else %}
+      <div class="panel-b muted small">Le temps de révision s’affichera ici, matière par matière, dès les prochaines réponses.</div>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <div class="panel-h">{{ icon('chart', 16) }}<h3>Révisions à venir</h3><span class="muted small right">{{ previsions_total }} sur {{ previsions|length }} jours</span></div>
+      <div class="panel-b">
+        {{ qm.previsions(previsions, previsions_max) }}
+        <p class="muted small">D’après les échéances FSRS (QCM et langues) ; les retards comptent aujourd’hui.</p>
+      </div>
+    </div>
+  </div>
+
+  {% if temps %}
+  <div class="panel mt">
+    <div class="panel-h">{{ icon('table', 16) }}<h3>Minutes par semaine</h3></div>
+    <div class="qcm-table-wrap">
+      <table class="qcm-table">
+        <thead><tr><th>Matière</th>{% for l in semaines %}<th class="num" title="Semaine du {{ l|date }}">{% if loop.last %}Cette sem.{% else %}{{ '%02d/%02d'|format(l.day, l.month) }}{% endif %}</th>{% endfor %}<th class="num">Total</th></tr></thead>
+        <tbody>
+          {% for ligne in temps %}<tr><td>{{ ligne.matiere }}</td>{% for m in ligne.minutes %}<td class="num">{% if m %}{{ m }}{% else %}<span class="muted">·</span>{% endif %}</td>{% endfor %}<td class="num"><b>{{ ligne.total }}</b></td></tr>{% endfor %}
+        </tbody>
+        <tfoot><tr><th>Toutes</th>{% for m in temps_totaux %}<th class="num">{{ m }}</th>{% endfor %}<th></th></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% for cat, entries in categories %}
+  <div class="panel mt">
+    <div class="panel-h">{{ icon('folder', 16) }}<h3>{{ cat }}</h3><span class="muted small right">{{ entries|length }} set{{ 's' if entries|length > 1 }}</span></div>
+    <div class="qcm-table-wrap">
+      <table class="qcm-table">
+        <thead><tr><th>Set</th><th>Maîtrise</th><th class="num" title="Probabilité moyenne de se souvenir des questions déjà vues, maintenant">Rétention</th><th class="num">Vues</th><th class="num">Précision</th><th class="num">À réviser</th><th class="num">Ratées</th><th></th></tr></thead>
+        <tbody>
+          {% for x in entries %}{% set s = x.summary %}
+          <tr>
+            <td><a href="{{ url_for('qcm.play', set=x.set.id, mode='all') }}">{{ x.set.titre }}</a>{% if x.set.proprietaire %} <span class="badge badge-perso">perso</span>{% endif %}</td>
+            <td class="nowrap"><div class="mastery"><div class="mastery-fill" style="width: {{ s.pct_maitrise|round|int }}%"></div></div><span class="muted">{{ s.pct_maitrise|round|int }} %</span></td>
+            <td class="num">{% if s.retention is not none %}{{ s.retention|round|int }} %{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td class="num">{{ s.rencontrees }}/{{ s.total }}</td>
+            <td class="num">{{ s.precision|round|int }} %</td>
+            <td class="num">{% if s.a_reviser %}<a href="{{ url_for('qcm.play', set=x.set.id, mode='review') }}">{{ s.a_reviser }}</a>{% else %}<span class="muted">à jour ✓</span>{% endif %}</td>
+            <td class="num">{% if s.ratees %}{{ s.ratees }}
+              {% if can_edit and ia and not x.set.proprietaire %}
+              <form method="post" action="{{ url_for('ai.generer_qcm') }}" title="L’IA écrit une variante de chaque question ratée, pour retravailler la notion ; brouillon à relire">
+                {{ ui.csrf() }}<input type="hidden" name="genre" value="variantes"><input type="hidden" name="set" value="{{ x.set.id }}">
+                <button type="submit" class="btn btn-xs">{{ icon('sparkle', 12) }} Variantes</button>
+              </form>
+              {% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td class="num">
+              <form method="post" action="{{ url_for('qcm.reset') }}" data-confirm="Réinitialiser la progression de « {{ x.set.titre }} » ?">
+                {{ ui.csrf() }}<input type="hidden" name="set" value="{{ x.set.id }}">
+                <button type="submit" class="btn btn-xs btn-ghost" title="Réinitialiser la progression">{{ icon('refresh', 12) }}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  {{ ui.empty('graduation', 'Aucun set de QCM', 'Ajoute un fichier .json dans le dossier QCM/ du coffre.') }}
+  {% endfor %}
+</div>
+{% endblock %}

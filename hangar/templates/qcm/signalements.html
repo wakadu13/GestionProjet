@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}Questions signalées · QCM{% endblock %}
+{% block head %}{{ qm.styles(katex=True) }}{% endblock %}
+{% block content_class %}narrow{% endblock %}
+{% block header %}{{ qm.header('Signalements') }}{% endblock %}
+{% block content %}
+<div class="inner" id="qcm-signalements">
+  <div class="qcm-hero"><div><h1>{{ icon('flag', 20) }} Questions signalées</h1>
+    <div class="sub">Pendant un QCM, « ⚑ Signaler un problème » envoie ici la question et le commentaire. Corrige le fichier à la main, retire la question,
+      ou demande une correction à l’IA puis applique-la : la question garde son identifiant, la progression de chacun est conservée.</div></div></div>
+
+  {% if not ouverts %}
+  <div class="qcm-callout success">{{ icon('check-circle', 16) }}<div><b>Aucun signalement en attente ✓</b></div></div>
+  {% endif %}
+
+  {% for l in ouverts %}
+  <section class="signalement" id="signalement-{{ l.s.id }}">
+    <div class="flex gap wrap"><b>{% if l.set %}{{ l.set.titre }}{% else %}{{ l.s.set_id }}{% endif %}</b>
+      <span class="muted small">question <code>{{ l.s.question_id }}</code> · signalée {{ l.s.cree_le|ago }}{% if l.s.user %} par {{ l.s.user.display_name }}{% endif %}</span></div>
+    {% if l.s.commentaire %}<blockquote class="signalement-commentaire">{{ l.s.commentaire }}</blockquote>{% else %}<p class="muted small mt">Sans commentaire.</p>{% endif %}
+    {% if l.question %}
+    <div class="signalement-question md">
+      <p class="muted small">{{ l.question.type }}{% if l.question.consigne %} · {{ l.question.consigne }}{% endif %}</p>
+      {{ l.html.enonce|safe }}
+      {% if l.html.choix %}<ul>{% for c in l.html.choix %}<li{% if loop.index0 in l.question.reponses %} class="bonne"{% endif %}>{{ c|safe }}{% if loop.index0 in l.question.reponses %} ✓{% endif %}</li>{% endfor %}</ul>{% endif %}
+      {% if l.question.reponses_texte %}<p>Réponse(s) : <b>{{ l.question.reponses_texte|join(' / ') }}</b></p>{% endif %}
+      {% if l.question.verso %}<p>Verso : {{ l.html.verso|safe }}</p>{% endif %}
+      {% if l.question.explication %}<div class="muted">Explication : {{ l.html.explication|safe }}</div>{% endif %}
+    </div>
+    {% if l.proposition %}
+    <div class="signalement-proposition md">
+      <p><b>{{ icon('sparkle', 13) }} Correction proposée par l’IA</b>{% if l.s.proposition_note %} <span class="muted">— {{ l.s.proposition_note }}</span>{% endif %}</p>
+      <p class="muted small">{{ l.proposition.type }}{% if l.proposition.consigne %} · {{ l.proposition.consigne }}{% endif %}</p>
+      {{ l.proposition.enonce|safe }}
+      {% if l.proposition.choix %}<ul>{% for c, bonne in l.proposition.choix %}<li{% if bonne %} class="bonne"{% endif %}>{{ c|safe }}{% if bonne %} ✓{% endif %}</li>{% endfor %}</ul>{% endif %}
+      {% if l.proposition.reponses_texte %}<p>Réponse(s) : <b>{{ l.proposition.reponses_texte|join(' / ') }}</b></p>{% endif %}
+      {% if l.proposition.verso %}<p>Verso : {{ l.proposition.verso|safe }}</p>{% endif %}
+      {% if l.proposition.explication %}<div class="muted">Explication : {{ l.proposition.explication|safe }}</div>{% endif %}
+    </div>
+    {% endif %}
+    <div class="signalement-actions">
+      {% if l.proposition %}<form method="post">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ l.s.id }}"><button type="submit" class="btn btn-sm btn-primary" name="action" value="appliquer">Appliquer la correction</button></form>{% endif %}
+      {% if ia %}<form method="post">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ l.s.id }}"><button type="submit" class="btn btn-sm" name="action" value="proposer">{{ icon('sparkle', 13) }} {% if l.proposition %}Nouvelle proposition{% else %}Corriger avec l’IA{% endif %}</button></form>{% endif %}
+      <a class="btn btn-sm" href="{{ url_for('qcm.play', set=l.s.set_id, mode='all') }}">Rejouer le set</a>
+      <form method="post" data-confirm="Retirer définitivement cette question du set ?">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ l.s.id }}"><button type="submit" class="btn btn-sm btn-danger-ghost" name="action" value="retirer">Retirer la question</button></form>
+      <form method="post">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ l.s.id }}"><button type="submit" class="btn btn-sm btn-ghost" name="action" value="clore" title="Déjà corrigée à la main, ou signalement infondé">Clore</button></form>
+    </div>
+    {% else %}
+    <p class="muted small mt">Cette question n’existe plus dans le set (ou le set a été supprimé).</p>
+    <form method="post" class="signalement-actions">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ l.s.id }}"><button type="submit" class="btn btn-sm" name="action" value="clore">Clore</button></form>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  {% if traites %}
+  <details class="qcm-bloc mt">
+    <summary><span><b>Derniers signalements traités</b><span class="muted">{{ traites|length }}</span></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <ul class="qcm-list">{% for s in traites %}<li><span class="t">{{ s.set_id }}</span><span class="m"><code>{{ s.question_id }}</code> · {{ s.traite_le|ago if s.traite_le else '' }}{% if s.commentaire %} — {{ s.commentaire|truncate(80) }}{% endif %}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}{{ qm.katex_js() }}<script src="{{ url_for('static', filename='qcm/qcm_math.js') }}?v={{ version }}" defer></script>{% endblock %}

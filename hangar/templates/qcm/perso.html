@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}Mon espace · QCM{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}narrow{% endblock %}
+{% block header %}
+{% set actions %}<a class="btn btn-sm" href="{{ url_for('qcm.masque_editeur') }}">{{ icon('image', 14) }} Image masquée</a>{% endset %}
+{{ qm.header('Mon espace', (), actions) }}
+{% endblock %}
+{% block content %}
+<div class="inner">
+  <div class="qcm-hero"><div><h1>{{ icon('lock', 20) }} Mon espace</h1>
+    <div class="sub">Tes propres sets de QCM et paquets de vocabulaire : <b class="text-2">toi seul les vois</b>. Ils apparaissent avec les autres (marqués « perso »), se révisent pareil et s’exportent vers Anki.</div></div>
+    <div class="actions"><span class="badge">{{ nombre }} / {{ max_fichiers }} fichiers</span><span class="badge">{{ taille|filesize }} / {{ max_octets|filesize }}</span></div>
+  </div>
+
+  {% if erreurs %}
+  <div class="qcm-callout warning">{{ icon('alert', 16) }}<div><b>Fichiers de ton espace ignorés (JSON invalide)</b><ul>{% for e in erreurs %}<li>{{ e }}</li>{% endfor %}</ul></div></div>
+  {% endif %}
+
+  <div class="panel mb">
+    <div class="panel-h">{{ icon('cards', 16) }}<h3>Mes sets et paquets</h3><span class="muted small right">{{ elements|length }}</span></div>
+    {% if elements %}
+    <ul class="qcm-list qcm-perso-list">
+      {% for x in elements %}
+      <li style="flex-wrap:wrap">
+        {{ icon('languages' if x.langue else 'graduation', 15) }}
+        <a class="t" href="{{ x.jouer }}">{{ x.set.titre }}</a>
+        <span class="m">{% if x.langue %}{{ x.set.langue }} · {% endif %}{{ x.dossier }} · {{ x.taille }} {% if x.langue %}exercice{% else %}question{% endif %}{{ 's' if x.taille > 1 }}</span>
+        <span class="r">
+          <a class="btn btn-sm btn-primary" href="{{ x.jouer }}">{{ icon('play', 13) }} Réviser</a>
+          {% if x.set.est_masque %}<a class="btn btn-sm" href="{{ url_for('qcm.masque_editeur', set=x.set.id) }}">{{ icon('image', 13) }} Zones</a>
+          {% else %}<a class="btn btn-sm btn-ghost btn-icon" href="{{ url_for('qcm.exporter', set=x.set.id) }}" title="Exporter pour Anki">{{ icon('download', 14) }}</a>{% endif %}
+          <form method="post" data-confirm="Supprimer « {{ x.set.titre }} » et sa progression ?">{{ ui.csrf() }}
+            <input type="hidden" name="action" value="supprimer"><input type="hidden" name="set" value="{{ x.set.id }}">
+            <button type="submit" class="btn btn-sm btn-danger-ghost btn-icon" title="Supprimer">{{ icon('trash', 14) }}</button></form>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    {{ ui.empty('lock', 'Rien pour l’instant', 'Importe une liste de mots, un set .json ou un paquet Anki ci-dessous.') }}
+    {% endif %}
+  </div>
+
+  <details class="qcm-bloc" open>
+    <summary><span class="ic-box">{{ icon('languages', 16) }}</span><span><b>Importer une liste de mots</b><span class="muted">Quizlet, Anki, tableur ou liste tapée</span></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <div class="qcm-bloc-b">{% set dossiers_langue = dossiers %}{% include "qcm/_form_liste.html" %}</div>
+  </details>
+  <details class="qcm-bloc">
+    <summary><span class="ic-box">{{ icon('code', 16) }}</span><span><b>Importer des sets de QCM</b><span class="muted">Fichiers .json au format des QCM, ou paquets Anki (.apkg)</span></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <div class="qcm-bloc-b">
+      <form method="post" enctype="multipart/form-data">
+        {{ ui.csrf() }}<input type="hidden" name="action" value="json">
+        <div class="field"><label>Fichiers .json ou .apkg</label><input class="input" type="file" name="fichiers" accept=".json,.apkg,application/json" multiple required></div>
+        <div class="qcm-form-row">
+          <div class="field"><label>Dossier</label><input class="input" name="categorie" list="liste-dossiers" placeholder="Mes sets"></div>
+          <label class="qcm-check"><input type="checkbox" name="remplacer" value="1"> Remplacer les sets existants</label>
+        </div>
+        <p class="muted small mt">Même format que les sets du coffre (voir la page d’import) ; chaque fichier est vérifié avant d’être ajouté.</p>
+        <button type="submit" class="btn btn-primary">Importer</button>
+      </form>
+    </div>
+  </details>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='qcm/qcm_index.js') }}?v={{ version }}" defer></script>{% endblock %}

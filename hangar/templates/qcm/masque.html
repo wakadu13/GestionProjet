@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}{% if donnees %}Modifier les zones · {{ donnees.titre }}{% else %}Image masquée{% endif %} · QCM{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}medium{% endblock %}
+{% block header %}
+{% set actions %}{% if donnees %}<a class="btn btn-sm" href="{{ donnees.jouer }}">{{ icon('play', 14) }} Réviser ce set</a>{% endif %}{% endset %}
+{{ qm.header('Modifier les zones' if donnees else 'Image masquée', (), actions) }}
+{% endblock %}
+{% block content %}
+<div class="inner" id="masque-editeur" data-url="{{ url_for('qcm.masque_editeur') }}" data-perso-url="{{ url_for('qcm.perso') }}">
+  <div class="qcm-hero"><div><h1>{{ icon('image', 20) }} {% if donnees %}Modifier les zones{% else %}Cartes à image masquée{% endif %}</h1>
+    <div class="sub">Un schéma, des zones à retenir : chaque zone tracée devient une carte où elle est cachée, et il faut dire ce qu’elle cache. Les cartes se révisent comme les autres (FSRS).</div></div></div>
+
+  <div class="masque-image-choix">
+    <input class="input" list="masque-images" data-image-choix placeholder="Chercher une image du wiki…" autocomplete="off" aria-label="Image du wiki">
+    <span class="muted">ou</span>
+    <label class="btn">{{ icon('upload', 14) }} Envoyer une image<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-image-fichier class="sr-only"></label>
+  </div>
+  <datalist id="masque-images">{% for i in images %}<option value="{{ i.lien }}">{{ i.dossier }}</option>{% endfor %}</datalist>
+
+  <div class="masque-travail">
+    <div class="masque-scene-cadre">
+      <p class="masque-vide muted" data-vide>Choisis d’abord une image, puis trace des rectangles dessus.</p>
+      <div class="masque-scene" data-scene hidden>
+        <img data-image alt="Image à masquer">
+        <div class="masque-calque" data-calque aria-label="Zone de dessin : glisse pour tracer un rectangle"></div>
+      </div>
+    </div>
+    <div class="masque-liste panel">
+      <div class="panel-b">
+        <h3>Zones <span class="muted" data-compte></span></h3>
+        <ol data-zones></ol>
+        <p class="muted small">Glisse sur l’image pour tracer une zone ; touche une zone pour la choisir, la déplacer ou l’agrandir (coin en bas à droite) ; <kbd>Suppr</kbd> l’efface. {{ max_zones }} zones au plus.</p>
+      </div>
+    </div>
+  </div>
+
+  <form data-masque-form class="panel mt">
+    <div class="panel-b">
+      <div class="qcm-form-row" style="margin-top:0">
+        <div class="field"><label>Titre</label><input class="input" name="titre" required maxlength="120" placeholder="Ex. : Le cœur"></div>
+        <div class="field"><label>Consigne</label><input class="input" name="question" maxlength="300" placeholder="{{ enonce_defaut }}"></div>
+      </div>
+      <label class="qcm-check mt"><input type="checkbox" name="masquer_tout" value="1" checked> Cacher aussi les autres zones (plus difficile)</label>
+      {% if not donnees %}
+      <div class="qcm-form-row">
+        {% if can_edit %}
+        <div class="field"><label>Ranger dans</label>
+          <select class="input" name="destination"><option value="perso">Mon espace (visible de moi seul)</option><option value="coffre">le coffre, sous QCM/ (visible de tous)</option></select></div>
+        {% else %}<input type="hidden" name="destination" value="perso">{% endif %}
+        <div class="field"><label>Dossier</label><input class="input" name="dossier" list="masque-dossiers" placeholder="Images masquées"></div>
+      </div>
+      <datalist id="masque-dossiers">{% for d in dossiers %}<option value="{{ d }}">{% endfor %}</datalist>
+      {% endif %}
+      <p class="masque-actions"><button type="submit" class="btn btn-primary">Enregistrer les cartes</button>
+        <span data-masque-etat role="status"></span></p>
+    </div>
+  </form>
+  <script type="application/json" id="masque-donnees">{{ donnees|tojson }}</script>
+  <script type="application/json" id="masque-images-json">{{ images|tojson }}</script>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='qcm/masque.js') }}?v={{ version }}" defer></script>{% endblock %}

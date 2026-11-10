@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}{{ titre }}{% endblock %}
+{% block head %}{{ qm.styles(katex=True) }}{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs">
+    <a href="{{ url_for('qcm.langues_index') }}">{{ icon('languages', 15) }} Langues</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
+    <span class="current ellipsis" style="max-width: 52vw">{{ titre }}</span>
+  </div>
+  <div class="header-actions"><a class="btn btn-sm" href="{{ back_url }}">{{ icon('x', 14) }} Quitter</a></div>
+</div>
+{% endblock %}
+{% block content %}
+<article class="quiz" id="quiz-langue"
+         data-corriger-url="{{ url_for('qcm.langue_corriger') }}"
+         data-record-url="{{ url_for('qcm.langue_record') }}"
+         data-back-url="{{ back_url }}"
+         data-mode="{% if intensif %}intensif{% else %}normal{% endif %}">
+  <div class="quiz-topbar">
+    <span class="quiz-progress-text" id="quiz-progress"></span>
+  </div>
+  <div class="quiz-bar"><div class="quiz-bar-fill" id="quiz-bar-fill"></div></div>
+  {% if intensif and count %}
+  <p class="quiz-intensif-info">Révision intensive : tous les exercices, et chaque exercice raté revient plus loin dans la session jusqu’à être réussi <b>2 fois de suite</b>.
+    Seule la première réponse compte pour la révision espacée.</p>
+  {% endif %}
+  {% if count %}
+  <div id="quiz-stage" class="quiz-stage"></div>
+  <p class="quiz-aide" id="quiz-aide"></p>
+  {% else %}
+  <div class="empty">
+    {{ icon('check-circle', 40) }}
+    <h3>{% if mode == "faibles" %}Aucun point faible pour l’instant ✓{% else %}Rien à réviser ni à découvrir pour l’instant ✓{% endif %}</h3>
+    <p>Reviens plus tard : les éléments reviennent juste avant d’être oubliés.</p>
+    <div class="mt"><a class="btn btn-primary" href="{{ back_url }}">Retour au menu</a></div>
+  </div>
+  {% endif %}
+</article>
+<script type="application/json" id="quiz-data">{{ exercices|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+{{ qm.katex_js() }}
+<script src="{{ url_for('static', filename='qcm/quiz_langue.js') }}?v={{ version }}" defer></script>
+{% endblock %}

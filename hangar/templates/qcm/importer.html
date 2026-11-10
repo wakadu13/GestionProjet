@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}Importer · QCM{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}narrow{% endblock %}
+{% block header %}{{ qm.header('Importer') }}{% endblock %}
+{% block content %}
+<div class="inner">
+  <div class="qcm-hero"><div><h1>{{ icon('upload', 20) }} Importer des QCM</h1>
+    <div class="sub">Les sets sont rangés dans le dossier <code>QCM/&lt;catégorie&gt;/</code> du coffre du wiki, visibles de tous. Pour des sets visibles de toi seul : <a class="text-2" href="{{ url_for('qcm.perso') }}">Mon espace</a>.</div></div></div>
+
+  <details class="qcm-bloc" open>
+    <summary><span class="ic-box">{{ icon('code', 16) }}</span><span><b>Sets de questions (.json) ou paquets Anki (.apkg)</b><span class="muted">Vérifiés avant d’être ajoutés au coffre</span></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <div class="qcm-bloc-b">
+      <form method="post" enctype="multipart/form-data" data-quiz-import>
+        {{ ui.csrf() }}
+        <label class="qcm-dropzone" data-dropzone>
+          <input type="file" name="fichiers" accept=".json,.apkg,application/json" multiple hidden data-import-files>
+          {{ icon('upload', 26) }}
+          <b>Glisse-dépose tes fichiers .json ou .apkg ici</b>
+          <span class="muted small">ou clique pour les choisir · chaque set est vérifié avant d’être ajouté</span>
+        </label>
+        <div class="qcm-form-row">
+          <div class="field"><label>Catégorie (dossier)</label>
+            <input class="input" type="text" name="categorie" list="qcm-categories" placeholder="Importés" autocomplete="off"></div>
+          <label class="qcm-check"><input type="checkbox" name="remplacer" value="1"> Remplacer les sets existants</label>
+        </div>
+        <datalist id="qcm-categories">{% for c in categories_import %}<option value="{{ c }}">{% endfor %}</datalist>
+        <p class="muted small mt">Paquet Anki : chaque note devient une carte recto/verso (texte à trous pour les notes « cloze ») ; à l’export dans Anki, coche « Compatibilité avec les anciennes versions ».</p>
+      </form>
+      <details class="mt">
+        <summary class="muted small" style="cursor:pointer">Format d’un set (exemple minimal, types de questions)</summary>
+        <pre class="qcm-code">{
+  "titre": "Mon premier set",
+  "description": "Facultatif",
+  "questions": [
+    {"type": "QCM", "question": "2 + 2 = ?", "choix": ["3", "4", "5"], "reponses": [1]},
+    {"type": "QCR", "question": "Nombres pairs ?", "choix": ["2", "3", "4"], "reponses": [0, 2]},
+    {"type": "TROU", "question": "La capitale de la France est ___.", "reponses_texte": ["Paris"]},
+    {"type": "QRC", "question": "chien", "consigne": "Traduire en anglais", "reponses_texte": ["dog"], "inverse": true},
+    {"type": "FLASHCARD", "question": "$E = mc^2$ ?", "verso": "Équivalence masse-énergie", "explication": "…"}
+  ]
+}</pre>
+        <p class="muted small">Markdown et formules LaTeX <code>$…$</code> acceptés, images du coffre avec <code>![[schema.png]]</code>. Vérifier un fichier écrit par une IA : <code>uv run hangar qcm-verifier fichier.json</code>.</p>
+      </details>
+    </div>
+  </details>
+
+  <details class="qcm-bloc" id="liste">
+    <summary><span class="ic-box">{{ icon('languages', 16) }}</span><span><b>Liste de mots (vocabulaire)</b><span class="muted">Quizlet, Anki, tableur ou liste tapée : un paquet de langue à part</span></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <div class="qcm-bloc-b">
+      {% include "qcm/_form_liste.html" %}
+    </div>
+  </details>
+
+  {% if ia %}
+  <details class="qcm-bloc" id="generer">
+    <summary><span class="ic-box">{{ icon('sparkle', 16) }}</span><span><b>Générer avec l’IA</b><span class="muted">Un QCM d’après une page du cours, ou un paquet de vocabulaire d’après tes mots</span></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <div class="qcm-bloc-b">
+      <form method="post" action="{{ url_for('ai.generer_qcm') }}">
+        {{ ui.csrf() }}<input type="hidden" name="genre" value="qcm">
+        <div class="field"><label for="generer-page">Page du cours</label>
+          <input class="input" id="generer-page" name="page" list="generer-pages" placeholder="Rechercher une page du wiki…" autocomplete="off"></div>
+        <datalist id="generer-pages">{% for key, title in pages %}<option value="{{ key }}">{{ title }}</option>{% endfor %}</datalist>
+        <div class="field"><label for="generer-texte">ou texte du cours, collé</label><textarea class="input" id="generer-texte" name="texte" rows="4"></textarea></div>
+        <div class="qcm-form-row">
+          <div class="field"><label>Questions</label><select class="input" name="nombre">{% for n in (10, 15, 20, 30, 40) %}<option value="{{ n }}"{% if n == 20 %} selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+          <div class="field"><label>Catégorie</label><input class="input" name="categorie" list="qcm-categories" placeholder="dossier de la page"></div>
+          <div class="field"><label>Titre <span class="muted">(facultatif)</span></label><input class="input" name="titre"></div>
+        </div>
+        <div class="flex gap wrap mt"><label class="qcm-check"><input type="checkbox" name="publier" value="1"> Publier directement, sans relecture</label>
+          <label class="qcm-check" title="Traitement différé à moitié prix (Claude)"><input type="checkbox" name="lot" value="1"> Sans urgence (en lot)</label>
+          <button type="submit" class="btn btn-primary right">{{ icon('sparkle', 14) }} Générer le QCM</button></div>
+      </form>
+      <hr>
+      <form method="post" action="{{ url_for('ai.generer_qcm') }}" data-qcm-cartes>
+        {{ ui.csrf() }}<input type="hidden" name="genre" value="vocabulaire">
+        <div class="field"><label for="generer-mots">Mots ou expressions, un par ligne (en français ou dans la langue apprise)</label>
+          <textarea class="input" id="generer-mots" name="mots" rows="6" spellcheck="false" placeholder="un emploi&#10;to achieve&#10;la cuisine = the kitchen"></textarea></div>
+        <fieldset class="qcm-cartes"><legend>Types de cartes</legend>
+          {% for cle, nom, coche in cartes %}<label class="qcm-check"><input type="checkbox" name="cartes" value="{{ cle }}"{% if coche %} checked{% endif %}> {{ nom }}</label>{% endfor %}
+        </fieldset>
+        <div class="qcm-form-row">
+          <div class="field"><label>Langue</label><input class="input" name="langue" list="liste-langues" value="Anglais" required></div>
+          <div class="field"><label>Nom du paquet <span class="muted">(facultatif)</span></label><input class="input" name="titre"></div>
+          <div class="field"><label>Dossier</label><input class="input" name="dossier" list="liste-dossiers" placeholder="Vocabulaire"></div>
+        </div>
+        <div class="flex gap wrap mt"><label class="qcm-check"><input type="checkbox" name="publier" value="1"> Publier directement, sans relecture</label>
+          <button type="submit" class="btn btn-primary right">{{ icon('sparkle', 14) }} Créer le paquet</button></div>
+      </form>
+    </div>
+  </details>
+  {% endif %}
+
+  <details class="qcm-bloc">
+    <summary><span class="ic-box">{{ icon('image', 16) }}</span><span><b>Cartes à image masquée</b><span class="muted">Un schéma dont il faut retrouver les zones cachées</span></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <div class="qcm-bloc-b"><a class="btn btn-primary" href="{{ url_for('qcm.masque_editeur') }}">{{ icon('image', 14) }} Ouvrir l’éditeur d’images masquées</a></div>
+  </details>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='qcm/qcm_index.js') }}?v={{ version }}" defer></script>{% endblock %}

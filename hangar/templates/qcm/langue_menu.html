@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "qcm/_macros.html" as qm with context %}
+{% block title %}{{ langue }}{% if paquet %} · {{ paquet.titre }}{% elif dossier %} · {{ dossier }}{% endif %} · Langues{% endblock %}
+{% block head %}{{ qm.styles() }}{% endblock %}
+{% block content_class %}narrow{% endblock %}
+{% block header %}
+{% set sous = paquet.titre if paquet else (dossier or '') %}
+{{ qm.header(sous, (('Langues', url_for('qcm.langues_index')), (langue, url_for('qcm.langue_menu', langue=langue) if sous else None))) }}
+{% endblock %}
+{% block content %}
+<div class="inner">
+  <div class="qcm-hero"><div>
+    <h1>{{ icon('languages', 20) }} {{ langue }}{% if paquet %} · {{ paquet.titre }}{% elif dossier %} · {{ dossier }}{% endif %}</h1>
+    <div class="sub">{% if paquet %}Ce paquet seulement · <a class="text-2" href="{{ url_for('qcm.langue_menu', langue=langue) }}">toute la langue</a>{% elif dossier %}Dossier « {{ dossier }} » seulement · <a class="text-2" href="{{ url_for('qcm.langue_menu', langue=langue) }}">toute la langue</a>{% else %}Toute la langue{% endif %}</div>
+  </div></div>
+
+  <div class="stats qcm-tiles">
+    <div class="stat accent"><div class="v">{{ resume.a_revoir }}</div><div class="l">À revoir</div></div>
+    <div class="stat"><div class="v">{{ resume.nouveaux_disponibles }}</div><div class="l">Nouveau{{ 'x' if resume.nouveaux_disponibles > 1 }} aujourd’hui</div></div>
+    <div class="stat"><div class="v">{{ resume.sept_jours }}</div><div class="l">Dans les 7 jours</div></div>
+  </div>
+
+  <form class="panel mb" method="get" action="{{ url_for('qcm.langue_play', langue=langue) }}">
+    <div class="panel-h">{{ icon('play', 16) }}<h3>Commencer une session</h3></div>
+    <div class="panel-b">
+      {% if fichier %}<input type="hidden" name="fichier" value="{{ fichier }}">{% elif dossier %}<input type="hidden" name="dossier" value="{{ dossier }}">{% endif %}
+      <div class="flex gap wrap">
+        {% for cle, nom in modes %}
+        <button class="btn {% if loop.first %}btn-primary{% endif %}" type="submit" name="mode" value="{{ cle }}">{{ nom }}{% if loop.first %} <span style="opacity:.75;font-weight:400">(tout mélangé)</span>{% endif %}</button>
+        {% endfor %}
+      </div>
+      <label class="qcm-inline-label mt">Exercices par session (la révision intensive prend tout) <input class="input input-sm" style="width:80px" type="number" name="n" min="1" max="200" value="{{ taille }}"></label>
+    </div>
+  </form>
+
+  <div class="panel mb">
+    <div class="panel-h">{{ icon('chart', 16) }}<h3>Statistiques</h3></div>
+    <div class="qcm-table-wrap">
+      <table class="qcm-table">
+        <thead><tr><th></th><th class="num">Appris</th><th class="num">Maîtrisés (≥ 3 sem.)</th><th class="num">À revoir</th><th>Rétention estimée</th></tr></thead>
+        <tbody>
+          {% for g in resume.genres %}
+          <tr><td><b>{{ g.nom }}</b></td><td class="num">{{ g.appris }}/{{ g.total }}</td><td class="num">{{ g.maitrises }}</td><td class="num">{{ g.a_revoir }}</td>
+            <td class="nowrap">{% if g.retention is not none %}<div class="mastery"><div class="mastery-fill" style="width: {{ g.retention|round|int }}%"></div></div><span class="muted">{{ g.retention|round|int }} %</span>{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if resume.difficiles %}
+    <div class="panel-b" style="border-top:1px solid var(--border-2)"><b class="small">Éléments les plus souvent oubliés</b>
+      <ul class="small" style="margin:6px 0 0;padding-left:18px">{% for texte, n in resume.difficiles %}<li><span class="quiz-oublis">×{{ n }}</span> {{ texte }}</li>{% endfor %}</ul></div>
+    {% endif %}
+  </div>
+
+  <div class="panel mb">
+    <div class="panel-h">{{ icon('cards', 16) }}<h3>Contenu</h3></div>
+    <ul class="qcm-list">
+      {% for s in sets %}<li><span class="t">{{ s.titre }}</span><span class="m">{{ s|length }} exercices{% if s.proprietaire %} · perso{% endif %}</span>
+        <span class="r">{% if not paquet %}<a class="btn btn-xs" href="{{ url_for('qcm.langue_menu', langue=langue, fichier=s.id) }}">Ouvrir</a>{% endif %}<a class="btn btn-xs btn-ghost btn-icon" href="{{ url_for('qcm.exporter', set=s.id) }}" title="Exporter pour Anki">{{ icon('download', 13) }}</a></span></li>{% endfor %}
+    </ul>
+  </div>
+
+  <details class="qcm-bloc">
+    <summary><span class="ic-box">{{ icon('help', 16) }}</span><span><b>Comment ça marche ?</b></span>{{ icon('chevron-right', 15, 'chev') }}</summary>
+    <div class="qcm-bloc-b small">
+      <ul style="padding-left:18px;margin:0">
+        <li><b>Répétition espacée FSRS</b> : chaque élément revient quand la probabilité de s’en souvenir tombe à 90 %.</li>
+        <li><b>Rappel actif</b> : un mot est d’abord découvert par une carte, puis revient sous les autres formes choisies pour son paquet (traduction à taper, QCM, phrase à compléter) — jamais deux facettes d’un même mot dans la même session.</li>
+        <li><b>Conjugaison</b> personne par personne, avec le tableau complet à la correction ; <b>grammaire</b> par phrases à trous, remise en ordre et correction d’erreurs.</li>
+        <li><b>Entrelacement</b> : vocabulaire, conjugaison et grammaire sont mélangés ; un exercice raté revient quelques questions plus tard.</li>
+        <li><b>Tolérance</b> : en vocabulaire, un accent oublié ou une faute de frappe compte comme « presque » ; en conjugaison et en grammaire, la réponse doit être exacte.</li>
+        <li>Au plus {{ resume.nouveaux_disponibles }} nouveaux éléments restent à découvrir aujourd’hui (quota journalier) ; les révisions dues passent toujours en premier.</li>
+        <li><b>Révision intensive</b> (avant un examen) : tous les exercices, sans attendre leur échéance ; chaque exercice raté revient jusqu’à être réussi 2 fois de suite.</li>
+        <li>Clavier : <kbd>Entrée</kbd> valider / suivant, <kbd>1</kbd>–<kbd>4</kbd> noter une carte, <kbd>F</kbd> passer en « Facile », <kbd>R</kbd> réécouter, <kbd>Q</kbd> quitter.</li>
+      </ul>
+    </div>
+  </details>
+
+  <form method="post" action="{{ url_for('qcm.langue_reset', langue=langue) }}" class="mt" data-confirm="Effacer toute la progression en {{ langue }}{% if paquet %} (paquet « {{ paquet.titre }} »){% elif dossier %} ({{ dossier }}){% endif %} ?">
+    {{ ui.csrf() }}
+    {% if fichier %}<input type="hidden" name="fichier" value="{{ fichier }}">{% elif dossier %}<input type="hidden" name="dossier" value="{{ dossier }}">{% endif %}
+    <button type="submit" class="btn btn-sm btn-danger-ghost">{{ icon('refresh', 13) }} Réinitialiser la progression {% if paquet %}de ce paquet{% elif dossier %}de ce dossier{% else %}de cette langue{% endif %}</button>
+  </form>
+</div>
+{% endblock %}
