@@ -15,6 +15,7 @@
     <div class="qcm-cat-actions">
       <a class="btn btn-sm" href="{{ url_for('qcm.play', categorie=cat.nom, langue=cat.langue or None, mode='intensif') }}" title="Toutes les questions de la catégorie ; les ratées reviennent jusqu’à être sues">Révision intensive</a>
       <a class="btn btn-sm" href="{{ url_for('qcm.play', categorie=cat.nom, langue=cat.langue or None, mode='examen') }}" title="20 questions de la catégorie, chronométrées, corrigées à la fin, note sur 20">Examen blanc</a>
+      <a class="btn btn-sm" href="{{ qcm_hors_ligne_url(cat.sets|map(attribute='set.id')|list) }}" title="Télécharger les sets de la catégorie sur cet appareil, pour réviser sans réseau">{{ icon('download', 13) }} Hors ligne</a>
       <form method="post" action="{{ url_for('qcm.planning_page') }}" title="La même date d’examen pour tous les sets de la catégorie ; chaque set garde ses quotas">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <input type="hidden" name="categorie" value="{{ cat.nom }}"><input type="hidden" name="langue" value="{{ cat.langue }}">

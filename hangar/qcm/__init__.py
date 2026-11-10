@@ -10,7 +10,16 @@ Modules :
 - `coffre` (fichiers du coffre), `rendu` (Markdown + LaTeX, moteur du wiki s'il est là) ;
 - `models` (progression FSRS, réglages, activité, temps, objectifs, signalements, explications de l'IA) ;
 - `services` : `resume_du_jour(user)`, section « qcm.revisions » du résumé quotidien, contexte du panneau IA ;
-- `views`, `gestion`, `langues_views`, `masque_views` : les pages ; `cli` : `hangar qcm-verifier`.
+- `views`, `gestion`, `langues_views`, `masque_views` : les pages ; `cli` : `hangar qcm-verifier`,
+  `hangar qcm-rappels`, `hangar connexions-debloquer` ;
+- `hors_ligne` : application hors ligne /qcm/hors-ligne/ (catalogue, sets, synchro, /qcm/sw.js, manifeste),
+  aussi utilisée par l'application Android de Revision ;
+- `rappels`, `push` : rappel quotidien par notification web (/api/push/…, /api/rappel/), envoyé par le fil
+  d'arrière-plan de Hangar (`mailer.start_worker`).
+
+Hors du paquet, mais enregistrés avec lui : `hangar/appareils.py` (jetons de l'application Android,
+/api/appareil/…, /api/status/, alias des adresses de Revision) et `hangar/blocage_connexion.py`
+(blocage après des mots de passe faux, comme django-axes).
 
 Pour l'agent IA : `services.bibliotheque(user_id).get(set_id)` donne un set (ses `questions`),
 `rendu.rendre(texte)` le HTML d'une explication, `models.Explication` le cache des explications,

@@ -28,6 +28,13 @@
     <div class="sb-section-h"><span>Suivi</span></div>
     <a class="sb-link {% if ep == 'qcm.planning_page' %}active{% endif %}" href="{{ url_for('qcm.planning_page') }}">{{ icon('target') }} Planning et examens</a>
     <a class="sb-link {% if ep == 'qcm.stats' %}active{% endif %}" href="{{ url_for('qcm.stats') }}">{{ icon('chart') }} Statistiques</a>
+    <a class="sb-link" href="{{ url_for('qcm.aujourdhui') }}#rappel-web" title="Notification chaque jour à l’heure choisie, avec ce qu’il reste à réviser">{{ icon('bell') }} Rappel quotidien</a>
+  </div>
+  <div class="sb-section">
+    <div class="sb-section-h"><span>Sans réseau</span></div>
+    <a class="sb-link" href="{{ qcm_hors_ligne_url() }}" title="Sets téléchargés sur cet appareil, révisables sans connexion">{{ icon('smartphone') }} QCM hors ligne</a>
+    {% if appli_android() %}<a class="sb-link" href="{{ appli_locale }}connexion.html">{{ icon('settings') }} Réglages de l’appli</a>
+    <script src="{{ url_for('static', filename='qcm/appli.js') }}?v={{ version }}" defer></script>{% endif %}
   </div>
   <div class="sb-section">
     <div class="sb-section-h"><span>Contenu</span></div>

@@ -490,6 +490,12 @@ def start_worker(app, interval: int = 30):
                     except Exception:
                         db.session.rollback()
                         app.logger.exception("Erreur dans les rappels de l’agenda")
+                    try:  # QCM : rappels quotidiens par notification web (hangar/qcm/rappels.py)
+                        from .qcm.rappels import envoyer_rappels_dus
+                        envoyer_rappels_dus(journal=app.logger.warning)
+                    except Exception:
+                        db.session.rollback()
+                        app.logger.exception("Erreur dans les rappels de révision")
                     send_pending()
                     db.session.remove()
             except Exception:  # ne jamais arrêter le serveur pour un e-mail

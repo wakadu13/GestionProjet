@@ -99,7 +99,31 @@
           <p class="muted small mt">QCM et langues confondus. Vide : pas d’objectif. Le résumé quotidien par e-mail rappelle ce qu’il reste à réviser.</p>
         </div>
       </div>
+
+      <div class="panel mt qcm-rappel" id="rappel-web"{% if appli_android() %} hidden{% endif %}
+           data-sw-url="{{ url_for('qcm.service_worker') }}" data-scope="{{ url_for('qcm.index') }}"
+           data-cle-url="{{ url_for('qcm.push_cle') }}" data-abonner-url="{{ url_for('qcm.push_abonner') }}"
+           data-desabonner-url="{{ url_for('qcm.push_desabonner') }}" data-tester-url="{{ url_for('qcm.push_tester') }}">
+        <div class="panel-h">{{ icon('bell', 16) }}<h3>Rappel quotidien</h3><span class="badge qcm-rappel-actif right">actif</span></div>
+        <div class="panel-b">
+          <p class="muted small mt-0" data-rappel-etat>Notification sur cet appareil à l’heure choisie, avec ce qu’il reste à réviser et ta série de jours.</p>
+          <div class="qcm-rappel-controles" data-rappel-controles hidden>
+            <label class="qcm-inline-label">Heure <input class="input input-sm" type="time" value="19:00" data-rappel-heure></label>
+            <button type="button" class="btn btn-sm btn-primary" data-rappel-activer>Activer</button>
+            <button type="button" class="btn btn-sm" data-rappel-tester hidden>Tester</button>
+            <button type="button" class="btn btn-sm btn-ghost" data-rappel-desactiver hidden>Désactiver</button>
+          </div>
+          <p class="muted small mt">Rien n’est envoyé les jours où tout est déjà révisé. Un rappel par appareil (ordinateur, téléphone…).</p>
+        </div>
+      </div>
+      {% if appli_android() %}
+      <div class="panel mt">
+        <div class="panel-h">{{ icon('bell', 16) }}<h3>Rappel quotidien</h3></div>
+        <div class="panel-b muted small">Dans l’application, le rappel se règle dans <a href="{{ appli_locale }}connexion.html">ses réglages</a> : une notification à l’heure choisie, avec ce qu’il reste à réviser.</div>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='qcm/rappel_web.js') }}?v={{ version }}" defer></script>{% endblock %}

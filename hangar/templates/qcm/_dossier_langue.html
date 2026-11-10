@@ -15,6 +15,7 @@
       <a class="btn btn-sm btn-primary" href="{{ url_for('qcm.langue_play', langue=cat.langue, mode='quotidien', dossier=cat.nom) }}">Session du jour du dossier</a>
       <a class="btn btn-sm" href="{{ url_for('qcm.langue_play', langue=cat.langue, mode='intensif', dossier=cat.nom) }}" title="Tous les exercices ; ceux ratés reviennent jusqu’à être sus">Révision intensive</a>
       <a class="btn btn-sm" href="{{ url_for('qcm.langue_menu', langue=cat.langue, dossier=cat.nom) }}">Modes et statistiques</a>
+      <a class="btn btn-sm" href="{{ qcm_hors_ligne_url(cat.sets|map(attribute='set.id')|list) }}" title="Télécharger les paquets du dossier sur cet appareil, pour réviser sans réseau">{{ icon('download', 13) }} Hors ligne</a>
       {% if can_edit %}
       <form method="post" action="{{ url_for('qcm.supprimer') }}" data-confirm="Supprimer le dossier « {{ cat.nom }} » : tous ses paquets ({{ cat.sets|length }}) et leur progression ? Les fichiers seront effacés du coffre." style="margin-left:auto">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

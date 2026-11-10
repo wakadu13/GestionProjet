@@ -392,3 +392,9 @@ details.sb-group .sb-sub .sb-link { font-size: 12.5px; }
 @media (max-width: 420px) {
   .qcm-prev-col:nth-child(even) .qcm-prev-j { visibility: hidden; }
 }
+
+/* Rappel quotidien par notification web (page « Aujourd'hui ») */
+.qcm-rappel-controles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.qcm-rappel-controles input[type=time] { width: auto; }
+.qcm-rappel .qcm-rappel-actif { display: none; background: var(--success-bg); color: var(--success); }
+.qcm-rappel.actif .qcm-rappel-actif { display: inline-flex; }

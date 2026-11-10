@@ -51,6 +51,50 @@
       </div>
       <div class="form-actions"><button class="btn btn-primary">Changer le mot de passe</button></div>
     </form>
+
+    {# Application Android (jetons d'appareil, hangar/appareils.py) #}
+    {% set jetons = jetons_appareil(current_user) %}
+    <h2 id="appareils" class="mt-lg">Applications connectées</h2>
+    <p class="help">L’application Android de révision garde un jeton d’appareil au lieu de ton mot de passe. Changer de mot de passe les déconnecte toutes.</p>
+    <div class="panel">
+      {% if jetons %}
+      {% for a in jetons %}
+      <div class="flex gap wrap panel-b" style="align-items:center;{% if not loop.last %}border-bottom:1px solid var(--border-2){% endif %}">
+        {{ icon('smartphone', 16) }}
+        <div style="flex:1;min-width:0"><b>{{ a.nom or 'Appareil' }}</b>
+          <div class="muted small">connecté le {{ a.cree|date }}{% if a.utilise %} · vu le {{ a.utilise|date }} à {{ a.utilise.strftime('%H:%M') }}{% endif %}</div></div>
+        <form method="post" action="{{ url_for('appareils.revoquer', pk=a.id) }}" data-confirm="Déconnecter « {{ a.nom or 'cet appareil' }} » ? L’application devra se reconnecter avec le mot de passe.">
+          {{ ui.csrf() }}<button class="btn btn-sm">{{ icon('x', 13) }} Déconnecter</button>
+        </form>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="panel-b muted small">Aucune application connectée. L’APK Android de Revision se connecte à Hangar avec l’adresse de ce serveur, ton identifiant et ton mot de passe ; ses QCM et ses paquets de langue restent révisables sans réseau.</div>
+      {% endif %}
+    </div>
+
+    {% if current_user.is_admin %}
+    {% set bloques = connexions_bloquees() %}
+    <h2 id="connexions" class="mt-lg">Connexions bloquées</h2>
+    <p class="help">Après 5 mots de passe faux pour un identifiant depuis une même adresse (ou 20 depuis une adresse, tous comptes confondus), la connexion est bloquée 30 minutes.</p>
+    <div class="panel">
+      {% if bloques %}
+      {% for b in bloques %}
+      <div class="flex gap wrap panel-b" style="align-items:center;{% if not loop.last %}border-bottom:1px solid var(--border-2){% endif %}">
+        {{ icon('lock', 16) }}
+        <div style="flex:1;min-width:0"><b>{% if b.adresse %}Adresse {{ b.ip }}{% else %}@{{ b.identifiant }}{% endif %}</b>
+          <div class="muted small">{% if not b.adresse %}depuis {{ b.ip or 'adresse inconnue' }} · {% endif %}{{ b.echecs }} échecs · encore {{ b.minutes }} min</div></div>
+        <form method="post" action="{{ url_for('appareils.debloquer') }}">
+          {{ ui.csrf() }}{% if b.adresse %}<input type="hidden" name="ip" value="{{ b.ip }}">{% else %}<input type="hidden" name="identifiant" value="{{ b.identifiant }}"><input type="hidden" name="ip" value="{{ b.ip }}">{% endif %}
+          <button class="btn btn-sm">{{ icon('key', 13) }} Débloquer</button>
+        </form>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="panel-b muted small">Aucune connexion bloquée. En ligne de commande : <code>uv run hangar connexions-debloquer [identifiant]</code>.</div>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

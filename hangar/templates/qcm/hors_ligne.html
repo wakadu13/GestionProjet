@@ -1,0 +1,97 @@
+<!doctype html>
+{# QCM hors ligne (PWA) : page autonome, gardée en cache par le service worker (/qcm/sw.js) et
+   jouable sans réseau ; tout le contenu vient d'IndexedDB (static/qcm/qcm_hors_ligne.js). #}
+<html lang="fr" data-theme="{{ current_user.theme or 'system' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#3f76ff">
+  <title>QCM hors ligne · Hangar</title>
+  <link rel="manifest" href="{{ url_for('qcm.manifeste') }}">
+  <link rel="icon" href="{{ url_for('static', filename='qcm/icone-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='qcm/icone-192.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='qcm/qcm.css') }}?v={{ version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='qcm/hors_ligne.css') }}?v={{ version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/katex/katex.min.css') }}">
+  <script src="{{ url_for('static', filename='vendor/katex/katex.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='qcm/qcm_attente.js') }}?v={{ version }}" defer></script>
+  <script src="{{ url_for('static', filename='qcm/fsrs.js') }}?v={{ version }}" defer></script>
+  <script src="{{ url_for('static', filename='qcm/quiz.js') }}?v={{ version }}" defer></script>
+  <script src="{{ url_for('static', filename='qcm/quiz_langue.js') }}?v={{ version }}" defer></script>
+  <script src="{{ url_for('static', filename='qcm/langues_hors_ligne.js') }}?v={{ version }}" defer></script>
+  <script src="{{ url_for('static', filename='qcm/qcm_hors_ligne.js') }}?v={{ version }}" defer></script>
+</head>
+<body class="hl-body">
+  <header class="hl-barre">
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('qcm.index') }}" data-en-ligne>{{ icon('chevron-left', 14) }} QCM en ligne</a>
+    <span class="hl-marque"><img src="{{ url_for('static', filename='qcm/icone-192.png') }}" alt="" width="22" height="22"> QCM hors ligne</span>
+    <span class="hl-reseau" id="hl-reseau"></span>
+  </header>
+
+  <main class="hl" id="hl"
+        data-sw-url="{{ url_for('qcm.service_worker') }}"
+        data-scope="{{ url_for('qcm.index') }}"
+        data-sets-url="{{ url_for('qcm.hl_sets') }}"
+        data-login-url="{{ url_for('auth.login', next=url_for('qcm.hors_ligne')) }}"
+        data-home-url="{{ url_for('qcm.hors_ligne') }}">
+
+    <section id="hl-accueil">
+      <div class="qcm-hero">
+        <div>
+          <h1>QCM hors ligne</h1>
+          <div class="sub">Les sets téléchargés restent sur cet appareil : révise sans réseau, tes réponses rejoignent ta progression dès que la connexion revient.</div>
+        </div>
+      </div>
+
+      <div class="hl-synchro">
+        <span class="hl-synchro-ic">{{ icon('refresh', 16) }}</span>
+        <p id="hl-etat">Chargement…</p>
+        <button type="button" class="btn btn-sm" id="hl-synchroniser">Synchroniser</button>
+      </div>
+      <div class="qcm-callout warning" id="hl-alerte" hidden>{{ icon('alert', 16) }}<div id="hl-alerte-texte"></div></div>
+
+      <div id="hl-telecharges"></div>
+
+      <details class="qcm-cat hl-catalogue" id="hl-catalogue">
+        <summary><span class="hl-chev">›</span>{{ icon('download', 15) }}<span class="qcm-cat-name">Télécharger des sets</span><span class="qcm-cat-meta" id="hl-catalogue-meta"></span></summary>
+        <div class="qcm-cat-body">
+          <p class="muted small mt-0">Coche les sets de QCM et les paquets de langue à garder sur cet appareil, puis télécharge-les. Les sessions de langue (cartes, saisie, dictée…) sont corrigées et planifiées sur l’appareil, puis synchronisées.</p>
+          <div class="hl-actions">
+            <button type="button" class="btn btn-sm btn-primary" id="hl-telecharger">{{ icon('download', 14) }} Télécharger la sélection</button>
+            <button type="button" class="btn btn-sm" id="hl-tout-cocher">Tout cocher</button>
+          </div>
+          <div id="hl-liste"></div>
+        </div>
+      </details>
+
+      <details class="hl-aide">
+        <summary>{{ icon('help', 14) }} Installer sur le téléphone</summary>
+        <p>Dans Chrome : menu <b>⋮</b> → <b>Ajouter à l’écran d’accueil</b> (ou <b>Installer l’application</b>) ; sur iPhone : Partager → <b>Sur l’écran d’accueil</b>.
+          L’icône « QCM » ouvre alors cette page, même sans réseau. Tes réponses sont gardées sur l’appareil et envoyées automatiquement dès que la connexion revient.
+          Hors de cet ordinateur, Hangar doit être servi en HTTPS pour que le mode hors ligne fonctionne.</p>
+      </details>
+    </section>
+
+    <article class="quiz" id="quiz" hidden>
+      <div class="hl-session-h"><a class="btn btn-sm" href="#">{{ icon('chevron-left', 14) }} Sets</a><b class="ellipsis" id="hl-titre-session"></b></div>
+      <div class="quiz-topbar"><span class="quiz-progress-text" id="quiz-progress"></span></div>
+      <div class="quiz-bar"><div class="quiz-bar-fill" id="quiz-bar-fill"></div></div>
+      <p class="quiz-intensif-info" id="hl-intensif-info" hidden>Révision intensive : chaque question ratée revient plus loin dans la session,
+        jusqu’à être réussie <b>2 fois de suite</b>. Seule la première réponse compte pour la révision espacée.</p>
+      <div id="quiz-stage" class="quiz-stage"></div>
+      <p class="quiz-keys"><span><kbd>A</kbd>–<kbd>D</kbd> choisir</span><span><kbd>Entrée</kbd> valider / suivant</span><span><kbd>Espace</kbd> retourner la carte</span><span><kbd>1</kbd>–<kbd>4</kbd> noter une carte</span></p>
+    </article>
+
+    <article class="quiz" id="quiz-langue" hidden>
+      <div class="hl-session-h"><a class="btn btn-sm" href="#">{{ icon('chevron-left', 14) }} Langues</a><b class="ellipsis" data-titre-session></b></div>
+      <div class="quiz-topbar"><span class="quiz-progress-text"></span></div>
+      <div class="quiz-bar"><div class="quiz-bar-fill"></div></div>
+      <p class="quiz-intensif-info" hidden>Révision intensive : tous les exercices, et chaque exercice raté revient plus
+        loin dans la session jusqu’à être réussi <b>2 fois de suite</b>. Seule la première réponse compte pour la révision espacée.</p>
+      <div class="quiz-stage"></div>
+      <p class="quiz-aide"></p>
+    </article>
+  </main>
+</body>
+</html>

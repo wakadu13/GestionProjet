@@ -40,7 +40,7 @@
     {% if s.a_reviser %}<span class="qcm-due" title="{{ s.revisions + s.reapprendre }} révision(s), {{ s.nouvelles }} nouvelle(s)">{{ s.a_reviser }}</span>{% else %}<span class="qcm-due zero" title="À jour">{{ icon('check', 12) }}</span>{% endif %}
   </div>
   {% if qs.description %}<p class="qcm-set-desc" title="{{ qs.description }}">{{ qs.description }}</p>{% endif %}
-  {% if qs.source_page %}<p class="qcm-set-desc">D’après la page « {{ qs.source_page }} »</p>{% endif %}
+  {% if qs.source_page %}<p class="qcm-set-desc">D’après la page « <a href="{{ url_for('wiki.page', path=qs.source_page) }}">{{ qs.source_page }}</a> »</p>{% endif %}
   <div class="qcm-set-stat"><div class="progress accent" title="Maîtrise {{ s.pct_maitrise|round|int }} %"><span style="width: {{ s.pct_maitrise|round|int }}%"></span></div><span class="pct">{{ s.pct_maitrise|round|int }} %</span></div>
   <div class="qcm-set-status">
     <span>{{ s.total }} question{{ 's' if s.total > 1 }}</span>
@@ -63,6 +63,7 @@
         <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id) }}">{{ icon('download') }} Exporter pour Anki (.apkg)</a>
         <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='tsv') }}">{{ icon('table') }} Exporter en texte (Quizlet, tableur)</a>
         {% endif %}
+        <a class="menu-item" href="{{ qcm_hors_ligne_url([qs.id]) }}">{{ icon('smartphone') }} Garder sur cet appareil (hors ligne)</a>
         <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='json') }}">{{ icon('code') }} Télécharger le fichier .json</a>
         {% if can_edit and not qs.proprietaire %}
         <div class="menu-sep"></div>
@@ -97,6 +98,7 @@
       <div class="menu">
         <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id) }}">{{ icon('download') }} Exporter pour Anki (.apkg)</a>
         <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='tsv') }}">{{ icon('table') }} Exporter en texte (Quizlet, tableur)</a>
+        <a class="menu-item" href="{{ qcm_hors_ligne_url([qs.id]) }}">{{ icon('smartphone') }} Garder sur cet appareil (hors ligne)</a>
         <a class="menu-item" href="{{ url_for('qcm.exporter', set=qs.id, format='json') }}">{{ icon('code') }} Télécharger le fichier .json</a>
         {% if can_edit and not qs.proprietaire %}
         <div class="menu-sep"></div>

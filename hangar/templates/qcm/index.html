@@ -9,6 +9,7 @@
   {{ ui.mobile_toggle() }}
   <div class="crumbs"><span class="current">{{ icon('graduation', 15) }} QCM</span></div>
   <div class="header-actions">
+    <a class="btn btn-sm" href="{{ qcm_hors_ligne_url() }}" title="Télécharger des sets sur cet appareil pour réviser sans réseau (téléphone, train…)">{{ icon('download', 14) }} Hors ligne</a>
     {% if can_edit %}<a class="btn btn-sm" href="{{ url_for('qcm.importer') }}">{{ icon('upload', 14) }} Importer</a>{% endif %}
     {% if etat.a_reviser %}<a class="btn btn-sm btn-primary" href="{{ url_for('qcm.play', revision=1) }}" title="Révision intelligente : les cartes dues de tous les sets (les plus menacées d’oubli d’abord), puis les nouvelles du jour — {{ etat.a_reviser }} question(s), par séances de 200 au plus">{{ icon('play', 14) }} Réviser tout ce qui est dû{% if etat.cartes_dues %} ({{ etat.cartes_dues }}){% endif %}</a>{% endif %}
   </div>

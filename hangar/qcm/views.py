@@ -532,4 +532,10 @@ def fichier(path):
 
 
 # Les autres pages du module, sur le même blueprint.
-from . import gestion, langues_views, masque_views  # noqa: E402,F401
+from . import gestion, hors_ligne, langues_views, masque_views, rappels  # noqa: E402,F401
+
+# Application Android de Revision (jetons d'appareil, /api/appareil/…, /api/status/) et alias des
+# adresses de Revision : blueprint « appareils » enregistré en même temps que celui des QCM.
+from .. import appareils as _appareils  # noqa: E402
+
+bp.record_once(lambda etat: etat.app.register_blueprint(_appareils.bp))

@@ -371,3 +371,30 @@ class ObjectifRevision(db.Model):
     def de(cls, user_id):
         o = cls.query.filter_by(user_id=user_id).first()
         return o.reponses_jour if o else None
+
+
+class AbonnementPush(db.Model):
+    """Notifications web (navigateur, application installée) : un abonnement par appareil, pour le
+    rappel quotidien de révision (rappels.py, push.py)."""
+    __tablename__ = "qcm_abonnement_push"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint = db.Column(db.String(1000), nullable=False, unique=True)
+    p256dh = db.Column(db.String(200), nullable=False)
+    auth = db.Column(db.String(100), nullable=False)
+    heure = db.Column(db.Integer, default=19)
+    minute = db.Column(db.Integer, default=0)
+    agent = db.Column(db.String(300), default="")
+    cree_le = db.Column(db.DateTime, default=quiz.maintenant)
+    dernier_envoi = db.Column(db.Date)  # au plus un rappel par jour
+
+    user = db.relationship("User")
+
+    def __repr__(self):
+        return f"<AbonnementPush {self.user_id} · {self.heure:02d}:{self.minute:02d}>"
+
+
+# Tables des jetons de l'application Android et du blocage des connexions (modules de Hangar
+# hors QCM, mais créées avec celles-ci : create_app importe ce fichier avant db.create_all()).
+from .. import appareils as _appareils, blocage_connexion as _blocage  # noqa: E402,F401

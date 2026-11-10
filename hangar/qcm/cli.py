@@ -55,7 +55,35 @@ def cmd_verifier(args) -> None:
     print(_couleur(f"{len(fichiers)} fichier(s) valide(s).", VERT))
 
 
+def cmd_rappels(args) -> None:
+    """Envoie les rappels quotidiens dus par notification web (port de `envoyer_rappels`).
+    Hangar le fait déjà tout seul pendant qu'il tourne (`hangar run`) ; la commande sert à un
+    serveur lancé autrement, par exemple par cron toutes les 15 minutes."""
+    from .. import create_app
+    from .rappels import envoyer_rappels_dus
+
+    app = create_app(args.data)
+    with app.app_context():
+        c = envoyer_rappels_dus(journal=lambda m: print(_couleur(m, ROUGE), file=sys.stderr))
+    print(f"{c['envoyes']} envoyé(s), {c['rien']} sans objet, {c['expires']} abonnement(s) expiré(s), "
+          f"{c['erreurs']} erreur(s)")
+
+
+def cmd_debloquer(args) -> None:
+    """Lève les blocages de connexion (port de `axes_reset`) : tous, ou ceux d'un identifiant."""
+    from .. import blocage_connexion, create_app
+
+    app = create_app(args.data)
+    with app.app_context():
+        n = blocage_connexion.debloquer(args.identifiant or None, args.ip or None)
+    print(_couleur(f"{n} blocage(s) levé(s).", VERT))
+
+
 def register(sub) -> dict:
     p = sub.add_parser("qcm-verifier", help="vérifier des fichiers de QCM ou de langue (.json)")
     p.add_argument("chemins", nargs="*", help="fichiers .json ou dossiers (défaut : QCM/ du coffre)")
-    return {"qcm-verifier": cmd_verifier}
+    sub.add_parser("qcm-rappels", help="envoyer les rappels de révision dus (notifications web)")
+    p = sub.add_parser("connexions-debloquer", help="lever les blocages après des mots de passe faux")
+    p.add_argument("identifiant", nargs="?", help="identifiant à débloquer (défaut : tous)")
+    p.add_argument("--ip", help="adresse IP à débloquer")
+    return {"qcm-verifier": cmd_verifier, "qcm-rappels": cmd_rappels, "connexions-debloquer": cmd_debloquer}

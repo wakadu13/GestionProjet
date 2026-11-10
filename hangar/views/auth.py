@@ -5,6 +5,7 @@ import re
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
+from .. import blocage_connexion as blocage
 from ..extensions import db
 from ..models import PALETTE, User, Workspace, now
 from ..utils import is_safe_next
@@ -60,17 +61,23 @@ def login():
     if request.method == "POST":
         ident = (request.form.get("login") or "").strip().lower()
         password = request.form.get("password") or ""
-        user = User.query.filter(User.username == ident).first()
-        if user and user.check_password(password):
+        ip = blocage.ip_client()
+        attente = blocage.bloque(ident, ip)  # trop d'échecs récents : pas d'essai (blocage_connexion.py)
+        user = None if attente else User.query.filter(User.username == ident).first()
+        if attente:
+            flash(blocage.message(attente), "error")
+        elif user and user.check_password(password):
             if not user.active:
                 flash("Ce compte est désactivé. Contacte un administrateur.", "error")
             else:
+                blocage.reussite(ident, ip)
                 login_user(user, remember=bool(request.form.get("remember")))
                 user.last_login_at = now()
                 db.session.commit()
                 nxt = request.args.get("next")
                 return redirect(nxt if is_safe_next(nxt) else url_for("agenda.dashboard"))
         else:
+            blocage.noter_echec(ident, ip)
             flash("Identifiant ou mot de passe incorrect.", "error")
     accounts = User.query.filter_by(active=True).order_by(User.role, User.first_name, User.last_name).all()
     return render_template("auth/login.html", ws=ws, accounts=accounts)
