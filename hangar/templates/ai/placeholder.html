@@ -1,5 +1,5 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
-{% block title %}En cours d’intégration{% endblock %}
-{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">En cours d’intégration</span></div></div>{% endblock %}
-{% block content %}{{ ui.empty('zap', 'Bientôt disponible', 'Cette section est en cours d’intégration.') }}{% endblock %}
+{% block title %}Bientôt disponible{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('ai.index') }}">{{ icon('sparkle', 15) }} Assistant IA</a><span class="sep">/</span><span class="current">Bientôt disponible</span></div></div>{% endblock %}
+{% block content %}{{ ui.empty('sparkle', 'Bientôt disponible', 'Cette fonction d’IA (wiki et QCM) arrive avec l’intégration du wiki de cours et des QCM. En attendant, l’assistant du panneau latéral (Ctrl+J) répond à tes questions.') }}{% endblock %}
