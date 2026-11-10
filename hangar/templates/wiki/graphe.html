@@ -1,0 +1,29 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Graphe{% if centre %} · {{ centre.title }}{% endif %} · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Graphe' ~ (' · ' ~ centre.title if centre else '')) }}</div>{% endblock %}
+{% block content %}
+<div class="wiki graphe-page">
+  <div class="graphe-outils">
+    <div class="wiki-search-inline">{{ icon('search', 14) }}<input class="input input-sm" type="search" data-graphe-recherche placeholder="Trouver une page…" aria-label="Trouver une page dans le graphe"></div>
+    <label class="small text-2">Afficher
+      <select class="input input-sm" data-graphe-portee>
+        {% if centre %}<option value="1">les voisines de « {{ centre.title }} »</option><option value="2">les voisines sur 2 niveaux</option>{% endif %}
+        <option value="tout">tout le wiki</option>
+      </select>
+    </label>
+    <label class="checkbox small"><input type="checkbox" data-graphe-isolees checked> pages sans lien</label>
+    <span class="muted small" data-graphe-compte></span>
+  </div>
+  <div class="graphe-cadre">
+    <canvas data-graphe data-url="{{ url_for('wiki.graphe_donnees') }}" data-centre="{{ centre.key if centre else '' }}"
+            role="img" aria-label="Graphe des liens entre les pages du wiki : clique une page pour l'ouvrir"></canvas>
+    <div class="graphe-info" data-graphe-info hidden></div>
+  </div>
+  <p class="muted small">Fais glisser pour te déplacer, molette ou deux doigts pour zoomer ; survole une page pour voir ses liens,
+    clique pour l'ouvrir (sur écran tactile : touche une fois pour la choisir, puis « Ouvrir »). La couleur indique la collection.</p>
+  <ul class="graphe-legende" data-graphe-legende></ul>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='wiki/graphe.js') }}?v={{ version }}" defer></script>{% endblock %}

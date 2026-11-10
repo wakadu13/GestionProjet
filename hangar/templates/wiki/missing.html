@@ -1,0 +1,29 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}{{ name }} · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs(crumbs, name.rsplit('/', 1)[-1]) }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow">
+  <div class="wiki-doc-icon">{{ icon('wiki-file-text', 34, stroke=1.4) }}</div>
+  <h1 class="wiki-doc-title wiki-missing-title">{{ name.rsplit('/', 1)[-1] }}</h1>
+  <div class="callout" data-callout="info">
+    <div class="callout-title">Cette page n’existe pas encore</div>
+    <div class="callout-content">
+      {% if can_edit and can_create %}
+      <p>Tu peux la créer directement depuis le wiki.</p>
+      <p><a class="btn btn-sm btn-primary" href="{{ url_for('wiki.edit', path=name) }}">{{ icon('plus', 14) }} Créer cette page</a></p>
+      {% else %}
+      <p>Pour la créer, ajoute le fichier <code>{{ filename }}</code> dans le coffre (ou crée la note depuis Obsidian).
+        Elle apparaîtra ici dès le prochain chargement.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% if backlinks %}
+  <div class="section-title"><h2>Pages qui y font référence</h2><span class="count">{{ backlinks|length }}</span></div>
+  <div class="panel wiki-list">
+    {% for n in backlinks %}<a class="wiki-row" href="{{ n.url }}">{{ wk.page_icon(n, 16) }}<span class="grow ellipsis">{{ n.title }}</span></a>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

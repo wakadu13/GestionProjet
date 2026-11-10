@@ -1,0 +1,60 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Historique · {{ note.title }}{% endblock %}
+{% block header %}
+<div class="page-header">{{ ui.mobile_toggle() }}
+  <div class="crumbs wiki-crumbs">
+    <a href="{{ url_for('wiki.home') }}">{{ icon('book', 15) }} Wiki</a>
+    {% for label, url in crumbs %}<span class="sep">{{ icon('chevron-right', 14) }}</span><a href="{{ url }}">{{ label }}</a>{% endfor %}
+    <span class="sep">{{ icon('chevron-right', 14) }}</span><a href="{{ note.url }}">{{ note.title }}</a>
+    <span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">{{ icon('history', 14) }} Historique</span>
+  </div>
+  <div class="header-actions">
+    <a class="btn btn-sm" href="{{ note.url }}">{{ icon('arrow-left', 14) }} Retour à la page</a>
+    {% if can_edit %}<a class="btn btn-sm btn-primary" href="{{ url_for('wiki.edit', path=note.key) }}">{{ icon('edit', 14) }} Modifier</a>{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="wiki">
+  <h1 class="wiki-doc-title">Historique de « {{ note.title }} »</h1>
+  <p class="muted">Chaque enregistrement qui modifie la page garde le texte précédent ({{ max_versions }} versions au plus,
+    hors du coffre). Choisis une version pour voir ce qui a changé depuis, et la restaurer au besoin.</p>
+  {% if not versions %}
+  <div class="callout" data-callout="info"><div class="callout-title">Aucune version précédente : la page n'a pas encore été modifiée depuis le wiki.</div></div>
+  {% else %}
+  <div class="wiki-hist">
+    <div class="panel wiki-hist-versions">
+      {% for v in versions %}
+      <a class="wiki-hist-v {% if v.id == choisie.id %}active{% endif %}" href="?v={{ v.id }}">
+        <span>{{ icon('clock', 13) }} {{ v.date.strftime('%d/%m/%Y à %H:%M:%S') }}</span>
+        <span class="muted small">{% if v.auteur %}{{ v.auteur }} · {% endif %}{{ v.taille|filesize }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    <section class="wiki-hist-diff">
+      <h2>Du {{ choisie.date.strftime('%d/%m/%Y à %H:%M') }} à aujourd’hui</h2>
+      {% if not diff %}
+      <p class="muted">Aucune différence : cette version est identique à la page actuelle.</p>
+      {% else %}
+      <p class="muted small"><span class="wiki-diff-legend del">— retiré</span> · <span class="wiki-diff-legend add">+ ajouté</span></p>
+      <pre class="wiki-diff">{% for l in diff %}<span class="diff-{{ l.type }}">{{ l.texte }}</span>
+{% endfor %}</pre>
+      {% endif %}
+      <details class="wiki-hist-full">
+        <summary>Texte complet de cette version</summary>
+        <pre class="wiki-diff">{{ contenu_version }}</pre>
+      </details>
+      {% if can_edit %}
+      <form method="post" class="flex gap mt" data-confirm="Remplacer la page actuelle par cette version ? La page actuelle est gardée dans l’historique.">
+        {{ ui.csrf() }}
+        <input type="hidden" name="v" value="{{ choisie.id }}">
+        <button type="submit" class="btn btn-primary" name="action" value="restaurer">{{ icon('refresh', 14) }} Restaurer cette version</button>
+      </form>
+      {% endif %}
+    </section>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

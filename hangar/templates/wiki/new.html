@@ -1,0 +1,28 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Nouvelle page · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Nouvelle page') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow">
+  <h1 class="wiki-doc-title">Nouvelle page</h1>
+  {% if error %}
+  <div class="callout" data-callout="danger"><div class="callout-title">{{ error }}</div></div>
+  {% endif %}
+  <form method="get" class="panel panel-b wiki-form">
+    <div class="field">
+      <label for="name">Nom de la page</label>
+      <input class="input" type="text" id="name" name="name" value="{{ name }}" required autofocus placeholder="Ex. : Compte rendu de TP">
+    </div>
+    <div class="field">
+      <label for="folder">Collection (dossier)</label>
+      <input class="input" type="text" id="folder" name="folder" value="{{ folder }}" list="new-folders" placeholder="(racine du wiki)" autocomplete="off">
+      <datalist id="new-folders">{% for f in folders %}<option value="{{ f }}">{% endfor %}</datalist>
+      <span class="help">Choisis un dossier existant ou tape un nouveau nom (ex. <code>Cours/Physique</code>) : il sera créé.</span>
+    </div>
+    <div class="flex gap"><button type="submit" class="btn btn-primary">{{ icon('arrow-right', 14) }} Continuer</button></div>
+  </form>
+  <p class="muted small mt">Tu as déjà des notes en <code>.md</code> (Obsidian, Typora…) ?
+    <a href="{{ url_for('wiki.importer') }}">Importe-les</a>, une par une ou un dossier entier.</p>
+</div>
+{% endblock %}

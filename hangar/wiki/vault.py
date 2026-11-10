@@ -1,0 +1,554 @@
+"""Indexation d'un coffre Obsidian : notes .md, pièces jointes, liens et tags.
+
+Le coffre est relu automatiquement dès qu'un fichier est ajouté, modifié ou
+supprimé : il suffit de déposer un fichier .md dans le dossier pour créer une
+nouvelle page.
+
+Port de ``wiki/vault.py`` de Revision : seules les dépendances à Django changent
+(``settings`` → ``current_app.config``, ``reverse`` → ``url_for``).
+"""
+
+import html
+import json
+import os
+import posixpath
+import re
+import threading
+import time
+import unicodedata
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
+from functools import cached_property
+from pathlib import Path, PurePosixPath
+
+import yaml
+from flask import current_app, has_app_context
+
+from .liens import wiki_url
+
+IGNORED_DIRS = {".obsidian", ".trash", ".git", "__pycache__"}
+HOME_CANDIDATES = ("index", "home", "accueil", "readme")
+
+FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?)\n---[ \t]*(?:\n|\Z)", re.S)
+WIKILINK_RE = re.compile(r"(!?)\[\[([^\[\]\n]+?)\]\]")
+MDLINK_RE = re.compile(r"\]\(<?([^)\s>]+?\.md)(?:#[^)\s>]*)?>?\)")
+COMMENT_RE = re.compile(r"%%.*?%%", re.S)
+# Un tag Obsidian : #mot, #mot-composé, #parent/enfant (pas uniquement des chiffres).
+TAG_RE = re.compile(r"(?<![\w&#/\\(\[\"'=:])#([\w/-]*[^\W\d][\w/-]*|[\w/-]*[-/][\w/-]*)")
+# Blocs de code (``` ou ~~~) et code en ligne, où la syntaxe Obsidian est ignorée.
+CODE_RE = re.compile(
+    r"^[ \t]*(?P<fence>`{3,}|~{3,})[^\n]*\n.*?^[ \t]*(?P=fence)[ \t]*$"
+    r"|(?P<tick>`+)(?:[^`\n]|\n(?![ \t]*\n))+?(?P=tick)(?!`)",
+    re.M | re.S,
+)
+
+
+def escape(text):
+    return html.escape(str(text))
+
+
+def _config(name, default=None):
+    """Réglage de l'application Flask (``WIKI_HOME``, ``WIKI_VERIF_INTERVALLE``…)."""
+    return current_app.config.get(name, default) if has_app_context() else default
+
+
+class _FoldTable(dict):
+    """Table de ``str.translate`` remplie à la demande : chaque caractère n'est calculé qu'une fois."""
+
+    def __missing__(self, code):
+        ch = chr(code)
+        base = "".join(c for c in unicodedata.normalize("NFD", ch) if not unicodedata.combining(c))
+        folded = (base if len(base) == 1 else ch).lower()
+        # Garde la longueur (« İ ».lower() donne 2 caractères) pour que les positions concordent.
+        self[code] = folded = folded if len(folded) == 1 else ch
+        return folded
+
+
+_FOLD_TABLE = _FoldTable()
+
+
+def fold(text):
+    """Minuscules sans accents, en gardant la longueur (é→e) pour repérer les extraits.
+
+    Permet de chercher « reseau » et de trouver « Réseau ».
+    """
+    return text.translate(_FOLD_TABLE)
+
+
+def map_outside_code(text, fn):
+    """Applique ``fn`` aux portions de ``text`` situées hors des blocs de code."""
+    out, pos = [], 0
+    for m in CODE_RE.finditer(text):
+        out.append(fn(text[pos:m.start()]))
+        out.append(m.group(0))
+        pos = m.end()
+    out.append(fn(text[pos:]))
+    return "".join(out)
+
+
+def split_frontmatter(text):
+    """Sépare les propriétés YAML (entre ``---``) du corps de la note."""
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return {}, text
+    try:
+        meta = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError:
+        meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    return meta, text[m.end():]
+
+
+def as_list(value, sep=r"[,\s]+"):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [v for v in re.split(sep, value) if v]
+    if isinstance(value, (list, tuple, set)):
+        return [str(v) for v in value if v is not None]
+    return [str(value)]
+
+
+INVALID_NAME_RE = re.compile(r'[\\:*?"<>|#^\[\]\x00-\x1f]')
+
+
+def clean_key(raw):
+    """Valide un chemin de note saisi (``Dossier/Ma note``), ou renvoie None."""
+    parts = [p.strip() for p in raw.replace("\\", "/").strip().removesuffix(".md").split("/")]
+    parts = [p for p in parts if p]
+    if not parts or any(p.startswith(".") or INVALID_NAME_RE.search(p) for p in parts):
+        return None
+    return "/".join(parts)
+
+
+def parse_link_target(raw):
+    """``'Page#Titre|Alias'`` -> ``('Page', 'Titre', 'Alias')``."""
+    target, _, alias = raw.partition("|")
+    target = target.rstrip("\\").strip()  # [[Page\|alias]] dans les tableaux
+    page, _, fragment = target.partition("#")
+    return page.strip(), fragment.strip(), alias.strip()
+
+
+@dataclass(eq=False)
+class Attachment:
+    path: PurePosixPath
+
+    @property
+    def name(self):
+        return self.path.name
+
+    @property
+    def suffix(self):
+        return self.path.suffix.lower()
+
+    @cached_property
+    def url(self):
+        return wiki_url("wiki.file", str(self.path))
+
+    @cached_property
+    def view_url(self):
+        """Adresse pour consulter le fichier : le lecteur intégré pour un PDF."""
+        return wiki_url("wiki.pdf", str(self.path)) if self.suffix == ".pdf" else self.url
+
+
+@dataclass(eq=False)
+class Note:
+    path: PurePosixPath
+    mtime: float
+    meta: dict
+    body: str
+
+    @property
+    def name(self):
+        return self.path.stem
+
+    @property
+    def key(self):
+        """Chemin dans le coffre sans l'extension .md (sert d'URL)."""
+        return str(self.path.parent / self.path.stem) if self.path.parent.parts else self.path.stem
+
+    @property
+    def folder(self):
+        return str(self.path.parent) if self.path.parent.parts else ""
+
+    @property
+    def folders(self):
+        return self.path.parent.parts
+
+    @property
+    def modified(self):
+        """Date de modification, en heure locale naïve (comme le reste de Hangar)."""
+        return datetime.fromtimestamp(self.mtime)
+
+    @cached_property
+    def url(self):
+        return wiki_url("wiki.page", self.key)
+
+    @cached_property
+    def title(self):
+        return str(self.meta.get("title") or self.name)
+
+    @cached_property
+    def aliases(self):
+        return as_list(self.meta.get("aliases") or self.meta.get("alias"), sep=r"\s*,\s*")
+
+    @cached_property
+    def clean_body(self):
+        """Corps sans les commentaires %% ... %%."""
+        return map_outside_code(self.body, lambda s: COMMENT_RE.sub("", s))
+
+    @cached_property
+    def folded_title(self):
+        """Titre, chemin et alias repliés, pour la recherche."""
+        return fold(f"{self.title} {self.key} {' '.join(self.aliases)}")
+
+    @cached_property
+    def folded_body(self):
+        """Corps replié (même longueur que ``clean_body``), pour la recherche."""
+        return fold(self.clean_body)
+
+    @cached_property
+    def _text_outside_code(self):
+        """Portions de ``clean_body`` hors blocs de code, découpées une seule fois."""
+        segments = []
+        map_outside_code(self.clean_body, lambda s: segments.append(s) or s)
+        return segments
+
+    @cached_property
+    def tags(self):
+        tags = {t.lstrip("#") for t in as_list(self.meta.get("tags") or self.meta.get("tag"))}
+        for segment in self._text_outside_code:
+            tags.update(TAG_RE.findall(segment))
+        return sorted(t for t in tags if t)
+
+    @cached_property
+    def link_targets(self):
+        """Pages ciblées par les liens [[...]] et [texte](page.md) de la note."""
+        targets = []
+        for segment in self._text_outside_code:
+            targets.extend(parse_link_target(m.group(2))[0] for m in WIKILINK_RE.finditer(segment))
+            targets.extend(m.group(1) for m in MDLINK_RE.finditer(segment))
+        return [t for t in targets if t]
+
+    @cached_property
+    def properties(self):
+        """Propriétés à afficher (hors titre, tags et alias)."""
+        hidden = {"title", "tags", "tag", "aliases", "alias", "cssclasses", "cssclass"}
+        return [
+            (key, ", ".join(as_list(value)) if isinstance(value, (list, tuple)) else value)
+            for key, value in self.meta.items()
+            if key not in hidden
+        ]
+
+
+class Vault:
+    def __init__(self, root, files, previous=None):
+        self.root = Path(root)
+        self.notes = {}  # chemin sans .md, en minuscules -> Note
+        self.attachments = {}  # chemin en minuscules -> Attachment
+        self._by_name = defaultdict(list)  # nom, alias ou nom de fichier en minuscules
+        self._rendered = {}
+        # (chemin, date, taille) -> Note : seules les notes modifiées depuis ``previous`` sont relues.
+        self._parsed = {}
+        reusable = previous._parsed if previous is not None and previous.root == self.root else {}
+
+        for rel, mtime, size in files:
+            path = PurePosixPath(rel)
+            if path.suffix.lower() == ".md":
+                note = reusable.get((rel, mtime, size))
+                if note is None:
+                    text = (self.root / path).read_text(encoding="utf-8", errors="replace")
+                    meta, body = split_frontmatter(text.lstrip("﻿").replace("\r\n", "\n"))
+                    note = Note(path, mtime / 1e9, meta, body)
+                self._parsed[(rel, mtime, size)] = note
+                self.notes[note.key.lower()] = note
+                self._by_name[note.name.lower()].append(note)
+                for alias in note.aliases:
+                    self._by_name[alias.lower()].append(note)
+            else:
+                attachment = Attachment(path)
+                self.attachments[rel.lower()] = attachment
+                self._by_name[path.name.lower()].append(attachment)
+
+        self.backlinks = defaultdict(set)  # clé de note -> notes qui la citent
+        self.attachment_backlinks = defaultdict(set)  # chemin de pièce jointe -> notes qui la citent
+        self.unresolved = defaultdict(set)  # cible inexistante -> notes qui la citent
+        self.tags = defaultdict(set)  # tag (et ses parents) -> notes
+        for note in self.notes.values():
+            for target in note.link_targets:
+                found = self.resolve(target, note)
+                if isinstance(found, Note):
+                    if found is not note:
+                        self.backlinks[found.key.lower()].add(note)
+                elif isinstance(found, Attachment):
+                    self.attachment_backlinks[str(found.path).lower()].add(note)
+                elif found is None:
+                    self.unresolved[target.lower()].add(note)
+            for tag in note.tags:
+                parts = tag.lower().split("/")
+                for i in range(1, len(parts) + 1):
+                    self.tags["/".join(parts[:i])].add(note)
+
+    def resolve(self, target, source=None):
+        """Trouve la note ou la pièce jointe désignée par un lien, comme Obsidian.
+
+        Ordre : chemin relatif à la note source, chemin depuis la racine du
+        coffre, puis nom de fichier (ou alias) n'importe où dans le coffre, en
+        privilégiant le dossier de la note source puis le chemin le plus court.
+        """
+        target = target.strip().replace("\\", "/").lstrip("/")
+        if not target:
+            return source
+        low = target.lower()
+        paths = [low]
+        if source is not None and source.folder:
+            relative = posixpath.normpath(posixpath.join(source.folder.lower(), low))
+            if not relative.startswith(".."):
+                paths.insert(0, relative)
+        for path in paths:
+            note = self.notes.get(path.removesuffix(".md"))
+            if note is not None:
+                return note
+            if path in self.attachments:
+                return self.attachments[path]
+
+        name = low.rsplit("/", 1)[-1]
+        candidates = self._by_name.get(name.removesuffix(".md"), []) + self._by_name.get(name, [])
+        candidates = [
+            c for c in candidates
+            if "/" not in low or str(c.path).lower().removesuffix(".md").endswith(low.removesuffix(".md"))
+        ]
+        if not candidates:
+            return None
+        folder = source.folder.lower() if source is not None else ""
+        return min(
+            candidates,
+            key=lambda c: (str(c.path.parent).lower() != (folder or "."), len(c.path.parts), str(c.path).lower()),
+        )
+
+    def home(self):
+        names = (str(_config("WIKI_HOME", "") or "").lower(),) + HOME_CANDIDATES
+        for name in names:
+            if name and name in self.notes:
+                return self.notes[name]
+        return None
+
+    def sorted_notes(self):
+        return sorted(self.notes.values(), key=lambda n: n.key.lower())
+
+    def recent_notes(self, limit=10):
+        return sorted(self.notes.values(), key=lambda n: n.mtime, reverse=True)[:limit]
+
+    def notes_with_tag(self, tag):
+        return sorted(self.tags.get(tag.lower().lstrip("#"), ()), key=lambda n: n.title.lower())
+
+    def all_tags(self):
+        return sorted(((tag, len(notes)) for tag, notes in self.tags.items()), key=lambda t: t[0])
+
+    def pdfs(self):
+        return sorted((a for a in self.attachments.values() if a.suffix == ".pdf"), key=lambda a: str(a.path).lower())
+
+    @cached_property
+    def tree(self):
+        """Arborescence des notes (et des PDF, lisibles dans le wiki) pour la barre latérale."""
+        root = {"name": "", "path": "", "folders": {}, "notes": [], "files": []}
+
+        def folder(parts):
+            node = root
+            for part in parts:
+                node = node["folders"].setdefault(
+                    part,
+                    {"name": part, "path": f"{node['path']}{part}/", "folders": {}, "notes": [], "files": []},
+                )
+            return node
+
+        for note in self.sorted_notes():
+            folder(note.folders)["notes"].append(note)
+        for pdf in self.pdfs():
+            folder(pdf.path.parent.parts)["files"].append(pdf)
+
+        def freeze(node):
+            node["folders"] = [freeze(f) for _, f in sorted(node["folders"].items(), key=lambda i: i[0].lower())]
+            node["count"] = len(node["notes"]) + len(node["files"]) + sum(f["count"] for f in node["folders"])
+            return node
+
+        return freeze(root)
+
+    def folders(self):
+        """Tous les dossiers du coffre (chemins relatifs)."""
+        found = set()
+        for dirpath, dirnames, _ in os.walk(self.root):
+            dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS and not d.startswith(".")]
+            found.update(Path(dirpath, d).relative_to(self.root).as_posix() for d in dirnames)
+        return sorted(found, key=str.lower)
+
+    def link_for(self, item):
+        """Texte à mettre entre [[ ]] : le nom seul suffit, sauf si un autre
+        fichier du même genre porte le même nom (on donne alors le chemin)."""
+        if isinstance(item, Note):
+            same = [n for n in self._by_name[item.name.lower()] if isinstance(n, Note)]
+            return item.name if len(same) == 1 else item.key
+        same = [a for a in self._by_name[item.name.lower()] if isinstance(a, Attachment)]
+        return item.name if len(same) == 1 else str(item.path)
+
+    def link_choices(self):
+        """Notes proposées dans l'éditeur, avec le texte à insérer entre [[ ]]."""
+        return [
+            {"link": self.link_for(note), "title": note.title, "folder": note.folder, "aliases": note.aliases}
+            for note in self.sorted_notes()
+        ]
+
+    def attachment_choices(self, suffixes):
+        """Pièces jointes intégrables (images, PDF...) proposées après ![[ dans l'éditeur."""
+        found = [a for a in self.attachments.values() if a.suffix in suffixes]
+        return [
+            {"link": self.link_for(a), "folder": str(a.path.parent) if a.path.parent.parts else "", "url": a.view_url}
+            for a in sorted(found, key=lambda a: str(a.path).lower())
+        ]
+
+    def attachment_folder(self, note_key):
+        """Dossier où ranger une image collée dans une note, réglé comme dans
+        Obsidian (``attachmentFolderPath`` de ``.obsidian/app.json``) : racine du
+        coffre par défaut, ``./`` pour le dossier de la note, ``./sous-dossier``
+        ou un chemin depuis la racine."""
+        try:
+            config = json.loads((self.root / ".obsidian" / "app.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            config = {}
+        setting = config.get("attachmentFolderPath") if isinstance(config, dict) else None
+        setting = str(setting or "/").strip()
+        note_folder = note_key.rpartition("/")[0]
+        if setting == "." or setting.startswith("./"):
+            folder = f"{note_folder}/{setting[2:]}"
+        else:
+            folder = setting
+        return clean_key(folder) or ""
+
+    def render(self, note):
+        """HTML de la note (mis en cache jusqu'à la prochaine modification du coffre)."""
+        if note.key not in self._rendered:
+            from .render import render_note
+
+            self._rendered[note.key] = render_note(self, note)
+        return self._rendered[note.key]
+
+    def search(self, query, limit=50):
+        """Recherche insensible à la casse et aux accents. Renvoie (note, extrait HTML)."""
+        words = [fold(w) for w in query.split() if w]
+        if not words:
+            return []
+        results = []
+        for note in self.notes.values():
+            title, body = note.folded_title, note.folded_body
+            in_title = [w for w in words if w in title]
+            if not all(w in title or w in body for w in words):
+                continue
+            score = 5 * len(in_title) + sum(body.count(w) for w in words)
+            results.append((score, note, self._snippet(note.clean_body, body, words)))
+        results.sort(key=lambda r: (-r[0], r[1].title.lower()))
+        return [(note, snippet) for _, note, snippet in results[:limit]]
+
+    @staticmethod
+    def _snippet(text, folded, words, width=240):
+        """Extrait du corps centré sur la première occurrence, termes surlignés."""
+        spans = sorted(
+            (m.start(), m.end())
+            for w in words
+            for m in re.finditer(re.escape(w), folded)
+        )
+        if not spans:
+            snippet = text[:width]
+            return escape(snippet) + ("…" if len(text) > width else "")
+        start = max(spans[0][0] - width // 4, 0)
+        end = min(start + width, len(text))
+        out, cursor = [], start
+        for s, e in spans:
+            if s < start or e > end:
+                continue
+            out.append(escape(text[cursor:s]))
+            out.append(f"<mark>{escape(text[s:e])}</mark>")
+            cursor = e
+        out.append(escape(text[cursor:end]))
+        snippet = "".join(out).replace("\n", " ")
+        return ("… " if start else "") + snippet + (" …" if end < len(text) else "")
+
+
+def scan(root):
+    """Liste (chemin relatif, date de modification, taille) des fichiers du coffre."""
+    files = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS and not d.startswith(".")]
+        for filename in filenames:
+            if filename.startswith("."):
+                continue
+            full = Path(dirpath, filename)
+            try:
+                stat = full.stat()
+            except OSError:
+                continue
+            files.append((full.relative_to(root).as_posix(), stat.st_mtime_ns, stat.st_size))
+    return tuple(sorted(files))
+
+
+# Détection des changements du coffre. Parcourir tout le coffre à chaque requête
+# coûte (deux fois : pages et QCM) ; le parcours est donc fait au plus toutes les
+# WIKI_VERIF_INTERVALLE secondes. Les écritures faites par le wiki lui-même sont
+# vues tout de suite : pendant une requête POST le coffre est toujours relu
+# (crochets de requête du blueprint, voir views.py), et invalider() force le prochain parcours (après
+# la requête, ou après une écriture du fil de Claude).
+_scan_lock = threading.Lock()
+_scans = {}  # dossier -> {"signature", "quand", "generation"} (coffre, espaces personnels)
+_generation = 0
+_local = threading.local()
+
+
+def invalider():
+    """Le prochain accès au coffre le relira (un fichier vient d'être écrit)."""
+    global _generation
+    with _scan_lock:
+        _generation += 1
+
+
+class toujours_verifier:
+    """Pendant ce bloc (une requête qui écrit), le coffre est relu à chaque accès."""
+
+    def __enter__(self):
+        _local.forcer = getattr(_local, "forcer", 0) + 1
+
+    def __exit__(self, *exc):
+        _local.forcer -= 1
+        invalider()
+
+
+def signature_coffre(root):
+    """Liste (chemin, date, taille) des fichiers du coffre, parcourue au plus toutes les
+    WIKI_VERIF_INTERVALLE secondes (partagée par les pages et les QCM)."""
+    intervalle = float(_config("WIKI_VERIF_INTERVALLE", 2.0))
+    maintenant = time.monotonic()
+    root = Path(root)
+    with _scan_lock:
+        c = _scans.get(root)
+        if (c is not None and c["generation"] == _generation and not getattr(_local, "forcer", 0)
+                and maintenant - c["quand"] < intervalle):
+            return c["signature"]
+        generation = _generation
+    signature = scan(root) if root.is_dir() else ()
+    with _scan_lock:
+        _scans[root] = {"signature": signature, "quand": maintenant, "generation": generation}
+    return signature
+
+
+_lock = threading.Lock()
+_cache = {"root": None, "signature": None, "vault": None}
+
+
+def get_vault():
+    """Renvoie le coffre, réindexé seulement si un fichier a changé."""
+    root = Path(current_app.config["WIKI_DIR"])
+    signature = signature_coffre(root)
+    with _lock:
+        if _cache["vault"] is None or _cache["root"] != root or _cache["signature"] != signature:
+            _cache.update(root=root, signature=signature, vault=Vault(root, signature, previous=_cache["vault"]))
+        return _cache["vault"]

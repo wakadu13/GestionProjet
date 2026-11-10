@@ -1,0 +1,31 @@
+{# Macros du wiki : arborescence du menu, icône de page, fil d'Ariane #}
+
+{% macro page_icon(note, size=15) -%}
+{%- set e = wiki_icone(note) -%}
+{%- if e %}<span class="wiki-emoji" aria-hidden="true">{{ e }}</span>{% else %}{{ icon('wiki-file-text', size) }}{% endif -%}
+{%- endmacro %}
+
+{# Arborescence des collections (dossiers → pages et PDF), dossier de la page affichée ouvert #}
+{% macro tree(node, sb, depth=0) %}
+{% for f in node.folders %}
+<details class="wiki-tree-folder" {% if f.path in sb.ouverts %}open{% endif %}>
+  <summary class="sb-link wiki-tree-sum" style="--d: {{ depth }}">{{ icon('chevron-right', 12, 'wiki-chev') }}{{ icon('folder', 15) }}<span class="ellipsis grow">{{ f.name }}</span><span class="wiki-count">{{ f.count }}</span></summary>
+  <div class="wiki-tree-children">{{ tree(f, sb, depth + 1) }}</div>
+</details>
+{% endfor %}
+{% for n in node.notes %}
+<a class="sb-link wiki-tree-note {% if sb.note is not none and n.key == sb.note.key %}active{% endif %}" style="--d: {{ depth }}" href="{{ n.url }}" title="{{ n.title }}">{{ page_icon(n, 14) }}<span class="ellipsis">{{ n.name }}</span></a>
+{% endfor %}
+{% for p in node.files %}
+<a class="sb-link wiki-tree-note {% if sb.attachment is not none and p.path == sb.attachment.path %}active{% endif %}" style="--d: {{ depth }}" href="{{ p.view_url }}" title="{{ p.name }}">{{ icon('wiki-pdf', 14) }}<span class="ellipsis">{{ p.path.stem }}</span><span class="wiki-file-badge">PDF</span></a>
+{% endfor %}
+{% endmacro %}
+
+{# Fil d'Ariane : Wiki › dossiers › page courante #}
+{% macro crumbs(items, current=None, current_icon=None) %}
+<div class="crumbs wiki-crumbs">
+  <a href="{{ url_for('wiki.home') }}">{{ icon('book', 15) }} Wiki</a>
+  {% for label, url in items %}<span class="sep">{{ icon('chevron-right', 14) }}</span><a href="{{ url }}" class="wiki-crumb-folder">{{ label }}</a>{% endfor %}
+  {% if current %}<span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current ellipsis">{% if current_icon %}{{ current_icon }} {% endif %}{{ current }}</span>{% endif %}
+</div>
+{% endmacro %}

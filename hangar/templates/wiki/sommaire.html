@@ -1,0 +1,53 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}{% if dossier %}{{ dossier }}{% else %}Sommaire{% endif %} · Wiki{% endblock %}
+
+{% macro arbre(node) %}
+<ul class="wiki-som-tree">
+  {% for folder in node.folders %}
+  <li class="wiki-som-folder">
+    <details open>
+      <summary>{{ icon('chevron-right', 13, 'wiki-chev') }}{{ icon('folder', 15) }} <span>{{ folder.name }}</span> <span class="wiki-count">{{ folder.count }}</span>
+        <a class="wiki-som-open" href="{{ url_for('wiki.sommaire', dossier=folder.path.rstrip('/')) }}" title="Ouvrir ce dossier seul">{{ icon('arrow-right', 13) }}</a></summary>
+      {{ arbre(folder) }}
+    </details>
+  </li>
+  {% endfor %}
+  {% for n in node.notes %}
+  <li class="wiki-som-note"><a href="{{ n.url }}">{{ wk.page_icon(n, 14) }} {{ n.title }}</a>{% if n.tags %} <span class="wiki-som-tags">{% for t in n.tags[:3] %}<span>#{{ t }}</span>{% endfor %}</span>{% endif %}</li>
+  {% endfor %}
+  {% for f in node.files %}
+  <li class="wiki-som-note"><a href="{{ f.view_url }}">{{ icon('wiki-pdf', 14) }} {{ f.path.stem }}</a><span class="wiki-file-badge">PDF</span></li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% block header %}
+<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs(crumbs, dossier.rsplit('/', 1)[-1] if dossier else 'Sommaire') }}
+  <div class="header-actions">
+    <button class="btn btn-sm btn-ghost" type="button" data-fold="open">Tout déplier</button>
+    <button class="btn btn-sm btn-ghost" type="button" data-fold="close">Tout replier</button>
+    {% if can_edit %}<a class="btn btn-sm btn-primary" href="{{ url_for('wiki.new', folder=dossier) }}">{{ icon('plus', 14) }} Nouvelle page</a>{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow wiki-sommaire-page">
+  <h1 class="wiki-doc-title">{% if dossier %}{{ icon('folder', 26) }} {{ dossier }}{% else %}Sommaire{% endif %}</h1>
+  <p class="muted">{% if dossier %}{{ root.count }} élément{{ 's' if root.count > 1 }} dans ce dossier · <a href="{{ url_for('wiki.sommaire') }}">tout le wiki</a>{% else %}{{ total }} page{{ 's' if total > 1 }} dans le wiki{% endif %}</p>
+  <form class="wiki-search-big" action="{{ url_for('wiki.search') }}" method="get" role="search">
+    {{ icon('search', 16) }}<input class="input" type="search" name="q" placeholder="Rechercher dans toutes les pages et les PDF…" aria-label="Rechercher">
+    <button type="submit" class="btn btn-primary">Rechercher</button>
+  </form>
+  <div class="wiki-sommaire">
+    {% if root.folders or root.notes or root.files %}{{ arbre(root) }}{% else %}{{ ui.empty('folder', 'Dossier vide') }}{% endif %}
+  </div>
+  {% if recent and not dossier %}
+  <div class="section-title"><h2>Récemment modifiées</h2></div>
+  <div class="panel wiki-list">
+    {% for n in recent %}<a class="wiki-row" href="{{ n.url }}">{{ wk.page_icon(n, 16) }}<span class="grow ellipsis">{{ n.title }}{% if n.folder %} <span class="muted small">{{ n.folder }}</span>{% endif %}</span><span class="muted small nowrap">{{ n.modified|ago }}</span></a>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
