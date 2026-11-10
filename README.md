@@ -1,6 +1,30 @@
-# ✈️ Hangar — gestion de projet et d'équipe, 100 % locale
+# ✈️ Hangar — agenda personnel et gestion de projet, 100 % locaux
 
-Application web en **Python** (Flask + SQLite) inspirée de [Plane](https://plane.so), pensée pour piloter une équipe projet sans aucun service en ligne : les données restent sur ta machine, l'interface fonctionne hors connexion (aucune ressource externe, aucun CDN).
+Application web en **Python** (Flask + SQLite) : un **tableau de bord d'emploi du temps** qui sert d'agenda. Chaque semaine, tu importes le fichier `.ics` de ton planning ; tu y planifies tes tâches, et l'application t'envoie des **rappels par e-mail**. La gestion de projet d'équipe (inspirée de [Plane](https://plane.so)) reste disponible dans la section « Gestion de projet ». Aucun service en ligne : les données restent sur ta machine, l'interface fonctionne hors connexion (aucune ressource externe, aucun CDN).
+
+## Agenda : emploi du temps, tâches et rappels
+
+Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochaine (avec compte à rebours), le programme du jour, la semaine en grille horaire, les tâches à faire, les contrôles à venir et les changements du dernier planning importé.
+
+**Importer l'emploi du temps chaque semaine** (menu *Emploi du temps*, ou le bandeau du tableau de bord)
+- Dépose le fichier `.ics` exporté de ton planning. **Le dernier fichier importé fait foi** :
+  - chaque séance est reconnue par son identifiant (`UID`) : si l'horaire, la salle ou l'intervenant changent, elle est **mise à jour** et marquée « modifiée » (avant → après) ;
+  - une séance absente du nouveau fichier est **retirée** (barrée dans le calendrier), seulement pour les semaines couvertes par le fichier et à partir d'aujourd'hui : le passé n'est jamais effacé ;
+  - tes **notes**, **rappels** et **tâches liées** restent attachés à la séance d'un import à l'autre ;
+  - chaque import a sa page de détail (ajouts, modifications, retraits) et le **dernier import peut être annulé**. Le fichier d'origine est conservé.
+- Format de l'école reconnu : `Réseaux avancés 3 CM` → matière, n° de séance, type (CM, TD/TP, contrôle écrit, sport, militaire, conférence…) ; `(PREVISION)` → séance prévisionnelle (hachurée) ; rubriques `Apprenants` et `Intervenants` de la description. Les autres fichiers `.ics` (Google Agenda, Outlook…) fonctionnent aussi.
+- En ligne de commande : `uv run hangar agenda-import planning.ics` (option `--mode future` pour remplacer tout le planning à venir, `--mode merge` pour ne rien retirer).
+
+**Calendrier** : vues semaine (grille horaire, ligne « maintenant »), mois et liste ; clic sur une séance pour ses détails, une note personnelle, un rappel ou une tâche liée ; clic sur un créneau libre pour créer une tâche à cette heure ; export `.ics` (cours et/ou tâches, avec les rappels) vers Google Agenda / Outlook / téléphone ; impression.
+
+**Tâches** : date, heure de début et de fin (ou journée entière), notes, priorité, catégorie, couleur, séance liée, **répétition** (tous les jours, du lundi au vendredi, chaque semaine, toutes les deux semaines, chaque mois — cocher l'occurrence passe à la suivante), report rapide (demain, lundi, +1 semaine). Raccourci clavier `T`.
+
+**Rappels et e-mails** (menu *Rappels et e-mails*)
+- Rappels par tâche ou par séance : à l'heure, 15 min, 1 h, la veille, 2 jours, 1 semaine avant… ou à une date précise ; par **e-mail + notification** dans l'application, ou notification seule.
+- **Programme quotidien** par e-mail : le matin (programme du jour) ou la veille au soir (programme du lendemain), à l'heure choisie.
+- **Rappel automatique des contrôles** (la veille, 2 jours, 1 semaine avant), e-mail récapitulatif des **changements après chaque import**.
+- Pour recevoir réellement les e-mails : renseigne ton adresse dans *Rappels et e-mails*, puis (administrateur) configure l'envoi dans *menu de l'espace › E-mails automatiques* — mode **SMTP**, préréglage Gmail avec un [mot de passe d'application](https://myaccount.google.com/apppasswords). Sinon, les messages sont seulement enregistrés en `.eml` dans `data/outbox/`.
+- Les rappels partent tant que Hangar est lancé (`uv run hangar`). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée.
 
 ## Démarrage rapide
 
@@ -88,7 +112,8 @@ uv run hangar run --port 8080       # autre port ; --host 0.0.0.0 pour le résea
 uv run hangar demo                  # données de démonstration du projet EAE
 uv run hangar demo --force          # efface puis recrée la démonstration
 uv run hangar rebuild-docs          # recrée les tickets du projet EAE d'après les documents (sauvegarde avant)
-uv run hangar mail-send             # envoie la file d'e-mails et les envois programmés maintenant
+uv run hangar agenda-import planning.ics  # importe l'emploi du temps (.ics) ; --user identifiant, --mode weeks|future|merge
+uv run hangar mail-send             # envoie la file d'e-mails, les rappels de l'agenda et les envois programmés maintenant
 uv run hangar mail-test adresse@ex.fr  # e-mail de test
 uv run hangar backup                # sauvegarde dans data/backups/
 uv run hangar reset                 # efface toutes les données (sauvegarde de sécurité avant)
@@ -104,6 +129,7 @@ Tout est dans `hangar/data/` :
 - `uploads/` : les pièces jointes
 - `backups/` : les sauvegardes
 - `outbox/` : les e-mails en mode « boîte d'envoi locale »
+- `agenda/` : les fichiers `.ics` importés (un dossier par utilisateur)
 - `secret.key` : la clé de session (générée automatiquement)
 
 Pour transférer Hangar sur une autre machine, copie le dossier `hangar/` entier (données comprises).
@@ -119,11 +145,14 @@ hangar/
 │   ├── models.py           modèle de données (SQLAlchemy)
 │   ├── services.py         logique métier : tickets, historique, notifications
 │   ├── issue_query.py      filtres, tris, regroupements, calendrier, Gantt
+│   ├── ics.py              lecture des fichiers .ics (format de l'école et iCalendar standard)
+│   ├── agenda.py           agenda : imports (le dernier fait foi), tâches, rappels, vues semaine / mois
 │   ├── importer.py         import/export Excel, CSV, JSON, Word
 │   ├── charts.py           graphiques SVG générés en Python
 │   ├── seed.py             données de démonstration
 │   ├── views/              routes (une par domaine : tickets, cycles, pages, équipe, API…)
 │   ├── templates/          gabarits Jinja
 │   └── static/             CSS et JavaScript (sans dépendance)
+├── tests/                  tests de l'agenda (uv run python -m unittest discover -s tests)
 └── data/                   base et fichiers (créé au premier lancement)
 ```

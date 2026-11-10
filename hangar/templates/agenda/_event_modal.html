@@ -1,0 +1,52 @@
+{# Détail d'une séance de l'emploi du temps (rempli par app.js à partir de window.AGENDA.events) #}
+<dialog class="modal" id="event-modal" aria-labelledby="em-title">
+  <div class="modal-h em-head">
+    <span class="em-color" data-em-color></span>
+    <h2 id="em-title" data-em-title></h2>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close title="Fermer">{{ icon('x', 16) }}</button>
+  </div>
+  <div class="modal-b">
+    <div class="em-badges" data-em-badges></div>
+    <div class="em-props">
+      <div>{{ icon('clock', 15) }}<span data-em-when></span></div>
+      <div data-em-row="location">{{ icon('map-pin', 15) }}<span data-em-location></span></div>
+      <div data-em-row="teachers">{{ icon('user', 15) }}<span data-em-teachers></span></div>
+      <div data-em-row="groups">{{ icon('users', 15) }}<span data-em-groups class="small text-2"></span></div>
+    </div>
+    <div class="em-desc" data-em-description></div>
+    <div class="em-changes" data-em-changes></div>
+
+    <div class="em-section">
+      <h4>{{ icon('sticky', 14) }} Ma note</h4>
+      <form method="post" data-em-note-form>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="">
+        <textarea class="input" name="note" rows="2" placeholder="Ex. : apporter la calculatrice, réviser les chapitres 3 à 5…"></textarea>
+        <div class="form-actions" style="margin-top:6px"><span class="help grow">Ta note est conservée même quand le planning est réimporté.</span><button class="btn btn-sm">Enregistrer</button></div>
+      </form>
+    </div>
+
+    <div class="em-section">
+      <h4>{{ icon('bell', 14) }} Rappels</h4>
+      <div data-em-reminders class="em-reminders"></div>
+      <form method="post" data-em-reminder-form class="em-add-reminder">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="">
+        <select class="input input-sm" name="offset" aria-label="Quand">
+          {% for v, lab in REMINDER_OFFSETS %}<option value="{{ v }}" {% if v == 1440 %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select>
+        <select class="input input-sm" name="channel" aria-label="Moyen">
+          <option value="email">e-mail + notification</option>
+          <option value="app">notification seulement</option>
+        </select>
+        <button class="btn btn-sm">{{ icon('plus', 13) }} Ajouter</button>
+      </form>
+    </div>
+
+    <div class="em-section">
+      <h4>{{ icon('list-check', 14) }} Tâches liées</h4>
+      <div data-em-tasks class="em-tasks"></div>
+      <button type="button" class="btn btn-sm" data-em-add-task>{{ icon('plus', 13) }} Ajouter une tâche liée</button>
+    </div>
+  </div>
+</dialog>

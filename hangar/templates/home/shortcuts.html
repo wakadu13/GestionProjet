@@ -5,8 +5,8 @@
 {% block content %}
 <div class="inner" style="max-width:720px;margin:0 auto">
   {% for title, rows in [
-    ('Général', [('Ctrl + K', 'Palette de commandes et recherche'), ('/', 'Rechercher'), ('C', 'Créer un ticket'), ('?', 'Afficher cette page'), ('Maj + D', 'Basculer le thème clair / sombre'), ('[', 'Afficher / masquer la barre latérale (mobile)'), ('Échap', 'Fermer une fenêtre ou un menu')]),
-    ('Navigation (G puis…)', [('G puis H', 'Accueil'), ('G puis I', 'Mes tickets'), ('G puis P', 'Projets'), ('G puis N', 'Notifications'), ('G puis A', 'Analytique'), ('G puis T', 'Équipe')]),
+    ('Général', [('Ctrl + K', 'Palette de commandes et recherche'), ('/', 'Rechercher'), ('T', 'Nouvelle tâche dans l’agenda'), ('C', 'Créer un ticket de projet'), ('?', 'Afficher cette page'), ('Maj + D', 'Basculer le thème clair / sombre'), ('[', 'Afficher / masquer la barre latérale (mobile)'), ('Échap', 'Fermer une fenêtre ou un menu')]),
+    ('Navigation (G puis…)', [('G puis H', 'Tableau de bord (agenda)'), ('G puis C', 'Calendrier'), ('G puis L', 'Liste des tâches'), ('G puis E', 'Emploi du temps (imports)'), ('G puis I', 'Mes tickets'), ('G puis P', 'Projets'), ('G puis N', 'Notifications'), ('G puis A', 'Analytique'), ('G puis T', 'Équipe')]),
     ('Édition', [('Ctrl + Entrée', 'Envoyer un commentaire / formulaire'), ('Ctrl + S', 'Enregistrer une page'), ('Ctrl + B / Ctrl + I', 'Gras / italique dans une page'), ('@', 'Mentionner un membre'), ('Entrée', 'Valider un titre ou un ajout rapide'), ('↑ ↓ + Entrée', 'Choisir dans un sélecteur')]),
   ] %}
   <div class="section-title"><h2>{{ title }}</h2></div>
@@ -15,6 +15,8 @@
   <div class="section-title"><h2>Astuces</h2></div>
   <div class="panel panel-b md">
     <ul>
+      <li>Dans la semaine, clique sur un créneau libre pour créer une tâche à cette heure ; clique sur un cours pour voir ses détails, ajouter une note ou un rappel.</li>
+      <li>Chaque semaine, importe le fichier .ics de ton emploi du temps : le dernier importé fait foi et les changements sont signalés.</li>
       <li>Clique sur n’importe quelle propriété (état, priorité, assignés, dates…) dans une liste pour la modifier directement.</li>
       <li>Glisse-dépose les tickets entre colonnes du tableau, sur le calendrier ou les barres du Gantt.</li>
       <li>Dans le tableur, coche plusieurs tickets pour les modifier en masse.</li>

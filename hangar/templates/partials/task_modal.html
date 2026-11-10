@@ -1,0 +1,82 @@
+{# Fenêtre de création / modification d'une tâche de l'agenda (remplie par app.js) #}
+{% set agcfg = agenda_cfg() %}
+<dialog class="modal" id="task-modal" aria-labelledby="tm-heading">
+  <form method="post" action="{{ url_for('agenda.task_create') }}" data-task-form>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="">
+    <input type="hidden" name="reminders_present" value="1">
+    <div class="modal-h">
+      <span class="tm-ic">{{ icon('list-check', 16) }}</span>
+      <h2 id="tm-heading" data-tm-heading>Nouvelle tâche</h2>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close title="Fermer">{{ icon('x', 16) }}</button>
+    </div>
+    <div class="modal-b">
+      <input class="input input-lg tm-title" name="title" placeholder="Que dois-tu faire ?" required maxlength="300" autocomplete="off">
+      <div class="tm-when">
+        <div class="field"><label for="tm-date">Date</label><input class="input" id="tm-date" type="date" name="date"></div>
+        <div class="field"><label for="tm-start">Début</label><input class="input" id="tm-start" type="time" name="start" step="300"></div>
+        <div class="field"><label for="tm-end">Fin</label><input class="input" id="tm-end" type="time" name="end" step="300"></div>
+      </div>
+      <p class="help tm-hint">Sans heure, la tâche est prévue pour la journée. Sans date, elle reste dans « Sans date ».</p>
+
+      <div class="field" data-tm-event-field>
+        <label for="tm-event">Séance liée <span class="muted">(facultatif)</span></label>
+        <select class="input" id="tm-event" name="event_id" data-tm-events><option value="">Aucune</option></select>
+      </div>
+
+      <div class="field"><label for="tm-notes">Notes</label><textarea class="input" id="tm-notes" name="notes" rows="3" placeholder="Détails, chapitres à revoir, liens… (markdown)"></textarea></div>
+
+      <div class="grid-2">
+        <div class="field"><label for="tm-prio">Priorité</label>
+          <select class="input" id="tm-prio" name="priority">
+            {% for k, lab, col in M.PRIORITIES|reverse %}<option value="{{ k }}">{{ lab }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label for="tm-cat">Catégorie</label>
+          <input class="input" id="tm-cat" name="category" list="tm-cats" maxlength="60" placeholder="Révisions, Projet, Perso…" autocomplete="off">
+          <datalist id="tm-cats">{% for c in agcfg.categories %}<option value="{{ c }}">{% endfor %}{% for c in ['Révisions', 'Devoirs', 'Projet', 'Sport', 'Perso', 'Administratif'] if c not in agcfg.categories %}<option value="{{ c }}">{% endfor %}</datalist>
+        </div>
+      </div>
+      <div class="field"><span class="label">Couleur</span>
+        <div class="color-swatches">
+          <label title="Couleur automatique"><input type="radio" name="color" value="" checked><span class="sw-none"></span></label>
+          {% for c in TASK_COLORS %}<label><input type="radio" name="color" value="{{ c }}"><span style="background:{{ c }}"></span></label>{% endfor %}
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label for="tm-rec">Répétition</label>
+          <select class="input" id="tm-rec" name="recurrence">{% for k, lab in RECURRENCES.items() %}<option value="{{ k }}">{{ lab }}</option>{% endfor %}</select>
+        </div>
+        <div class="field" data-tm-until><label for="tm-until">Jusqu’au <span class="muted">(facultatif)</span></label><input class="input" id="tm-until" type="date" name="until"></div>
+      </div>
+
+      <fieldset class="tm-reminders">
+        <legend>{{ icon('bell', 14) }} Rappels</legend>
+        <div class="tm-offsets">
+          {% for v, lab in QUICK_OFFSETS %}
+          <label class="tm-chip"><input type="checkbox" name="reminders" value="{{ v }}"><span>{{ lab }}</span></label>
+          {% endfor %}
+        </div>
+        <div class="tm-fixed" data-tm-fixed></div>
+        <div class="tm-more">
+          <label class="small text-2" for="tm-at">Ou le</label>
+          <input class="input input-sm" id="tm-at" type="datetime-local" name="reminder_at" style="width:auto">
+          <select class="input input-sm" name="reminder_channel" style="width:auto" aria-label="Moyen de rappel">
+            <option value="email">par e-mail + notification</option>
+            <option value="app">notification dans l’application</option>
+          </select>
+        </div>
+        <p class="help" data-tm-help-allday hidden>Pour une tâche sans heure, « à l’heure » correspond au jour même à {{ '%02d'|format(A.settings_of(current_user).allday_hour or 8) }} h.</p>
+        {% if not agcfg.has_email %}<p class="help warning-text">{{ icon('alert', 12) }} Aucune adresse e-mail : les rappels n’arriveront que dans l’application. <a href="{{ url_for('agenda.settings') }}" style="text-decoration:underline">Ajouter mon adresse</a></p>{% endif %}
+      </fieldset>
+    </div>
+    <div class="modal-f">
+      <button type="button" class="btn btn-danger-ghost btn-sm hide" data-tm-delete>{{ icon('trash', 14) }} Supprimer</button>
+      <label class="checkbox small muted hide" data-tm-done-wrap><input type="checkbox" data-tm-done> Terminée</label>
+      <div class="right">
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button class="btn btn-primary" data-tm-submit>Créer la tâche</button>
+      </div>
+    </div>
+  </form>
+</dialog>

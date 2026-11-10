@@ -41,20 +41,31 @@
       </div>
     </div>
     <div class="sb-actions">
-      <button class="btn btn-sm" type="button" data-create-issue {% if pid_ctx %}data-project="{{ pid_ctx }}"{% endif %}>{{ icon('edit', 14) }} Nouveau ticket</button>
+      <button class="btn btn-sm" type="button" data-new-task title="Nouvelle tâche (T)">{{ icon('plus', 14) }} Nouvelle tâche</button>
+      <button class="btn btn-sm btn-icon" type="button" data-create-issue {% if pid_ctx %}data-project="{{ pid_ctx }}"{% endif %} title="Nouveau ticket de projet (C)">{{ icon('edit', 14) }}</button>
       <button class="btn btn-sm btn-icon" type="button" data-palette title="Rechercher (Ctrl+K)">{{ icon('search', 14) }}</button>
     </div>
     <nav class="sb-scroll">
       {% set ep = request.endpoint or '' %}
-      <a class="sb-link {% if ep == 'home.index' %}active{% endif %}" href="{{ url_for('home.index') }}">{{ icon('home') }} Accueil</a>
+      {% set agcfg = agenda_cfg() %}
+      <a class="sb-link {% if ep == 'agenda.dashboard' %}active{% endif %}" href="{{ url_for('agenda.dashboard') }}">{{ icon('home') }} Tableau de bord</a>
+      <a class="sb-link {% if ep == 'agenda.calendar' %}active{% endif %}" href="{{ url_for('agenda.calendar') }}">{{ icon('calendar') }} Calendrier</a>
+      <a class="sb-link {% if ep == 'agenda.tasks' %}active{% endif %}" href="{{ url_for('agenda.tasks') }}">{{ icon('list-check') }} Tâches {% if agcfg.due %}<span class="sb-badge {% if agcfg.overdue %}danger{% endif %}" title="{{ agcfg.due }} pour aujourd’hui ou en retard">{{ agcfg.due }}</span>{% endif %}</a>
+      <a class="sb-link {% if ep.startswith('agenda.import') %}active{% endif %}" href="{{ url_for('agenda.imports') }}">{{ icon('upload') }} Emploi du temps</a>
       <a class="sb-link {% if ep == 'home.notifications' %}active{% endif %}" href="{{ url_for('home.notifications') }}">{{ icon('bell') }} Notifications {% if sb.unread %}<span class="sb-badge" id="notif-badge">{{ sb.unread if sb.unread < 100 else '99+' }}</span>{% else %}<span class="sb-badge hide" id="notif-badge"></span>{% endif %}</a>
+      <a class="sb-link {% if ep == 'agenda.settings' %}active{% endif %}" href="{{ url_for('agenda.settings') }}">{{ icon('mail') }} Rappels et e-mails</a>
+
+      <details class="sb-group" {% if not ep.startswith('agenda.') and ep not in ('home.notifications',) %}open{% endif %}>
+        <summary class="sb-section-h"><span>Gestion de projet</span>{{ icon('chevron-right', 13, 'chev') }}</summary>
+      <a class="sb-link {% if ep == 'home.index' %}active{% endif %}" href="{{ url_for('home.index') }}">{{ icon('briefcase') }} Accueil projets</a>
       <a class="sb-link {% if ep == 'home.workspace_issues' %}active{% endif %}" href="{{ url_for('home.workspace_issues') }}">{{ icon('layers') }} Mes tickets</a>
       <a class="sb-link {% if ep.startswith('saved_views.global') %}active{% endif %}" href="{{ url_for('saved_views.global_index') }}">{{ icon('eye') }} Vues</a>
       <a class="sb-link {% if ep == 'planning.workspace' %}active{% endif %}" href="{{ url_for('planning.workspace') }}">{{ icon('gantt') }} Planning</a>
       <a class="sb-link {% if ep == 'analytics.index' and not pid_ctx %}active{% endif %}" href="{{ url_for('analytics.index') }}">{{ icon('chart') }} Analytique</a>
       <a class="sb-link {% if ep.startswith('bilan.') and not pid_ctx %}active{% endif %}" href="{{ url_for('bilan.index') }}">{{ icon('flag') }} Bilan</a>
       <a class="sb-link {% if ep.startswith('team.') %}active{% endif %}" href="{{ url_for('team.index') }}">{{ icon('users') }} Équipe</a>
-      <a class="sb-link {% if ep == 'projects.index' %}active{% endif %}" href="{{ url_for('projects.index') }}">{{ icon('briefcase') }} Projets</a>
+      <a class="sb-link {% if ep == 'projects.index' %}active{% endif %}" href="{{ url_for('projects.index') }}">{{ icon('folder') }} Projets</a>
+      </details>
 
       {% if sb.favorites %}
       <div class="sb-section">
@@ -102,6 +113,7 @@
   </main>
 </div>
 {% include "partials/create_issue.html" %}
+{% include "partials/task_modal.html" %}
 {% include "partials/palette.html" %}
 {% else %}
 {% block auth %}{% endblock %}
@@ -119,8 +131,9 @@ window.HANGAR = {
   me: {{ {"id": current_user.id, "username": current_user.username, "name": current_user.display_name, "theme": current_user.theme}|tojson }},
   projects: {{ picker_data()|tojson }},
   contextProject: {{ (pid_ctx or none)|tojson }},
+  agenda: {{ {"defaultReminder": agcfg.default_reminder, "channel": agcfg.channel, "hasEmail": agcfg.has_email, "createUrl": url_for('agenda.task_create'), "dayUrl": url_for('agenda.api_day'), "reminderDelete": url_for('agenda.reminder_delete', rid=0), "taskUrl": url_for('agenda.task_update', tid=0), "settingsUrl": url_for('agenda.settings')}|tojson }},
   {% endif %}
-  urls: { search: "{{ url_for('api.search') }}", markdown: "{{ url_for('api.markdown_preview') }}", members: "{{ url_for('api.members') }}", lookup: "{{ url_for('api.lookup') }}", theme: "{{ url_for('api.theme') }}", notif: "{{ url_for('api.notifications_summary') }}", newProject: "{{ url_for('projects.new') }}", home: "{{ url_for('home.index') }}", myIssues: "{{ url_for('home.workspace_issues') }}", notifications: "{{ url_for('home.notifications') }}", analytics: "{{ url_for('analytics.index') }}", team: "{{ url_for('team.index') }}", projects: "{{ url_for('projects.index') }}", workload: "{{ url_for('team.workload') }}", profile: "{{ url_for('settings.profile') }}" }
+  urls: { search: "{{ url_for('api.search') }}", markdown: "{{ url_for('api.markdown_preview') }}", members: "{{ url_for('api.members') }}", lookup: "{{ url_for('api.lookup') }}", theme: "{{ url_for('api.theme') }}", notif: "{{ url_for('api.notifications_summary') }}", newProject: "{{ url_for('projects.new') }}", home: "{{ url_for('agenda.dashboard') }}", projectsHome: "{{ url_for('home.index') }}", calendar: "{{ url_for('agenda.calendar') }}", tasks: "{{ url_for('agenda.tasks') }}", imports: "{{ url_for('agenda.imports') }}", myIssues: "{{ url_for('home.workspace_issues') }}", notifications: "{{ url_for('home.notifications') }}", analytics: "{{ url_for('analytics.index') }}", team: "{{ url_for('team.index') }}", projects: "{{ url_for('projects.index') }}", workload: "{{ url_for('team.workload') }}", profile: "{{ url_for('settings.profile') }}" }
 };
 </script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ version }}"></script>

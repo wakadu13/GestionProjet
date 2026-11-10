@@ -1,0 +1,171 @@
+{# Composants de l'agenda : grille de la semaine, lignes de tâches, pastilles #}
+
+{% macro csrf() %}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro ev_title(ev) -%}
+{{ ev.title }} — {{ A.event_when(ev) }}{% if ev.location %} — {{ ev.location }}{% endif %}{% if ev.teachers %} — {{ ev.teachers }}{% endif %}
+{%- endmacro %}
+
+{% macro ev_classes(ev) -%}
+{% if ev.tentative %}tentative {% endif %}{% if ev.status != 'active' %}removed {% endif %}{% if ev.cancelled %}cancelled {% endif %}{% if A.is_exam(ev) %}exam{% endif %}
+{%- endmacro %}
+
+{% macro pending_bell(reminders, size=10) -%}
+{% if reminders|selectattr('status', 'equalto', 'pending')|list %}<span class="ag-bell" title="Rappel programmé">{{ icon('bell', size) }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro task_check(t, ghost=False, small=False) -%}
+<button type="button" class="tk-check {% if small %}sm{% endif %} {% if t.is_done %}on{% endif %}" {% if ghost %}disabled title="Occurrence à venir"{% else %}data-task-toggle="{{ url_for('agenda.task_toggle', tid=t.id) }}" title="{{ 'Rouvrir la tâche' if t.is_done else 'Marquer comme terminée' }}"{% endif %} style="--tc: {{ t.color or M.PRIORITY_COLORS.get(t.priority, '#8a919c') if (t.color or t.priority in ('urgent', 'high')) else 'var(--text-3)' }}">{{ icon('check', 11 if small else 12, stroke=3) }}</button>
+{%- endmacro %}
+
+{# ------------------------------------------------------------------ Semaine #}
+{% macro week_grid(w, recent, compact=False) %}
+<div class="wk {% if compact %}compact{% endif %} {% if w.narrow_we %}narrow-we{% endif %}" style="--ndays: {{ w.ndays }}; --hours: {{ w.h1 - w.h0 }}" data-week data-h0="{{ w.h0 }}" data-h1="{{ w.h1 }}">
+  <div class="wk-head">
+    <div class="wk-corner" title="Semaine {{ w.week_no }}">S{{ w.week_no }}</div>
+    {% for c in w.days %}
+    <div class="wk-dh {% if c.today %}today{% endif %} {% if c.weekend %}we{% endif %}">
+      <span class="dow">{{ A.DAYS[c.date.weekday()] }}</span>
+      <span class="num">{{ c.date.day }}</span>
+      {% if c.minutes %}<span class="hrs" title="Heures de cours">{{ A.duration_label(c.minutes) }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if w.bars %}
+  <div class="wk-allday">
+    <div class="wk-corner tiny muted">Journée</div>
+    <div class="wk-allday-grid">
+      {% for b in w.bars %}
+      {% if b.type == 'event' %}{% set ev = b.obj %}{% set badge = A.change_badge(ev, recent) %}
+      <button type="button" class="wk-bar {{ ev_classes(ev) }} {% if b.cont_left %}cl{% endif %} {% if b.cont_right %}cr{% endif %}" style="grid-column: {{ b.c0 + 1 }} / {{ b.c1 + 2 }}; grid-row: {{ b.lane + 1 }}; --ec: {{ A.event_color(ev) }}" data-ev="{{ ev.id }}" title="{{ ev_title(ev) }}">
+        {% if b.cont_left %}{{ icon('chevron-left', 12) }}{% endif %}
+        <span class="ellipsis"><b>{{ ev.title }}</b>{% if ev.kind %} · {{ A.kind_label(ev.kind, True) }}{% endif %}{% if not ev.all_day %} <span class="muted">· {{ A.hm(ev.start) }} → {{ A.day_short(ev.last_day) }} {{ A.hm(ev.end) }}</span>{% endif %}</span>
+        {% if badge %}<span class="chg {{ badge[1] }}" title="{{ badge[0] }}"></span>{% endif %}
+        {% if b.cont_right %}{{ icon('chevron-right', 12) }}{% endif %}
+      </button>
+      {% else %}{% set o = b.obj %}{% set t = o.task %}
+      <div class="wk-bar task {% if t.is_done %}done{% endif %} {% if o.ghost %}ghost{% endif %}" style="grid-column: {{ b.c0 + 1 }} / {{ b.c1 + 2 }}; grid-row: {{ b.lane + 1 }}; --tc: {{ t.color or 'var(--accent)' }}">
+        {{ task_check(t, o.ghost, True) }}
+        <button type="button" class="ellipsis wk-task-t" data-edit-task="{{ t.id }}" title="{{ t.title }}">{{ t.title }}</button>
+        {{ pending_bell(t.reminders) }}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  <div class="wk-body">
+    <div class="wk-hours">{% for h in w.hours %}<div class="wk-h"><span>{{ '%02d'|format(h) }}:00</span></div>{% endfor %}</div>
+    {% for c in w.days %}
+    <div class="wk-col {% if c.today %}today{% endif %} {% if c.weekend %}we{% endif %}" data-slot-date="{{ c.date.isoformat() }}" title="Clique sur un créneau libre pour ajouter une tâche">
+      {% for b in c.blocks %}
+      {% if b.type == 'event' %}{% set ev = b.obj %}{% set badge = A.change_badge(ev, recent) %}
+      <button type="button" class="wk-ev {{ ev_classes(ev) }} {% if b.height < 75 %}short{% endif %} {% if b.height < 40 %}tiny{% endif %}" style="--t: {{ b.top }}; --h: {{ b.height }}; --c: {{ b.col }}; --n: {{ b.ncols }}; --ec: {{ A.event_color(ev) }}" data-ev="{{ ev.id }}" title="{{ ev_title(ev) }}">
+        <span class="t">{% if A.is_exam(ev) %}{{ icon('alert', 11) }} {% endif %}{{ ev.title }}</span>
+        <span class="m">{{ A.hm(ev.start) }}–{{ A.hm(ev.end) }}{% if ev.kind %} · {{ A.kind_label(ev.kind, True) }}{% endif %}{% if ev.session_no %} {{ ev.session_no }}{% endif %}</span>
+        {% if ev.location %}<span class="m loc">{{ icon('map-pin', 10) }} {{ ev.location }}</span>{% endif %}
+        <span class="marks">{% if badge %}<span class="chg {{ badge[1] }}" title="{{ badge[0] }}"></span>{% endif %}{% if ev.note %}<span title="Note personnelle">{{ icon('sticky', 10) }}</span>{% endif %}{{ pending_bell(ev.reminders) }}</span>
+      </button>
+      {% else %}{% set o = b.obj %}{% set t = o.task %}
+      <div class="wk-task {% if t.is_done %}done{% endif %} {% if o.ghost %}ghost{% endif %} {% if b.height < 40 %}short{% endif %}" style="--t: {{ b.top }}; --h: {{ b.height }}; --c: {{ b.col }}; --n: {{ b.ncols }}; --tc: {{ t.color or 'var(--accent)' }}">
+        {{ task_check(t, o.ghost, True) }}
+        <button type="button" class="wk-task-t" data-edit-task="{{ t.id }}" title="{{ t.title }}"><span class="t">{{ t.title }}</span><span class="m">{{ A.hm(b.start) }}{% if t.end_time %}–{{ A.hm(t.end_time) }}{% endif %}</span></button>
+        {{ pending_bell(t.reminders) }}
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% if c.today and w.now_top is not none %}<div class="wk-now" style="--t: {{ w.now_top }}" data-now-line></div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Éléments de listes / mois #}
+{% macro item_chip(x, recent, show_time=True) %}
+{% if x.type == 'event' %}{% set ev = x.obj %}{% set badge = A.change_badge(ev, recent) %}
+<button type="button" class="ag-chip ev {{ ev_classes(ev) }} {% if x.multi %}multi{% endif %}" style="--ec: {{ A.event_color(ev) }}" data-ev="{{ ev.id }}" title="{{ ev_title(ev) }}">
+  {% if show_time and x.time %}<span class="tm">{{ x.time }}</span>{% endif %}<span class="ellipsis">{{ ev.title }}</span>{% if badge %}<span class="chg {{ badge[1] }}"></span>{% endif %}
+</button>
+{% else %}{% set o = x.obj %}{% set t = o.task %}
+<div class="ag-chip task {% if t.is_done %}done{% endif %} {% if o.ghost %}ghost{% endif %}" style="--tc: {{ t.color or 'var(--accent)' }}">
+  {{ task_check(t, o.ghost, True) }}{% if show_time and x.time %}<span class="tm">{{ x.time }}</span>{% endif %}<button type="button" class="ellipsis wk-task-t" data-edit-task="{{ t.id }}">{{ t.title }}</button>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# Ligne détaillée d'une séance (vue liste, tableau de bord) #}
+{% macro event_line(ev, recent, state='', show_day=False) %}
+{% set badge = A.change_badge(ev, recent) %}
+<button type="button" class="ag-line {{ ev_classes(ev) }} {{ state }}" style="--ec: {{ A.event_color(ev) }}" data-ev="{{ ev.id }}">
+  <span class="ag-time">{% if show_day %}<b>{{ A.day_short(ev.start.date()) }}</b><br>{% endif %}{% if ev.multi_day %}<span class="small">Journée</span>{% else %}{{ A.hm(ev.start) }}<small>{{ A.hm(ev.end) }}</small>{% endif %}</span>
+  <span class="ag-body">
+    <span class="ag-title">{% if A.is_exam(ev) %}<span class="danger-text">{{ icon('alert', 13) }}</span> {% endif %}{{ ev.title }}
+      {% if ev.kind %}<span class="ag-kind">{{ A.kind_label(ev.kind, True) }}{% if ev.session_no %} {{ ev.session_no }}{% endif %}</span>{% endif %}
+      {% if ev.tentative %}<span class="badge badge-warning" title="Séance prévisionnelle">prévision</span>{% endif %}
+      {% if state == 'now' %}<span class="badge badge-success">en cours</span>{% endif %}
+      {% if badge %}<span class="badge badge-{{ badge[1] }}">{{ badge[0] }}</span>{% endif %}
+      {% if ev.cancelled %}<span class="badge badge-danger">annulé</span>{% endif %}
+    </span>
+    <span class="ag-meta">
+      {% if ev.multi_day %}<span>{{ A.event_when(ev) }}</span>{% endif %}
+      {% if ev.location %}<span>{{ icon('map-pin', 12) }} {{ ev.location }}</span>{% endif %}
+      {% if ev.teachers %}<span>{{ icon('user', 12) }} {{ ev.teachers }}</span>{% endif %}
+      {% if ev.note %}<span title="{{ ev.note }}">{{ icon('sticky', 12) }} note</span>{% endif %}
+      {{ pending_bell(ev.reminders, 12) }}
+    </span>
+  </span>
+</button>
+{% endmacro %}
+
+{# ------------------------------------------------------------------ Tâches #}
+{% macro task_row(t, show_date=True) %}
+<div class="tk-row {% if t.is_done %}done{% endif %} {% if t.is_overdue %}overdue{% endif %}" id="task-{{ t.id }}" data-task-row="{{ t.id }}">
+  {{ task_check(t) }}
+  <button type="button" class="tk-main" data-edit-task="{{ t.id }}">
+    <span class="tk-title">{{ t.title }}</span>
+    <span class="tk-meta">
+      {% if show_date and t.due_date %}<span class="{% if t.is_overdue %}danger-text{% elif t.due_date == today %}accent-text{% endif %}">{{ icon('calendar', 12) }} {{ A.due_label(t.due_date)|capitalize }}{% if t.start_time %} · {{ A.hm(t.start_time) }}{% if t.end_time %}–{{ A.hm(t.end_time) }}{% endif %}{% endif %}</span>
+      {% elif t.start_time %}<span>{{ icon('clock', 12) }} {{ A.hm(t.start_time) }}{% if t.end_time %}–{{ A.hm(t.end_time) }}{% endif %}</span>{% endif %}
+      {% if t.recurrence %}<span title="{{ RECURRENCES[t.recurrence] }}">{{ icon('refresh', 12) }} {{ RECURRENCES[t.recurrence]|lower }}</span>{% endif %}
+      {% if t.event %}<span class="tk-ev" style="--ec: {{ A.event_color(t.event) }}" title="Séance liée : {{ A.event_when(t.event) }}">{{ t.event.title }}</span>{% endif %}
+      {% if t.category %}<span class="tk-cat" style="--tc: {{ t.color or 'var(--text-3)' }}">{{ t.category }}</span>{% endif %}
+      {% if t.notes %}<span title="{{ t.notes|excerpt(200) }}">{{ icon('page', 12) }}</span>{% endif %}
+      {{ pending_bell(t.reminders, 12) }}
+      {% if t.is_done and t.done_at %}<span class="muted">terminée {{ t.done_at|ago }}</span>{% endif %}
+    </span>
+  </button>
+  {% if t.priority and t.priority != 'none' %}<span title="Priorité {{ PRIORITY_LABELS[t.priority]|lower }}">{{ priority_icon(t.priority) }}</span>{% endif %}
+  <div class="dd tk-menu">
+    <button class="btn btn-ghost btn-icon btn-xs" data-menu type="button" title="Plus d’actions">{{ icon('more', 15) }}</button>
+    <div class="menu">
+      <button class="menu-item" type="button" data-edit-task="{{ t.id }}">{{ icon('edit', 14) }} Modifier</button>
+      {% if not t.is_done %}
+      <div class="menu-h">Reporter</div>
+      {% for to, lab in [('today', 'À aujourd’hui'), ('tomorrow', 'À demain'), ('monday', 'À lundi prochain'), ('week', 'D’une semaine'), ('nodate', 'Sans date')] %}
+      <form method="post" action="{{ url_for('agenda.task_snooze', tid=t.id) }}">{{ csrf() }}<input type="hidden" name="to" value="{{ to }}"><button class="menu-item">{{ icon('clock', 14) }} {{ lab }}</button></form>
+      {% endfor %}
+      {% endif %}
+      <div class="menu-sep"></div>
+      <form method="post" action="{{ url_for('agenda.task_delete', tid=t.id) }}" data-confirm="Supprimer la tâche « {{ t.title }} » ?">{{ csrf() }}<button class="menu-item danger">{{ icon('trash', 14) }} Supprimer</button></form>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro quick_add(placeholder='Ajouter une tâche… (Entrée)', date_value='') %}
+<form method="post" action="{{ url_for('agenda.task_create') }}" class="tk-quick">
+  {{ csrf() }}
+  <input type="hidden" name="next" value="{{ request.full_path }}">
+  {{ icon('plus', 15) }}
+  <input class="input-bare grow" name="title" placeholder="{{ placeholder }}" maxlength="300" required autocomplete="off" aria-label="Titre de la tâche">
+  <input class="input input-sm" type="date" name="date" value="{{ date_value }}" aria-label="Date" style="width:auto">
+  <input class="input input-sm" type="time" name="start" step="300" aria-label="Heure" style="width:auto">
+  <button class="btn btn-sm btn-primary">Ajouter</button>
+</form>
+{% endmacro %}
+
+{# Données des fenêtres de détail #}
+{% macro page_data(data) %}
+<script>window.AGENDA = {{ data|tojson }};</script>
+{% endmacro %}

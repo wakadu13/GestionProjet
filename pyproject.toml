@@ -1,7 +1,7 @@
 [project]
 name = "hangar"
-version = "1.0.0"
-description = "Hangar : gestion de projet et d'équipe 100 % locale, inspirée de Plane"
+version = "1.1.0"
+description = "Hangar : agenda personnel (emploi du temps .ics, tâches, rappels par e-mail) et gestion de projet, 100 % local"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

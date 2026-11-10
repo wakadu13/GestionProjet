@@ -27,7 +27,7 @@ from .models import (
 
 EMAIL_RE = re.compile(r"^[^@\s<>,;\"']+@[^@\s<>,;\"']+\.[^@\s<>,;\"']+$")
 KIND_LABELS = {"notification": "Notification", "reminder": "Rappel", "digest": "Récapitulatif",
-               "bilan": "Bilan", "manual": "Message", "test": "Test"}
+               "bilan": "Bilan", "manual": "Message", "test": "Test", "agenda": "Agenda"}
 STATUS_LABELS = {"queued": "En attente", "sent": "Envoyé", "failed": "Échec", "outbox": "Boîte d’envoi locale"}
 WEEKDAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
@@ -481,6 +481,12 @@ def start_worker(app, interval: int = 30):
             try:
                 with app.app_context():
                     run_scheduled()
+                    try:  # agenda : rappels des tâches / séances et programme quotidien
+                        from .agenda import run_jobs
+                        run_jobs()
+                    except Exception:
+                        db.session.rollback()
+                        app.logger.exception("Erreur dans les rappels de l’agenda")
                     send_pending()
                     db.session.remove()
             except Exception:  # ne jamais arrêter le serveur pour un e-mail

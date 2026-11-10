@@ -942,3 +942,217 @@ class BilanReport(db.Model):
             return json.loads(self.data_json or "{}")
         except ValueError:
             return {}
+
+
+# ---------------------------------------------------------------------------
+# Agenda personnel : emploi du temps importé (.ics), tâches, rappels
+# ---------------------------------------------------------------------------
+
+RECURRENCES = {
+    "": "Ne se répète pas",
+    "daily": "Tous les jours",
+    "weekdays": "Du lundi au vendredi",
+    "weekly": "Toutes les semaines",
+    "biweekly": "Toutes les deux semaines",
+    "monthly": "Tous les mois",
+}
+
+# Délais de rappel proposés (minutes avant le début)
+REMINDER_OFFSETS = [
+    (0, "À l’heure du début"), (5, "5 min avant"), (10, "10 min avant"), (15, "15 min avant"),
+    (30, "30 min avant"), (60, "1 h avant"), (120, "2 h avant"), (180, "3 h avant"),
+    (1440, "La veille (24 h avant)"), (2880, "2 jours avant"), (4320, "3 jours avant"), (10080, "1 semaine avant"),
+]
+
+TASK_COLORS = ["#3f76ff", "#8b5cf6", "#ec4899", "#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#64748b"]
+
+
+class AgendaEvent(db.Model):
+    """Séance de l'emploi du temps, issue d'un import .ics (clé : UID du fichier).
+
+    Un nouvel import met à jour la même ligne (les notes et rappels personnels sont conservés) ;
+    une séance absente du dernier fichier passe à l'état « removed » (retirée) au lieu d'être effacée.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    uid = db.Column(db.String(255), nullable=False)
+    title = db.Column(db.String(300), nullable=False)        # matière
+    summary = db.Column(db.String(500), default="")          # intitulé brut du fichier
+    kind = db.Column(db.String(30), default="")              # CM, TD_TP, CO_ECRIT…
+    session_no = db.Column(db.String(10), default="")
+    tentative = db.Column(db.Boolean, default=False)         # « (PREVISION) »
+    cancelled = db.Column(db.Boolean, default=False)         # annulé dans le fichier
+    start = db.Column(db.DateTime, nullable=False, index=True)
+    end = db.Column(db.DateTime, nullable=False)
+    all_day = db.Column(db.Boolean, default=False)
+    location = db.Column(db.String(300), default="")
+    groups = db.Column(db.String(500), default="")
+    teachers = db.Column(db.String(300), default="")
+    description = db.Column(db.Text, default="")
+    status = db.Column(db.String(10), default="active", index=True)  # active | removed
+    note = db.Column(db.Text, default="")                    # note personnelle (jamais écrasée par un import)
+    created_import_id = db.Column(db.Integer)
+    changed_import_id = db.Column(db.Integer)
+    change_kind = db.Column(db.String(10), default="")       # added | modified | removed | restored
+    changes_json = db.Column(db.Text, default="")            # {champ: [avant, après]} du dernier changement
+    created_at = db.Column(db.DateTime, default=now)
+    updated_at = db.Column(db.DateTime, default=now)
+
+    reminders = db.relationship("AgendaReminder", back_populates="event", cascade="all, delete-orphan",
+                                passive_deletes=True)
+
+    __table_args__ = (db.UniqueConstraint("user_id", "uid"),)
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == "active" and not self.cancelled
+
+    @property
+    def last_day(self) -> date:
+        """Dernier jour couvert (la fin d'une journée entière est exclusive)."""
+        if self.end > self.start:
+            return (self.end - timedelta(microseconds=1)).date()
+        return self.start.date()
+
+    @property
+    def multi_day(self) -> bool:
+        return self.all_day or self.last_day > self.start.date()
+
+    @property
+    def minutes(self) -> int:
+        return max(0, int((self.end - self.start).total_seconds() // 60))
+
+    @property
+    def changes(self) -> dict:
+        try:
+            return json.loads(self.changes_json or "{}")
+        except ValueError:
+            return {}
+
+
+class AgendaImport(db.Model):
+    """Historique des imports d'emploi du temps (le dernier fait foi)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename = db.Column(db.String(255), default="")
+    stored_name = db.Column(db.String(255), default="")
+    mode = db.Column(db.String(10), default="weeks")  # weeks | future | merge
+    range_start = db.Column(db.Date)
+    range_end = db.Column(db.Date)
+    total = db.Column(db.Integer, default=0)
+    added = db.Column(db.Integer, default=0)
+    modified = db.Column(db.Integer, default=0)
+    removed = db.Column(db.Integer, default=0)
+    restored = db.Column(db.Integer, default=0)
+    unchanged = db.Column(db.Integer, default=0)
+    details_json = db.Column(db.Text, default="[]")
+    warnings = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=now, index=True)
+    undone_at = db.Column(db.DateTime)
+
+    user = db.relationship("User")
+
+    @property
+    def details(self) -> list:
+        try:
+            return json.loads(self.details_json or "[]")
+        except ValueError:
+            return []
+
+    @property
+    def changed(self) -> int:
+        return (self.added or 0) + (self.modified or 0) + (self.removed or 0) + (self.restored or 0)
+
+
+class AgendaTask(db.Model):
+    """Tâche personnelle planifiée dans l'agenda (avec rappels éventuels)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = db.Column(db.String(300), nullable=False)
+    notes = db.Column(db.Text, default="")
+    due_date = db.Column(db.Date, index=True)        # vide = « un jour »
+    start_time = db.Column(db.Time)                  # vide = toute la journée
+    end_time = db.Column(db.Time)
+    priority = db.Column(db.String(10), default="none")
+    category = db.Column(db.String(60), default="")
+    color = db.Column(db.String(10), default="")
+    recurrence = db.Column(db.String(10), default="")
+    recurrence_until = db.Column(db.Date)
+    done_count = db.Column(db.Integer, default=0)    # occurrences terminées (tâches répétées)
+    event_id = db.Column(db.Integer, db.ForeignKey("agenda_event.id", ondelete="SET NULL"))
+    done_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=now)
+    updated_at = db.Column(db.DateTime, default=now)
+
+    event = db.relationship("AgendaEvent")
+    reminders = db.relationship("AgendaReminder", back_populates="task", cascade="all, delete-orphan",
+                                passive_deletes=True, order_by="AgendaReminder.remind_at")
+
+    @property
+    def is_done(self) -> bool:
+        return self.done_at is not None
+
+    @property
+    def is_overdue(self) -> bool:
+        return not self.is_done and self.due_date is not None and self.due_date < date.today()
+
+
+class AgendaReminder(db.Model):
+    """Rappel d'une tâche ou d'une séance : e-mail + notification, ou notification seule."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("agenda_task.id", ondelete="CASCADE"), index=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("agenda_event.id", ondelete="CASCADE"), index=True)
+    offset_minutes = db.Column(db.Integer)            # minutes avant le début ; vide = date fixe
+    remind_at = db.Column(db.DateTime, index=True)
+    channel = db.Column(db.String(10), default="email")  # email | app
+    auto = db.Column(db.Boolean, default=False)          # créé automatiquement (contrôles)
+    status = db.Column(db.String(10), default="pending", index=True)  # pending | sent | missed | skipped
+    sent_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=now)
+
+    task = db.relationship("AgendaTask", back_populates="reminders")
+    event = db.relationship("AgendaEvent", back_populates="reminders")
+
+    @property
+    def label(self) -> str:
+        if self.offset_minutes is None:
+            return f"Le {self.remind_at:%d/%m/%Y à %H:%M}" if self.remind_at else "Date à définir"
+        for v, lab in REMINDER_OFFSETS:
+            if v == self.offset_minutes:
+                return lab
+        m = self.offset_minutes
+        if m % 1440 == 0:
+            return f"{m // 1440} jours avant"
+        if m % 60 == 0:
+            return f"{m // 60} h avant"
+        return f"{m} min avant"
+
+
+class AgendaSettings(db.Model):
+    """Préférences de l'agenda (une ligne par utilisateur)."""
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
+    day_start_hour = db.Column(db.Integer, default=8)
+    day_end_hour = db.Column(db.Integer, default=19)
+    show_weekends = db.Column(db.Boolean, default=False)
+    show_removed = db.Column(db.Boolean, default=True)
+    allday_hour = db.Column(db.Integer, default=8)        # heure de référence des tâches sans heure
+    default_reminder = db.Column(db.Integer, default=-1)  # minutes ; -1 = aucun rappel par défaut
+    reminder_channel = db.Column(db.String(10), default="email")
+    daily_mode = db.Column(db.String(10), default="off")  # off | morning (programme du jour) | evening (du lendemain)
+    daily_hour = db.Column(db.Integer, default=7)
+    last_daily_date = db.Column(db.Date)
+    import_email = db.Column(db.Boolean, default=False)   # e-mail récapitulatif des changements après un import
+    exam_reminder = db.Column(db.Integer, default=0)      # rappel automatique des contrôles (minutes, 0 = non)
+    weekly_import_nudge = db.Column(db.Boolean, default=True)
+
+    user = db.relationship("User")
+
+    @staticmethod
+    def of(user) -> "AgendaSettings":
+        s = db.session.get(AgendaSettings, user.id)
+        if s is None:
+            s = AgendaSettings(user_id=user.id)
+            db.session.add(s)
+            db.session.commit()
+        return s

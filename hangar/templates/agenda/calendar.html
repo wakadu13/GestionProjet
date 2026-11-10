@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "agenda/_macros.html" as ag with context %}
+{% block title %}Calendrier{% endblock %}
+{% block content_class %}flush{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('calendar', 15) }} Calendrier</span></div>
+  <div class="seg ag-seg" role="tablist" aria-label="Affichage">
+    {% for k, lab, ic in [('week', 'Semaine', 'table'), ('month', 'Mois', 'calendar'), ('list', 'Liste', 'list')] %}
+    <a class="{% if view == k %}active{% endif %}" href="{{ url_for('agenda.calendar', view=k, date=ref.isoformat()) }}" role="tab" aria-selected="{{ 'true' if view == k else 'false' }}">{{ icon(ic, 14) }} {{ lab }}</a>
+    {% endfor %}
+  </div>
+  <div class="header-actions">
+    <div class="dd">
+      <button class="btn btn-sm" data-menu type="button">{{ icon('download', 14) }} Exporter</button>
+      <div class="menu">
+        <a class="menu-item" href="{{ url_for('agenda.export', what='all') }}">{{ icon('calendar', 14) }} Cours + tâches (.ics)</a>
+        <a class="menu-item" href="{{ url_for('agenda.export', what='events') }}">{{ icon('graduation', 14) }} Cours seulement (.ics)</a>
+        <a class="menu-item" href="{{ url_for('agenda.export', what='tasks') }}">{{ icon('list-check', 14) }} Tâches seulement (.ics)</a>
+        <div class="menu-sep"></div>
+        <button class="menu-item" type="button" onclick="window.print()">{{ icon('printer', 14) }} Imprimer / PDF</button>
+      </div>
+    </div>
+    <button class="btn btn-sm btn-primary" type="button" data-new-task data-date="{{ ref.isoformat() }}">{{ icon('plus', 14) }} Nouvelle tâche</button>
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="cal ag-cal">
+  <div class="cal-nav">
+    {% if view == 'month' %}
+    <a class="btn btn-sm btn-icon" href="{{ url_for('agenda.calendar', view='month', date=cal.prev.isoformat()) }}" title="Mois précédent">{{ icon('chevron-left', 15) }}</a>
+    <a class="btn btn-sm btn-icon" href="{{ url_for('agenda.calendar', view='month', date=cal.next.isoformat()) }}" title="Mois suivant">{{ icon('chevron-right', 15) }}</a>
+    <h2>{{ cal.title }}</h2>
+    {% elif view == 'list' %}
+    <a class="btn btn-sm btn-icon" href="{{ url_for('agenda.calendar', view='list', date=cal.prev.isoformat()) }}" title="Période précédente">{{ icon('chevron-left', 15) }}</a>
+    <a class="btn btn-sm btn-icon" href="{{ url_for('agenda.calendar', view='list', date=cal.next.isoformat()) }}" title="Période suivante">{{ icon('chevron-right', 15) }}</a>
+    <h2 style="text-transform:none">Du {{ A.day_short(cal.start) }} au {{ A.day_short(cal.end) }}</h2>
+    {% else %}
+    <a class="btn btn-sm btn-icon" href="{{ url_for('agenda.calendar', view='week', date=cal.prev.isoformat()) }}" title="Semaine précédente">{{ icon('chevron-left', 15) }}</a>
+    <a class="btn btn-sm btn-icon" href="{{ url_for('agenda.calendar', view='week', date=cal.next.isoformat()) }}" title="Semaine suivante">{{ icon('chevron-right', 15) }}</a>
+    <h2 style="text-transform:none">{{ cal.title }} <span class="muted small" style="font-weight:500">· semaine {{ cal.week_no }}{% if cal.total_minutes %} · {{ A.duration_label(cal.total_minutes) }} de cours{% endif %}</span></h2>
+    {% endif %}
+    <a class="btn btn-sm" href="{{ url_for('agenda.calendar', view=view) }}">Aujourd’hui</a>
+    <form class="right flex gap" method="get" action="{{ url_for('agenda.calendar') }}">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input class="input input-sm" type="date" name="date" value="{{ ref.isoformat() }}" data-autosubmit aria-label="Aller à la date" style="width:auto">
+    </form>
+  </div>
+
+  {% if view == 'week' %}
+  <div class="ag-week-full">{{ ag.week_grid(cal, recent) }}</div>
+
+  {% elif view == 'month' %}
+  <div class="cal-grid ag-month">
+    <div class="cal-dow-row">{% for d in A.DAYS_FULL %}<div class="cal-dow">{{ d }}</div>{% endfor %}</div>
+    {% for wk in cal.weeks %}{% for day in wk %}
+    <div class="cal-day {% if day.out %}out{% endif %} {% if day.today %}today{% endif %} {% if day.weekend %}weekend{% endif %}" data-month-day="{{ day.date.isoformat() }}">
+      <div class="num"><span>{{ day.date.day }}</span><button type="button" class="add" data-new-task data-date="{{ day.date.isoformat() }}" title="Ajouter une tâche">{{ icon('plus', 13) }}</button></div>
+      {% for x in day['items'][:5] %}{{ ag.item_chip(x, recent) }}{% endfor %}
+      {% if day['items']|length > 5 %}<a class="cal-more" href="{{ url_for('agenda.calendar', view='week', date=day.date.isoformat()) }}">+ {{ day['items']|length - 5 }} de plus</a>{% endif %}
+    </div>
+    {% endfor %}{% endfor %}
+  </div>
+
+  {% else %}
+  <div class="ag-list">
+    {% for day in cal.days %}
+    <section class="ag-list-day {% if day.today %}today{% endif %}">
+      <div class="ag-list-h">
+        <div class="ag-list-date"><span class="num">{{ day.date.day }}</span><span><b>{{ A.DAYS_FULL[day.date.weekday()]|capitalize }}</b><br><span class="muted small">{{ A.MONTHS_FULL[day.date.month - 1] }}{% if day.today %} · aujourd’hui{% endif %}</span></span></div>
+        {% if day.minutes %}<span class="muted small">{{ A.duration_label(day.minutes) }} de cours</span>{% endif %}
+        <button class="btn btn-xs btn-ghost right" type="button" data-new-task data-date="{{ day.date.isoformat() }}">{{ icon('plus', 13) }} Tâche</button>
+      </div>
+      <div class="ag-list-items">
+        {% for x in day['items'] %}
+        {% if x.type == 'event' %}{{ ag.event_line(x.obj, recent) }}
+        {% else %}{% set t = x.obj.task %}
+        <div class="ag-line task {% if t.is_done %}done{% endif %} {% if x.obj.ghost %}ghost{% endif %}" style="--tc: {{ t.color or 'var(--accent)' }}">
+          <span class="ag-time">{% if t.start_time %}{{ A.hm(t.start_time) }}{% if t.end_time %}<small>{{ A.hm(t.end_time) }}</small>{% endif %}{% else %}<span class="small">Journée</span>{% endif %}</span>
+          {{ ag.task_check(t, x.obj.ghost) }}
+          <button type="button" class="ag-body" data-edit-task="{{ t.id }}"><span class="ag-title">{{ t.title }}</span><span class="ag-meta">{% if t.category %}<span>{{ t.category }}</span>{% endif %}{% if t.recurrence %}<span>{{ icon('refresh', 12) }} {{ RECURRENCES[t.recurrence]|lower }}</span>{% endif %}{% if t.event %}<span>{{ t.event.title }}</span>{% endif %}{{ ag.pending_bell(t.reminders, 12) }}</span></button>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="muted small" style="padding:10px 14px">Rien de prévu.</div>
+        {% endfor %}
+      </div>
+    </section>
+    {% else %}
+    {{ ui.empty('calendar', 'Rien sur cette période', 'Importe ton emploi du temps ou ajoute des tâches.') }}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% include "agenda/_event_modal.html" %}
+{{ ag.page_data(data) }}
+{% endblock %}

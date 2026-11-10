@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Rappels et e-mails{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('mail', 15) }} Rappels et e-mails</span></div></div>{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:820px;margin:0 auto">
+  <form method="post" class="ag-settings">
+    {{ ui.csrf() }}
+
+    <h2>{{ icon('mail', 17) }} Recevoir les e-mails</h2>
+    <div class="panel panel-b mb-lg">
+      <div class="field"><label for="st-email">Mon adresse e-mail</label>
+        <input class="input" id="st-email" type="email" name="contact_email" value="{{ current_user.contact_email or '' }}" placeholder="prenom.nom@exemple.fr" autocomplete="email">
+        <span class="help">Les rappels, le programme du jour et les récapitulatifs sont envoyés à cette adresse (la connexion reste par identifiant).</span>
+      </div>
+      <div class="mail-state {% if mail.ok %}ok{% else %}ko{% endif %}">
+        {% if mail.ok %}{{ icon('check-circle', 16) }}<span>Envoi réel actif via <b>{{ mail.host }}</b>.</span>
+        {% elif not mail.smtp %}{{ icon('alert', 16) }}<span><b>L’envoi réel n’est pas configuré</b> : les e-mails sont seulement enregistrés en .eml dans <code>data/outbox</code>. {% if current_user.is_admin %}<a href="{{ url_for('mail.settings') }}">Configurer l’envoi (Gmail avec mot de passe d’application, Outlook…)</a>{% else %}Demande à un administrateur de configurer l’envoi.{% endif %}</span>
+        {% else %}{{ icon('alert', 16) }}<span>Renseigne ton adresse ci-dessus pour recevoir les e-mails.</span>{% endif %}
+      </div>
+      <p class="help" style="margin-top:8px">Les rappels sont envoyés tant que Hangar est lancé sur ton ordinateur. Si l’application était fermée au moment d’un rappel, il part à la réouverture, sauf si la séance ou la tâche est déjà passée.</p>
+    </div>
+
+    <h2>{{ icon('sun', 17) }} Programme quotidien</h2>
+    <div class="panel panel-b mb-lg">
+      <div class="col start" style="gap:8px">
+        <label class="checkbox"><input type="radio" name="daily_mode" value="off" {% if s.daily_mode == 'off' %}checked{% endif %}> Pas d’e-mail quotidien</label>
+        <label class="checkbox"><input type="radio" name="daily_mode" value="morning" {% if s.daily_mode == 'morning' %}checked{% endif %}> <span>Le matin : le programme <b>du jour</b></span></label>
+        <label class="checkbox"><input type="radio" name="daily_mode" value="evening" {% if s.daily_mode == 'evening' %}checked{% endif %}> <span>La veille au soir : le programme <b>du lendemain</b></span></label>
+      </div>
+      <div class="field mt" style="max-width:220px"><label for="st-dh">Heure d’envoi</label>
+        <select class="input" id="st-dh" name="daily_hour">{% for h in range(0, 24) %}<option value="{{ h }}" {% if s.daily_hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select>
+      </div>
+      <p class="help">Séances avec horaires et salles, tâches prévues, tâches en retard et contrôles des 7 jours suivants. Rien n’est envoyé les jours vides.</p>
+    </div>
+
+    <h2 id="rappels">{{ icon('bell', 17) }} Rappels</h2>
+    <div class="panel panel-b mb-lg">
+      <div class="grid-2">
+        <div class="field"><label for="st-dr">Rappel par défaut des tâches rapides</label>
+          <select class="input" id="st-dr" name="default_reminder">
+            <option value="-1" {% if s.default_reminder is none or s.default_reminder < 0 %}selected{% endif %}>Aucun</option>
+            {% for v, lab in REMINDER_OFFSETS %}<option value="{{ v }}" {% if s.default_reminder == v %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+          </select>
+          <span class="help">Pré-coché dans la fenêtre « Nouvelle tâche » et ajouté aux tâches datées créées par l’ajout rapide.</span>
+        </div>
+        <div class="field"><label for="st-ch">Moyen par défaut</label>
+          <select class="input" id="st-ch" name="reminder_channel">
+            <option value="email" {% if s.reminder_channel != 'app' %}selected{% endif %}>E-mail + notification dans l’application</option>
+            <option value="app" {% if s.reminder_channel == 'app' %}selected{% endif %}>Notification dans l’application seulement</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label for="st-er">{{ icon('alert', 13) }} Rappel automatique des contrôles</label>
+          <select class="input" id="st-er" name="exam_reminder">
+            <option value="0" {% if not s.exam_reminder %}selected{% endif %}>Désactivé</option>
+            {% for v, lab in [(1440, 'La veille'), (2880, '2 jours avant'), (4320, '3 jours avant'), (10080, '1 semaine avant')] %}<option value="{{ v }}" {% if s.exam_reminder == v %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+          </select>
+          <span class="help">Pour chaque contrôle écrit / oral détecté dans le planning (type CO_ECRIT…).</span>
+        </div>
+        <div class="field"><label for="st-ah">Heure de référence des tâches sans heure</label>
+          <select class="input" id="st-ah" name="allday_hour">{% for h in range(5, 23) %}<option value="{{ h }}" {% if s.allday_hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select>
+          <span class="help">« La veille » d’une tâche sans heure = la veille à cette heure-ci.</span>
+        </div>
+      </div>
+    </div>
+
+    <h2>{{ icon('upload', 17) }} Imports du planning</h2>
+    <div class="panel panel-b mb-lg col start" style="gap:10px">
+      <label class="switch"><input type="checkbox" name="import_email" value="1" {% if s.import_email %}checked{% endif %}> M’envoyer un e-mail récapitulant les changements après chaque import</label>
+      <label class="switch"><input type="checkbox" name="weekly_import_nudge" value="1" {% if s.weekly_import_nudge %}checked{% endif %}> Me rappeler sur le tableau de bord d’importer le nouveau planning chaque semaine</label>
+    </div>
+
+    <h2>{{ icon('calendar', 17) }} Affichage</h2>
+    <div class="panel panel-b mb-lg">
+      <div class="grid-2">
+        <div class="field"><label for="st-h0">La journée commence à</label>
+          <select class="input" id="st-h0" name="day_start_hour">{% for h in range(0, 23) %}<option value="{{ h }}" {% if s.day_start_hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></div>
+        <div class="field"><label for="st-h1">et se termine à</label>
+          <select class="input" id="st-h1" name="day_end_hour">{% for h in range(1, 25) %}<option value="{{ h }}" {% if s.day_end_hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select></div>
+      </div>
+      <p class="help" style="margin-top:-6px">La grille s’agrandit automatiquement si une séance ou une tâche dépasse ces horaires.</p>
+      <div class="col start" style="gap:10px;margin-top:10px">
+        <label class="switch"><input type="checkbox" name="show_weekends" value="1" {% if s.show_weekends %}checked{% endif %}> Toujours afficher le samedi et le dimanche</label>
+        <label class="switch"><input type="checkbox" name="show_removed" value="1" {% if s.show_removed %}checked{% endif %}> Afficher (barrées) les séances retirées du planning</label>
+      </div>
+    </div>
+
+    <div class="form-actions" style="position:sticky;bottom:0;background:var(--bg);padding:10px 0"><button class="btn btn-primary">Enregistrer</button></div>
+  </form>
+
+  <h2 style="margin-top:20px">{{ icon('send', 17) }} Tester</h2>
+  <div class="panel panel-b mb-lg flex wrap gap">
+    <form method="post" action="{{ url_for('agenda.settings_test') }}">{{ ui.csrf() }}<input type="hidden" name="what" value="test"><button class="btn btn-sm" {% if not mail.address %}disabled title="Renseigne d’abord ton adresse"{% endif %}>{{ icon('mail', 14) }} M’envoyer un e-mail de test</button></form>
+    <form method="post" action="{{ url_for('agenda.settings_test') }}">{{ ui.csrf() }}<input type="hidden" name="what" value="program"><button class="btn btn-sm" {% if not mail.address %}disabled title="Renseigne d’abord ton adresse"{% endif %}>{{ icon('sun', 14) }} M’envoyer mon programme maintenant</button></form>
+  </div>
+
+  <h2>{{ icon('clock', 17) }} Rappels programmés</h2>
+  <div class="panel mb-lg">
+    {% for r in pending %}
+    <div class="rem-row">
+      <span class="rem-when"><b>{{ A.due_label(r.remind_at.date())|capitalize }}</b> {{ A.hm(r.remind_at) }}</span>
+      <span class="grow ellipsis">{% if r.task %}{{ icon('list-check', 13) }} {{ r.task.title }}{% elif r.event %}{{ icon('graduation', 13) }} {{ r.event.title }} <span class="muted small">({{ A.day_short(r.event.start.date()) }} {{ A.hm(r.event.start) }})</span>{% endif %}</span>
+      <span class="muted small nowrap">{{ r.label }}{% if r.auto %} · auto{% endif %} · {{ 'e-mail' if r.channel == 'email' else 'appli' }}</span>
+      <form method="post" action="{{ url_for('agenda.reminder_delete', rid=r.id) }}">{{ ui.csrf() }}<button class="btn btn-ghost btn-icon btn-xs" title="Supprimer ce rappel">{{ icon('x', 13) }}</button></form>
+    </div>
+    {% else %}
+    <div class="empty sm">Aucun rappel programmé. Ajoute-en depuis une tâche ou une séance du calendrier.</div>
+    {% endfor %}
+  </div>
+  {% if history %}
+  <h3 class="mb">Derniers rappels</h3>
+  <div class="panel">
+    {% for r in history %}
+    <div class="rem-row muted">
+      <span class="rem-when">{{ A.day_short(r.remind_at.date()) }} {{ A.hm(r.remind_at) }}</span>
+      <span class="grow ellipsis">{% if r.task %}{{ r.task.title }}{% elif r.event %}{{ r.event.title }}{% endif %}</span>
+      <span class="small">{{ A.STATUS_LABELS[r.status] }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

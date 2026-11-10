@@ -1,4 +1,4 @@
-"""Hangar : gestion de projet et d'équipe 100 % locale, inspirée de Plane."""
+"""Hangar : agenda personnel (emploi du temps, tâches, rappels) et gestion de projet, 100 % local."""
 from __future__ import annotations
 
 import os
@@ -10,7 +10,7 @@ from flask_login import current_user
 
 from .extensions import db, login_manager
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -103,9 +103,9 @@ def _auto_migrate() -> None:
 
 
 def _register_blueprints(app: Flask) -> None:
-    from .views import (analytics, api, apiv1, auth, bilan, cycles, home, intake, issues, mail, modules,
+    from .views import (agenda, analytics, api, apiv1, auth, bilan, cycles, home, intake, issues, mail, modules,
                         pages, planning, projects, saved_views, settings, team)
-    for bp in (auth.bp, home.bp, projects.bp, issues.bp, cycles.bp, modules.bp, saved_views.bp, pages.bp,
+    for bp in (auth.bp, agenda.bp, home.bp, projects.bp, issues.bp, cycles.bp, modules.bp, saved_views.bp, pages.bp,
                intake.bp, analytics.bp, team.bp, settings.bp, api.bp, apiv1.bp, mail.bp, planning.bp, bilan.bp):
         app.register_blueprint(bp)
 

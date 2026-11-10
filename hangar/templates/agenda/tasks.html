@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "agenda/_macros.html" as ag with context %}
+{% block title %}Tâches{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><span class="current">{{ icon('list-check', 15) }} Tâches</span></div>
+  <div class="tabs in-header" style="margin-left:8px">
+    <a class="{% if show != 'done' %}active{% endif %}" href="{{ url_for('agenda.tasks', q=q or None, cat=cat or None) }}">À faire <span class="count-pill">{{ counts.open }}</span></a>
+    <a class="{% if show == 'done' %}active{% endif %}" href="{{ url_for('agenda.tasks', show='done', q=q or None, cat=cat or None) }}">Terminées <span class="count-pill">{{ counts.done }}</span></a>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-sm btn-primary" type="button" data-new-task>{{ icon('plus', 14) }} Nouvelle tâche</button>
+  </div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner" style="max-width:900px;margin:0 auto">
+  {% if show != 'done' %}<div class="panel mb">{{ ag.quick_add('Ajouter une tâche… (ex. Réviser réseaux avancés)') }}</div>{% endif %}
+
+  <form class="flex gap wrap mb" method="get">
+    {% if show == 'done' %}<input type="hidden" name="show" value="done">{% endif %}
+    <div class="flex gap-4 input input-sm" style="width:260px">{{ icon('search', 14) }}<input class="input-bare grow" name="q" value="{{ q }}" placeholder="Rechercher…" aria-label="Rechercher"></div>
+    {% if cats %}
+    <div class="flex gap-4 wrap">
+      <a class="chip-filter {% if not cat %}on{% endif %}" href="{{ url_for('agenda.tasks', show=show if show == 'done' else None, q=q or None) }}">Toutes</a>
+      {% for c in cats %}<a class="chip-filter {% if cat == c %}on{% endif %}" href="{{ url_for('agenda.tasks', show=show if show == 'done' else None, q=q or None, cat=c) }}">{{ c }}</a>{% endfor %}
+    </div>
+    {% endif %}
+    {% if show == 'done' and counts.done %}
+    <div class="right">{{ ui.confirm_button(url_for('agenda.tasks_clear_done'), 'Supprimer les tâches terminées', 'Supprimer définitivement toutes les tâches terminées ?', icon_name='trash') }}</div>
+    {% endif %}
+  </form>
+
+  {% set total = groups|map(attribute=2)|map('length')|sum %}
+  {% for key, label, lst in groups if lst %}
+  <section class="panel mb tk-section" id="{{ key }}">
+    <div class="panel-h">{% if key == 'overdue' %}<span class="danger-text">{{ icon('alert', 15) }}</span>{% elif key == 'today' %}{{ icon('sun', 15) }}{% elif key == 'nodate' %}{{ icon('inbox', 15) }}{% elif key == 'done' %}{{ icon('check-circle', 15) }}{% else %}{{ icon('calendar', 15) }}{% endif %}
+      <h3 {% if key == 'overdue' %}class="danger-text"{% endif %}>{{ label }}</h3><span class="count-pill">{{ lst|length }}</span></div>
+    <div class="tk-list">{% for t in lst %}{{ ag.task_row(t, show_date=key not in ('today', 'tomorrow')) }}{% endfor %}</div>
+  </section>
+  {% endfor %}
+  {% if not total %}
+  {% if show == 'done' %}{{ ui.empty('check-circle', 'Aucune tâche terminée', 'Coche une tâche pour la retrouver ici.') }}
+  {% elif q or cat %}{{ ui.empty('search', 'Aucune tâche trouvée', 'Essaie une autre recherche.') }}
+  {% else %}{{ ui.empty('list-check', 'Aucune tâche', 'Planifie tes révisions, devoirs et rendez-vous : tu peux recevoir un rappel par e-mail pour chacun.', '<button class="btn btn-primary" type="button" data-new-task>Nouvelle tâche</button>') }}{% endif %}
+  {% endif %}
+</div>
+{% include "agenda/_event_modal.html" %}
+{{ ag.page_data(data) }}
+{% if focus %}<script>window.AGENDA_FOCUS = {{ focus|tojson }};</script>{% endif %}
+{% endblock %}
