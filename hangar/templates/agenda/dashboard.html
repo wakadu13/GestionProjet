@@ -137,6 +137,27 @@
         </div>
       </div>
 
+      {% if qcm and (qcm.cartes_dues or qcm.nouvelles or qcm.nouvelles_disponibles or qcm.objectifs or qcm.serie) %}
+      <div class="panel ag-qcm">
+        <div class="panel-h">{{ icon('graduation', 16) }}<h3>Révisions du jour</h3>{% if qcm.serie %}<span class="badge badge-warning" title="Jours de suite avec des révisions">🔥 {{ qcm.serie }} j</span>{% endif %}<a class="btn btn-xs btn-ghost right" href="{{ url_for('qcm.index') }}">QCM</a></div>
+        <div class="panel-b">
+          <div class="ag-qcm-top">
+            <div><div class="ag-qcm-v">{{ qcm.cartes_dues }}</div><div class="muted small">carte{{ 's' if qcm.cartes_dues > 1 }} à revoir</div></div>
+            {% set nv = qcm.nouvelles or qcm.nouvelles_disponibles %}
+            <div><div class="ag-qcm-v">{{ nv }}</div><div class="muted small">{{ 'nouvelles prévues' if qcm.nouvelles else 'à découvrir' }}</div></div>
+            {% if qcm.objectif %}<div><div class="ag-qcm-v">{{ qcm.aujourdhui }}<span class="muted small">/{{ qcm.objectif }}</span></div><div class="muted small">réponses aujourd’hui</div></div>{% endif %}
+          </div>
+          {% for st in qcm.par_set[:4] %}
+          <a class="ag-qcm-set" href="{{ st.url }}"><span class="ellipsis">{{ st.titre }}</span><span class="muted small nowrap">{{ st.cartes }} à revoir{% if st.nouvelles %} · {{ st.nouvelles }} nouv.{% endif %}</span></a>
+          {% endfor %}
+          {% for o in qcm.objectifs[:3] %}
+          <div class="ag-qcm-goal">{{ icon('flag', 13) }} <b>{{ o.titre }}</b> <span class="muted small">— examen {{ 'aujourd’hui' if o.jours == 0 else ('demain' if o.jours == 1 else 'dans ' ~ o.jours ~ ' j') }}</span></div>
+          {% endfor %}
+          {% if qcm.a_reviser %}<a class="btn btn-sm btn-primary w-full mt" href="{{ qcm.url_reviser }}">{{ icon('play', 13) }} Réviser maintenant</a>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+
       {% if exams %}
       <div class="panel">
         <div class="panel-h"><span class="danger-text">{{ icon('alert', 16) }}</span><h3>Contrôles à venir</h3><span class="count-pill">{{ exams|length }}</span></div>

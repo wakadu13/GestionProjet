@@ -111,7 +111,19 @@ def dashboard():
     tasks = tk1 + tk2 + [t for grp in d["groups"].values() for t in grp]
     events = ev1 + ev2 + d["exams"] + d["changes"] + d["tomorrow_evs"] + [d["current"], d["next"]]
     data, _ = _payloads(events, tasks)
-    return render_template("agenda/dashboard.html", data=data, mail=A.mail_status(current_user), **d)
+    return render_template("agenda/dashboard.html", data=data, mail=A.mail_status(current_user),
+                           qcm=_qcm_resume(), **d)
+
+
+def _qcm_resume():
+    """Révisions du jour (module QCM) pour le tableau de bord ; None si le module est indisponible."""
+    try:
+        from ..qcm.services import resume_du_jour
+        return resume_du_jour(current_user)
+    except Exception:  # le tableau de bord ne doit jamais tomber à cause d'un module
+        from flask import current_app
+        current_app.logger.exception("Résumé des QCM pour le tableau de bord")
+        return None
 
 
 @bp.route("/agenda/calendar")
