@@ -73,7 +73,8 @@ class SauvegardeCompleteTests(unittest.TestCase):
     """Piste 1 : tout ce qui n'est pas dans la base doit aussi être sauvegardé."""
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="hangar-donnees-"))
+        # realpath : sous Windows, le dossier temporaire est donné en nom court (RUNNER~1), Hangar l’affiche en entier
+        self.tmp = Path(os.path.realpath(tempfile.mkdtemp(prefix="hangar-donnees-")))
         self.data = self.tmp / "data"
         self.coffre = self.tmp / "Obsidian" / "Cours EOA"  # coffre hors du dossier des données
         self.env = mock.patch.dict(os.environ, {"HANGAR_VAULT": str(self.coffre)})
