@@ -388,7 +388,9 @@ def lire_apkg(contenu: bytes, nom: str = "paquet.apkg"):
         base_nom = "collection.anki2"
     else:
         raise ImportAnkiImpossible(f"{nom} : base du paquet introuvable.")
-    with tempfile.TemporaryDirectory() as dossier:
+    # Sous Windows, SQLite peut garder le fichier ouvert un instant après close() : le dossier
+    # temporaire sera alors effacé plus tard par le système, sans faire échouer l'import.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as dossier:
         chemin = Path(dossier) / "collection.sqlite"
         try:
             extraire(archive, base_nom, chemin, TAILLE_MAX_BASE, nom)

@@ -322,7 +322,7 @@ const [racine, essais] = [process.argv[1], JSON.parse(process.argv[2])];
 const out = {};
 for (const f of ["hangar/static/js/app.js", "hangar/static/wiki/palette.js", "hangar/static/wiki/graphe.js",
                  "hangar/static/qcm/qcm_index.js", "hangar/static/qcm/quiz.js", "hangar/static/qcm/langues_hors_ligne.js"]) {
-  const m = fs.readFileSync(racine + "/" + f, "utf-8").match(/const (?:plier|normaliser|replier) = \\(s\\) => (String\\(s \\|\\| ''\\)[\\s\\S]*?);\\n/);
+  const m = fs.readFileSync(racine + "/" + f, "utf-8").match(/const (?:plier|normaliser|replier) = \\(s\\) => (String\\(s \\|\\| ''\\)[\\s\\S]*?);\\r?\\n/);
   out[f] = m ? essais.map(new Function("s", "return " + m[1])) : null;
 }
 console.log(JSON.stringify(out));

@@ -618,7 +618,7 @@ class PariteFsrsJsTests(unittest.TestCase):
         script = (f"globalThis.window=globalThis;eval(require('fs').readFileSync({json.dumps(str(FSRS_JS))},'utf8'));"
                   f"const F=window.FSRS;process.stdout.write(String(F.delaiMs({{stabilite:22.7}},3,"
                   f"F.retentionCible({json.dumps(examen)},{now.timestamp() * 1000}))/F.JOUR_MS))")
-        r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, timeout=60)
+        r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, encoding="utf-8", timeout=60)
         serveur = langues.delai(fsrs.Etat(22.7, 5), fsrs.BIEN, planning.retention_cible(date.fromisoformat(examen), now))
         self.assertEqual(float(r.stdout), serveur.days)
         self.assertEqual(serveur.days, 10)
@@ -679,7 +679,7 @@ class AdresseNonSecuriseeTests(BaseTestCase):
 
         def lancer(securise, appli=False):
             r = subprocess.run([NODE, "-e", SCRIPT_PAGE, str(page), "1" if securise else "0", "1" if appli else "0"],
-                               capture_output=True, text=True, timeout=60)
+                               capture_output=True, text=True, encoding="utf-8", timeout=60)
             self.assertEqual(r.returncode, 0, r.stderr)
             return json.loads(r.stdout)
 
