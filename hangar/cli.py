@@ -13,14 +13,8 @@ import webbrowser
 
 
 def _lan_ip() -> str | None:
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.255.255.255", 1))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except OSError:
-        return None
+    from .reseau_local import ip_reseau
+    return ip_reseau()
 
 
 def _port_busy(port: int) -> bool:
@@ -88,6 +82,10 @@ def appliquer_options_reseau(args) -> None:
         os.environ["HANGAR_BEHIND_PROXY"] = "1"
     if getattr(args, "https", False):
         os.environ["HANGAR_HTTPS"] = "1"
+    if getattr(args, "lan_https", False):
+        # Caddy, sur cet ordinateur, est seul à parler à Hangar (127.0.0.1) : ses en-têtes sont crus. Pas de
+        # HANGAR_HTTPS : le navigateur de ce PC continue d'ouvrir http://127.0.0.1 (cookies non « Secure »).
+        os.environ["HANGAR_BEHIND_PROXY"] = "1"
 
 
 def avertissement_exposition(host: str) -> str | None:
@@ -120,9 +118,52 @@ def _dossier_donnees(args):
     return Path(args.data or os.environ.get("HANGAR_DATA") or BASE_DIR / "data").resolve()
 
 
+def _lancer_caddy(app, port: int, port_https: int):
+    """Lance Caddy pour --lan-https. Renvoie (processus, adresse https), ou (None, None) après avoir expliqué
+    pourquoi : Hangar reste alors ouvert à cet ordinateur seulement."""
+    import time
+
+    from . import reseau_local
+    data_dir = app.config["DATA_DIR"]
+    caddy = reseau_local.trouver_caddy(data_dir)
+    if caddy is None:
+        print("\n  ⚠ Partage en HTTPS impossible : Caddy n’est pas installé.\n"
+              "    Double-clique sur scripts\\partager-en-https.bat : il l’installe puis relance Hangar.\n"
+              "    En attendant, Hangar n’est ouvert qu’à cet ordinateur.\n")
+        return None, None
+    ip = reseau_local.ip_reseau()
+    if ip is None:
+        print("\n  ⚠ Partage en HTTPS impossible : cet ordinateur n’est relié à aucun réseau (Wi-Fi coupé ?).\n"
+              "    Connecte-le au Wi-Fi puis relance Hangar. En attendant, il n’est ouvert qu’à cet ordinateur.\n")
+        return None, None
+    try:
+        proc = reseau_local.demarrer_caddy(caddy, data_dir, ip, port, port_https)
+    except OSError as exc:
+        print(f"\n  ⚠ Caddy n’a pas pu démarrer ({exc}). Hangar reste ouvert à cet ordinateur seulement.\n")
+        return None, None
+    for _ in range(15):  # port déjà pris, configuration refusée… : Caddy s'arrête aussitôt
+        if proc.poll() is not None:
+            break
+        time.sleep(0.1)
+    if proc.poll() is not None:
+        fin = reseau_local.fin_du_journal(data_dir)
+        print("\n  ⚠ Caddy s’est arrêté au démarrage : le partage en HTTPS ne marche pas"
+              + (f" (le port {port_https} est peut-être déjà pris ; essaie --https-port 8443)" if port_https else "")
+              + ". Ses derniers messages :\n" + "\n".join("    " + ligne for ligne in fin.splitlines())
+              + f"\n    Journal complet : {os.path.join(data_dir, 'journal', 'caddy.log')}\n")
+        return None, None
+    return proc, f"https://{ip}:{port_https}/"
+
+
 def cmd_run(args):
-    from . import create_app, lancement
+    from . import create_app, lancement, reseau_local
     appliquer_options_reseau(args)
+    lan_https = getattr(args, "lan_https", False)
+    if lan_https and args.host not in HOTES_LOCAUX:
+        print(f"  ! Avec --lan-https, Hangar n’écoute que cet ordinateur (et non {args.host}) : "
+              "le réseau passe par Caddy, en HTTPS.")
+    if lan_https:
+        args.host = "127.0.0.1"  # personne sur le réseau ne parle à Hangar sans passer par Caddy
     port = args.port
     if _port_busy(port):
         if _is_hangar(port):
@@ -148,17 +189,29 @@ def cmd_run(args):
     url = f"http://127.0.0.1:{port}"
     print(f"\n  ✈️  Hangar {lancement.description(lancement.code_au_demarrage())} — gestion de projet locale")
     print(f"  → Ouvre {url} dans ton navigateur")
-    if args.host in ("0.0.0.0", "::"):
+    caddy, adresse_https, port_https = None, None, None
+    if lan_https:
+        port_https = getattr(args, "https_port", None) or reseau_local.PORT_HTTPS
+        caddy, adresse_https = _lancer_caddy(app, port, port_https)
+    app.config["PARTAGE"] = {"host": args.host, "port": port, "https_port": port_https if adresse_https else None}
+    if adresse_https:
+        print(reseau_local.message_demarrage(adresse_https, https=True))
+    elif args.host in ("0.0.0.0", "::"):
         ip = _lan_ip()
         if ip:
             print(f"  → Sur le réseau local : http://{ip}:{port}")
+            print(reseau_local.message_demarrage(f"http://{ip}:{port}/", https=False))
+            print("    En http, le téléphone n’a ni le wiki ni les QCM hors ligne, ni les notifications :\n"
+                  "    pour eux, lance plutôt scripts\\partager-en-https.bat (HTTPS).")
     print(f"  → Données : {app.config['DATA_DIR']}")
     print(message_coffre(app))
     print(f"  → Journal des erreurs : {journal}")
-    for alerte in (avertissement_exposition(args.host), avertissement_reseau(app, args.host)):
+    # Avec Caddy, Hangar écoute 127.0.0.1 mais il est bien ouvert au réseau : les comptes de démo comptent.
+    for alerte in (avertissement_exposition(args.host),
+                   avertissement_reseau(app, "0.0.0.0" if adresse_https else args.host)):
         if alerte:
             print(alerte)
-    if app.config.get("HANGAR_PROXY") or app.config.get("HANGAR_HTTPS"):
+    if (app.config.get("HANGAR_PROXY") or app.config.get("HANGAR_HTTPS")) and not lan_https:
         print("  → En ligne : " + ", ".join(x for x in (
             "derrière un proxy (adresse des visiteurs lue dans ses en-têtes)" if app.config.get("HANGAR_PROXY") else "",
             "HTTPS (cookies sécurisés)" if app.config.get("HANGAR_HTTPS") else "") if x))
@@ -182,6 +235,7 @@ def cmd_run(args):
     except KeyboardInterrupt:
         print("\n  Hangar arrêté.")
     finally:
+        reseau_local.arreter(caddy)
         from .extensions import db, vider_journal
         with app.app_context():
             vider_journal()  # hangar.db complet à lui seul après l'arrêt (copie sur une clé…)
@@ -506,6 +560,10 @@ def main(argv=None):
     run.add_argument("--behind-proxy", action="store_true",
                      help="derrière un autre proxy (Caddy, nginx…) qui écrit X-Forwarded-For")
     run.add_argument("--https", action="store_true", help="les visiteurs arrivent en HTTPS (cookies sécurisés, HSTS)")
+    run.add_argument("--lan-https", action="store_true",
+                     help="ouvrir Hangar au téléphone en HTTPS sur le réseau local (avec Caddy) ; "
+                          "voir scripts\\partager-en-https.bat")
+    run.add_argument("--https-port", type=int, default=None, help="port HTTPS de --lan-https (défaut : 5443)")
 
     demo = sub.add_parser("demo", help="créer les données de démonstration du projet EAE")
     demo.add_argument("--planning", help="chemin du fichier Excel de planification à importer")

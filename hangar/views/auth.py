@@ -2,7 +2,7 @@
 import random
 import re
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_user, logout_user
 
 from .. import blocage_connexion as blocage
@@ -26,10 +26,22 @@ def _validate_user_fields(form, require_password=True):
     return errors, username, password
 
 
+def _depuis_cet_ordinateur() -> bool:
+    """Requête faite sur l'ordinateur où tourne Hangar, sans passer par un proxy ni un tunnel (Caddy de
+    --lan-https, Cloudflare…) : ceux-ci tournent aussi sur cet ordinateur, mais pour le compte d'un visiteur."""
+    from ..en_ligne import ENTETES_PROXY
+    return blocage._bouclage(blocage.ip_client()) and not any(h in request.headers for h in ENTETES_PROXY)
+
+
 @bp.route("/setup", methods=["GET", "POST"])
 def setup():
     if db.session.query(User.id).first() is not None:
         return redirect(url_for("agenda.dashboard"))
+    if not _depuis_cet_ordinateur():
+        # Sinon, le premier venu sur le réseau (ou sur Internet) deviendrait administrateur d'un Hangar neuf.
+        abort(403, description="Hangar n’est pas encore installé. La première installation se fait sur "
+                               "l’ordinateur où il tourne : ouvre http://127.0.0.1:5000 sur cet ordinateur "
+                               "(ou crée le compte avec « uv run hangar create-admin »).")
     ws = Workspace.get()
     if request.method == "POST":
         errors, username, password = _validate_user_fields(request.form)
