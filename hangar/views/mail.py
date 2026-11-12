@@ -78,7 +78,7 @@ def settings():
             cfg.digest_weekday = min(max(to_int(f.get("digest_weekday")) or 0, 0), 6)
             cfg.bilan_weekday = min(max(to_int(f.get("bilan_weekday")) or 0, 0), 6)
             cfg.bilan_hour = min(max(to_int(f.get("bilan_hour")) or 17, 0), 23)
-            for k in ("send_notifications", "send_reminders", "send_digest", "send_bilan"):
+            for k in ("send_notifications", "send_reminders", "send_digest", "send_bilan", "members_external"):
                 setattr(cfg, k, bool(f.get(k)))
             if cfg.mode == "smtp" and not cfg.smtp_host:
                 flash("Mode SMTP choisi sans serveur : renseigne l’adresse du serveur.", "error")
@@ -269,6 +269,8 @@ def compose():
             flash("L’objet et le message sont obligatoires.", "error")
         elif not recipients:
             flash("Choisis au moins un destinataire avec une adresse e-mail.", "error")
+        elif refus := mailer.refus_envoi(current_user, recipients):
+            flash(refus, "error")
         else:
             cfg = MailConfig.get()
             content = mailer.absolutize_links(str(render_markdown(body)), cfg)
@@ -293,8 +295,13 @@ def compose():
                 db.session.commit()
                 return redirect(url_for("issues.detail", pid=linked.project_id, seq=linked.sequence_id))
             return redirect(url_for("mail.compose"))
-    prefill_subject, prefill_body = "", ""
-    if issue is not None:
+    prefill_subject, prefill_body, prefill_others = "", "", ""
+    checked_ids = {u.id for u in issue.assignees} if issue is not None else set()
+    if request.method == "POST":  # envoi refusé : ce qui a été tapé ou coché n'est pas perdu
+        prefill_subject, prefill_body = request.form.get("subject", ""), request.form.get("body", "")
+        prefill_others = request.form.get("others", "")
+        checked_ids = {to_int(i) for i in request.form.getlist("user_ids")}
+    elif issue is not None:
         prefill_subject = f"[{issue.key}] {issue.title}"
         prefill_body = (f"Bonjour,\n\nJe vous écris au sujet du ticket **{issue.key} — {issue.title}**.\n\n…\n\n"
                         f"{current_user.display_name}")
@@ -304,4 +311,5 @@ def compose():
     return render_template("mail/compose.html", issue=issue, members=members, with_email=with_email,
                            templates=templates, templates_json=json.dumps(templates, ensure_ascii=False),
                            prefill_subject=prefill_subject, prefill_body=prefill_body,
+                           prefill_others=prefill_others, checked_ids=checked_ids,
                            cfg=MailConfig.get(), today=date.today())

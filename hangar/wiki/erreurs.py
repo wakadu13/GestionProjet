@@ -4,6 +4,11 @@ Chaque page en erreur 500 (gestionnaire d'erreur de ``hangar/__init__.py``) et c
 travaux de l'IA (``hangar.ai.jobs``) est noté ; les erreurs identiques (même type, même message, même endroit
 du code) sont regroupées et comptées. Une erreur réglée qui revient est rouverte.
 
+Valeurs sensibles : le moteur de base est créé avec ``hide_parameters`` (``hangar/__init__.py``), donc les
+valeurs des requêtes SQL ne sont plus dans les messages ; ``masquer`` retire en plus, à l'enregistrement ET à
+l'affichage (erreurs gardées par une version plus ancienne), les paramètres SQL, les mots de passe, jetons et
+clés écrits « nom=valeur » (adresse, formulaire) et les en-têtes d'authentification.
+
 Rien ici ne doit lui-même lever d'exception : une base indisponible ne doit pas cacher l'erreur d'origine.
 L'enregistrement passe par une session à part (sa propre connexion) : il n'emporte jamais les écritures
 en cours de la requête ou du travail qui a échoué (à appeler après ``db.session.rollback()``).
@@ -12,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -22,6 +28,45 @@ log = logging.getLogger(__name__)
 MAX_ERREURS = 200
 MAX_TRACE = 20_000
 RACINE = Path(__file__).resolve().parent.parent.parent  # dossier du projet (au-dessus du paquet hangar)
+
+
+MASQUE = "•••"
+_SENSIBLE = (r"[\w.-]*(?:password|passwd|pwd|mot_?de_?passe|mdp|secret|token|jeton|api_?key|cle_?api|csrf|"
+             r"authorization)[\w.-]*")
+_MOTIFS = (
+    # Paramètres d'une requête SQL (SQLAlchemy) : « [parameters: (…)] », sur une ligne
+    (re.compile(r"\[parameters: [^\n]*"), "[parameters: masqués]"),
+    # En-têtes d'authentification et cookies
+    (re.compile(r"(?im)^(\s*(?:authorization|proxy-authorization|cookie|set-cookie|x-csrf-token|x-api-key)\s*:\s*)"
+                r"[^\n]*"), r"\1" + MASQUE),
+    (re.compile(r"(?i)\b(Bearer|Basic)\s+[\w.~+/=-]+"), r"\1 " + MASQUE),
+    # « 'password': 'valeur' » (dictionnaire, JSON)
+    (re.compile(r"""(?i)(['"]""" + _SENSIBLE + r"""['"]\s*:\s*)('[^']*'|"[^"]*")"""), r"\1'" + MASQUE + "'"),
+)
+# « password=valeur » (adresse, formulaire, message) : pas appliqué aux lignes de code des traces, et une valeur
+# qui n'est qu'un emplacement de paramètre SQL (« ? », « :nom », « %(nom)s ») est laissée telle quelle.
+_NOM_VALEUR = re.compile(r"""(?i)\b(""" + _SENSIBLE + r""")(\s*=\s*)('[^']*'|"[^"]*"|[^&\s,;)\]'"]+)""")
+_PARAM_SQL = re.compile(r"\?|:\w+|%\(\w+\)s")
+_LIGNE_FILE = re.compile(r'^\s*File "[^\n]*", line \d+')
+
+
+def _nom_valeur(m: re.Match) -> str:
+    if _PARAM_SQL.fullmatch(m.group(3)):
+        return m.group(0)
+    return m.group(1) + m.group(2) + MASQUE
+
+
+def masquer(texte) -> str:
+    """Le texte (message, trace, adresse) sans les valeurs sensibles qu'il pourrait contenir."""
+    texte = "" if texte is None else str(texte)
+    for motif, remplacement in _MOTIFS:
+        texte = motif.sub(remplacement, texte)
+    lignes, code = [], False
+    for ligne in texte.splitlines(keepends=True):
+        # La ligne qui suit « File "…", line N » est du code source de Hangar : rien de secret, on la garde lisible.
+        lignes.append(ligne if code else _NOM_VALEUR.sub(_nom_valeur, ligne))
+        code = bool(_LIGNE_FILE.match(ligne))
+    return "".join(lignes)
 
 
 def noter(exc: BaseException | None = None, contexte: str = "", request=None, user=None) -> None:
@@ -48,11 +93,11 @@ def _enregistrer(exc, contexte, request, user):
     type_ = type(exc)
     pile = traceback.extract_tb(exc.__traceback__)
     lieu = _lieu(pile)
-    message = str(exc)[:2000]
+    message = masquer(str(exc))[:2000]
     empreinte = hashlib.sha1(f"{type_.__name__}\x1f{message}\x1f{lieu}".encode("utf-8")).hexdigest()
-    trace = "".join(traceback.format_exception(type_, exc, exc.__traceback__))[-MAX_TRACE:]
+    trace = masquer("".join(traceback.format_exception(type_, exc, exc.__traceback__)))[-MAX_TRACE:]
     if request is not None:
-        chemin, methode = request.full_path.rstrip("?")[:500], request.method
+        chemin, methode = masquer(request.full_path.rstrip("?"))[:500], request.method
     else:
         chemin, methode = contexte[:500], ""
     if user is None and request is not None:

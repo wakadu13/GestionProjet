@@ -38,7 +38,10 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
     app.config.update(
         SECRET_KEY=_secret_key(data),
         SQLALCHEMY_DATABASE_URI=f"sqlite:///{data / 'hangar.db'}",
-        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"timeout": 15, "check_same_thread": False}},
+        # hide_parameters : les valeurs des requêtes (mot de passe SMTP, clé d'API…) n'apparaissent jamais dans
+        # les messages d'erreur, la console ni la page /erreurs/
+        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"timeout": 15, "check_same_thread": False},
+                                   "hide_parameters": True},
         DATA_DIR=str(data),
         UPLOAD_DIR=str(data / "uploads"),
         BACKUP_DIR=str(data / "backups"),
@@ -49,10 +52,14 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
         SESSION_COOKIE_SAMESITE="Lax",
         REMEMBER_COOKIE_SAMESITE="Lax",  # cookie « Rester connecté » : pas envoyé depuis un autre site
         REMEMBER_COOKIE_DURATION=60 * 60 * 24 * 30,
+        REMEMBER_COOKIE_SAMESITE="Lax",
+        REMEMBER_COOKIE_HTTPONLY=True,
         TESTING=testing,
         JSON_AS_ASCII=False,
     )
     app.json.ensure_ascii = False
+    from . import en_ligne
+    en_ligne.init_app(app)  # HANGAR_HTTPS, HANGAR_BEHIND_PROXY, HANGAR_CLOUDFLARE (cookies Secure, proxy, HSTS)
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -70,8 +77,7 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
 
     @login_manager.user_loader
     def load_user(uid):
-        u = db.session.get(models.User, int(uid))
-        return u if u and u.active else None
+        return models.User.depuis_session(uid)  # « numéro:empreinte » (models.User.get_id)
 
     from . import securite, web
     # securite d'abord : ses fonctions after_request passent après celles de web (ordre inverse de Flask)

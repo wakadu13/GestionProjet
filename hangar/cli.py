@@ -58,8 +58,30 @@ def avertissement_reseau(app, host: str) -> str | None:
             "    chacun dans Mon profil, ou un administrateur dans Équipe (réinitialiser le mot de passe).\n")
 
 
+def appliquer_options_reseau(args) -> None:
+    """--cloudflare, --behind-proxy, --https : posent les variables lues par hangar/en_ligne.py au démarrage."""
+    if getattr(args, "cloudflare", False):
+        os.environ["HANGAR_CLOUDFLARE"] = "1"
+        os.environ["HANGAR_HTTPS"] = "1"  # un tunnel Cloudflare sert les visiteurs en HTTPS
+    if getattr(args, "behind_proxy", False):
+        os.environ["HANGAR_BEHIND_PROXY"] = "1"
+    if getattr(args, "https", False):
+        os.environ["HANGAR_HTTPS"] = "1"
+
+
+def avertissement_exposition(host: str) -> str | None:
+    """Rappel au démarrage quand Hangar écoute au-delà de cet ordinateur (--host 0.0.0.0…)."""
+    if host in HOTES_LOCAUX:
+        return None
+    return ("\n  ⚠ Hangar est ouvert au réseau : tout appareil de ce réseau peut ouvrir la page de connexion.\n"
+            "    Les échanges ne sont pas chiffrés (http) : évite les Wi-Fi publics, et choisis de vrais mots de passe.\n"
+            "    Pour le mettre sur Internet (tunnel Cloudflare, Caddy…), lis « Mettre Hangar en ligne » dans le README\n"
+            "    et lance-le avec --cloudflare ou --behind-proxy.\n")
+
+
 def cmd_run(args):
     from . import create_app
+    appliquer_options_reseau(args)
     port = args.port
     if _port_busy(port):
         if _is_hangar(port):
@@ -84,9 +106,13 @@ def cmd_run(args):
         if ip:
             print(f"  → Sur le réseau local : http://{ip}:{port}")
     print(f"  → Données : {app.config['DATA_DIR']}")
-    alerte = avertissement_reseau(app, args.host)
-    if alerte:
-        print(alerte)
+    for alerte in (avertissement_exposition(args.host), avertissement_reseau(app, args.host)):
+        if alerte:
+            print(alerte)
+    if app.config.get("HANGAR_PROXY") or app.config.get("HANGAR_HTTPS"):
+        print("  → En ligne : " + ", ".join(x for x in (
+            "derrière un proxy (adresse des visiteurs lue dans ses en-têtes)" if app.config.get("HANGAR_PROXY") else "",
+            "HTTPS (cookies sécurisés)" if app.config.get("HANGAR_HTTPS") else "") if x))
     print("  (Ctrl+C pour arrêter)\n")
     if not args.no_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
@@ -297,6 +323,10 @@ def cmd_create_admin(args):
     with app.app_context():
         username = args.username or input("Identifiant : ").strip().lower()
         password = getpass.getpass("Mot de passe : ")
+        from .models import MOT_DE_PASSE_MIN
+        if len(password) < MOT_DE_PASSE_MIN:
+            print(f"✗ Le mot de passe doit contenir au moins {MOT_DE_PASSE_MIN} caractères.")
+            sys.exit(1)
         u = User.query.filter_by(username=username).first()
         if u:
             u.role, u.active = "admin", True
@@ -387,6 +417,11 @@ def main(argv=None):
     run.add_argument("--port", type=int, default=5000)
     run.add_argument("--debug", action="store_true")
     run.add_argument("--no-browser", action="store_true")
+    run.add_argument("--cloudflare", action="store_true",
+                     help="derrière un tunnel Cloudflare (adresse des visiteurs, HTTPS) ; voir « Mettre Hangar en ligne »")
+    run.add_argument("--behind-proxy", action="store_true",
+                     help="derrière un autre proxy (Caddy, nginx…) qui écrit X-Forwarded-For")
+    run.add_argument("--https", action="store_true", help="les visiteurs arrivent en HTTPS (cookies sécurisés, HSTS)")
 
     demo = sub.add_parser("demo", help="créer les données de démonstration du projet EAE")
     demo.add_argument("--planning", help="chemin du fichier Excel de planification à importer")

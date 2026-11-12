@@ -7,7 +7,7 @@ from flask_login import current_user, login_user, logout_user
 
 from .. import blocage_connexion as blocage
 from ..extensions import db
-from ..models import PALETTE, User, Workspace, now
+from ..models import MOT_DE_PASSE_MIN, PALETTE, User, Workspace, now
 from ..utils import is_safe_next, tri_fr
 
 bp = Blueprint("auth", __name__)
@@ -19,8 +19,8 @@ def _validate_user_fields(form, require_password=True):
     password = form.get("password") or ""
     if not re.fullmatch(r"[a-z0-9_.\-]{2,60}", username):
         errors.append("Identifiant invalide (2 à 60 caractères : lettres, chiffres, . _ -).")
-    if require_password and len(password) < 6:
-        errors.append("Le mot de passe doit contenir au moins 6 caractères.")
+    if require_password and len(password) < MOT_DE_PASSE_MIN:
+        errors.append(f"Le mot de passe doit contenir au moins {MOT_DE_PASSE_MIN} caractères.")
     if User.query.filter_by(username=username).first():
         errors.append("Cet identifiant est déjà utilisé.")
     return errors, username, password
@@ -92,8 +92,24 @@ def login():
             elif reste <= 3:
                 erreur += (f" Encore {reste} essai{'s' if reste > 1 else ''} avant un blocage de "
                            f"{int(blocage.DUREE.total_seconds() // 60)} minutes.")
-    accounts = User.query.filter_by(active=True).order_by(User.role, tri_fr(User.first_name), tri_fr(User.last_name)).all()
+    accounts = (User.query.filter_by(active=True).order_by(User.role, tri_fr(User.first_name), tri_fr(User.last_name)).all()
+                if _montrer_comptes(ws) else [])
     return render_template("auth/login.html", ws=ws, accounts=accounts, erreur=erreur, ident=ident)
+
+
+def _montrer_comptes(ws) -> bool:
+    """« Qui es-tu ? » (liste des comptes) : sur cet ordinateur, et sur le réseau local si le réglage de l'espace
+    le permet ; jamais derrière un proxy ou un tunnel (même mal réglé), où la page est vue depuis Internet."""
+    import ipaddress
+
+    from ..en_ligne import via_proxy
+    if via_proxy(current_app, request):
+        return False
+    try:
+        local = ipaddress.ip_address(request.remote_addr or "").is_loopback
+    except ValueError:
+        local = False
+    return local or bool(ws.login_accounts)
 
 
 @bp.route("/signup", methods=["GET", "POST"])

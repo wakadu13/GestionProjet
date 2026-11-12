@@ -14,6 +14,8 @@
       </div>
       <div class="field"><label>Description</label><textarea class="input" name="description" rows="3">{{ ws.description }}</textarea></div>
       <label class="switch"><input type="checkbox" name="allow_signup" value="1" {% if ws.allow_signup %}checked{% endif %}> Autoriser l’inscription libre (sinon seuls les administrateurs créent les comptes)</label>
+      <label class="switch mt"><input type="checkbox" name="login_accounts" value="1" {% if ws.login_accounts %}checked{% endif %}> Montrer la liste des comptes (« Qui es-tu ? ») sur la page de connexion aux autres appareils du réseau</label>
+      <span class="help">Elle reste toujours visible sur cet ordinateur, et n’est jamais montrée quand Hangar est en ligne (derrière un tunnel ou un proxy).</span>
       <div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>
     </form>
     <h2>Stockage local</h2><p class="help">Toutes les données restent sur cette machine.</p>

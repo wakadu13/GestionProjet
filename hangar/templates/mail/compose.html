@@ -23,13 +23,13 @@
       {% if with_email %}
       <div class="flex wrap gap-4">
         <button type="button" class="btn btn-xs" data-select-members>Tout sélectionner</button>
-        {% for u in with_email %}<label class="checkbox tag" style="height:28px"><input type="checkbox" name="user_ids" value="{{ u.id }}" {% if issue and u in issue.assignees %}checked{% endif %}>{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>{% endfor %}
+        {% for u in with_email %}<label class="checkbox tag" style="height:28px"><input type="checkbox" name="user_ids" value="{{ u.id }}" {% if u.id in checked_ids %}checked{% endif %}>{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>{% endfor %}
       </div>
       {% else %}<span class="help">Aucun membre n’a encore d’adresse e-mail{% if current_user.is_admin %} — <a href="{{ url_for('mail.settings') }}#members" style="color:var(--accent-text)">les renseigner</a>{% endif %}.</span>{% endif %}
       {% set missing = members|rejectattr('contact_email')|list %}
       {% if missing and with_email %}<span class="help">{{ missing|length }} membre(s) sans adresse : {{ missing|map(attribute='display_name')|join(', ') }}.</span>{% endif %}
     </div>
-    <div class="field"><label>Autres destinataires</label><input class="input" name="others" placeholder="dpo@exemple.fr, secretariat@exemple.fr"><span class="help">Adresses séparées par des virgules (interlocuteurs extérieurs : DPO, services…).</span></div>
+    <div class="field"><label>Autres destinataires</label><input class="input" name="others" value="{{ prefill_others }}" placeholder="dpo@exemple.fr, secretariat@exemple.fr"><span class="help">Adresses séparées par des virgules{% if current_user.is_admin or cfg.members_external %} (interlocuteurs extérieurs : DPO, services…){% else %}. Hors de l’équipe : un administrateur doit l’autoriser dans Réglages › E-mails{% endif %}.</span></div>
     <div class="field"><label>Objet</label><input class="input" name="subject" value="{{ prefill_subject }}" required data-mail-subject></div>
     <div class="field"><label>Message</label>{{ ui.md_editor('body', prefill_body, 'Ton message (markdown accepté)…', 12) }}</div>
     <div class="field"><label>Lien vers un ticket (facultatif)</label><input class="input" name="issue_ref" value="{{ issue.key if issue else '' }}" placeholder="EAE-12" style="max-width:200px"><span class="help">Ajoute une fiche du ticket et un bouton « Voir le ticket » dans l’e-mail.</span></div>
