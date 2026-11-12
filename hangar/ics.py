@@ -39,8 +39,10 @@ KINDS = {
     "PROJET": ("Projet", "Projet"),
 }
 
+# « Titre n° TYPE » : le numéro de séance est suivi d'une seule espace. Un emplacement de numéro vide laisse
+# deux espaces avant le type (« Anglais niveau 2  CO_ORAL ») : le « 2 » appartient alors au titre.
 _SUMMARY_RE = re.compile(
-    r"^(?P<title>.*?\S)(?P<sep>\s+)(?:(?P<num>\d{1,3})\s+)?(?P<kind>[A-Z][A-Z0-9_]{1,15})"
+    r"^(?P<title>.*?\S)(?P<sep>\s+)(?:(?P<num>\d{1,3})[ \t](?=\S))?(?P<kind>[A-Z][A-Z0-9_]{1,15})"
     r"(?:\s*\((?P<flag>[^()]*)\))?\s*$"
 )
 _FLAG_ONLY_RE = re.compile(r"^(?P<title>.*?\S)\s*\((?P<flag>PREVISION|PRÉVISION|ANNUL[EÉ]E?|REPORT[EÉ]E?)\)\s*$", re.I)
@@ -389,3 +391,86 @@ def week_start(d: date) -> date:
 
 def combine(d: date, t: time | None, default_hour: int = 8) -> datetime:
     return datetime.combine(d, t or time(default_hour, 0))
+
+
+# ---------------------------------------------------------------------------
+# Écriture (exports .ics de l'agenda et des tickets), conforme à la RFC 5545
+# ---------------------------------------------------------------------------
+
+def escape_text(s: str | None) -> str:
+    """Valeur TEXT : fins de ligne Windows ramenées à « \\n », puis \\ ; , et retours à la ligne échappés
+    (un retour à la ligne brut couperait la ligne et pourrait créer de faux événements)."""
+    s = (s or "").replace("\r\n", "\n").replace("\r", "\n")
+    return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def fold(line: str) -> list[str]:
+    """Replie une ligne en morceaux de 75 octets au plus (UTF-8, sans couper un caractère) ; chaque suite
+    commence par une espace."""
+    out, cur = [], ""
+    for ch in line:
+        if len((cur + ch).encode("utf-8")) > 75:
+            out.append(cur)
+            cur = " " + ch
+        else:
+            cur += ch
+    out.append(cur)
+    return out
+
+
+def serialize(lines: list[str]) -> str:
+    """Lignes de contenu -> texte du fichier : lignes repliées, séparées et terminées par CRLF."""
+    out = []
+    for ln in lines:
+        out += fold(ln)
+    return "\r\n".join(out) + "\r\n"
+
+
+def _paris_offset(naive: datetime) -> timedelta:
+    """Décalage de Europe/Paris sans base des fuseaux (Windows sans tzdata) : heure d'été du dernier dimanche
+    de mars, 2 h, au dernier dimanche d'octobre, 3 h (règle européenne)."""
+    def last_sunday(year: int, month: int) -> date:
+        d = date(year, month, 31)
+        return d - timedelta(days=(d.weekday() + 1) % 7)
+    start = datetime.combine(last_sunday(naive.year, 3), time(2))
+    end = datetime.combine(last_sunday(naive.year, 10), time(3))
+    return timedelta(hours=2 if start <= naive < end else 1)
+
+
+def local_to_utc(naive: datetime, tz_name: str = DEFAULT_TZ) -> datetime:
+    """Heure locale naïve du calendrier -> heure UTC naïve."""
+    tz = _zone(tz_name)
+    if tz is not None:
+        return naive.replace(tzinfo=tz).astimezone(timezone.utc).replace(tzinfo=None)
+    if tz_name == "Europe/Paris":
+        return naive - _paris_offset(naive)
+    return naive.astimezone(timezone.utc).replace(tzinfo=None)  # fuseau de la machine
+
+
+def utc_value(naive_utc: datetime) -> str:
+    return f"{naive_utc:%Y%m%dT%H%M%S}Z"
+
+
+def utc_stamp(at: datetime | None = None) -> str:
+    """DTSTAMP : toujours en UTC (« Z »)."""
+    at = at or datetime.now(timezone.utc)
+    if at.tzinfo is not None:
+        at = at.astimezone(timezone.utc).replace(tzinfo=None)
+    return utc_value(at)
+
+
+def trigger(minutes_after_start: int) -> str:
+    """TRIGGER relatif au début : négatif = avant (« -PT60M »), positif = après (« PT420M »)."""
+    m = int(minutes_after_start)
+    return f"TRIGGER:{'-' if m < 0 else ''}PT{abs(m)}M"
+
+
+def vtimezone(tz_name: str = DEFAULT_TZ) -> list[str]:
+    """Définition du fuseau Europe/Paris (exigée par la RFC pour chaque TZID, utile à Outlook)."""
+    if tz_name != "Europe/Paris":
+        return []
+    return ["BEGIN:VTIMEZONE", "TZID:Europe/Paris", "X-LIC-LOCATION:Europe/Paris",
+            "BEGIN:DAYLIGHT", "TZOFFSETFROM:+0100", "TZOFFSETTO:+0200", "TZNAME:CEST", "DTSTART:19700329T020000",
+            "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU", "END:DAYLIGHT",
+            "BEGIN:STANDARD", "TZOFFSETFROM:+0200", "TZOFFSETTO:+0100", "TZNAME:CET", "DTSTART:19701025T030000",
+            "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU", "END:STANDARD", "END:VTIMEZONE"]

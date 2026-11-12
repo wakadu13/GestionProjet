@@ -31,7 +31,8 @@
     <form method="post" class="panel panel-b mb-lg" id="config">
       {{ ui.csrf() }}<input type="hidden" name="action" value="config">
       <h3 class="mb">{{ icon('settings', 15) }} Envoi</h3>
-      <label class="switch mb"><input type="checkbox" name="enabled" value="1" {% if cfg.enabled %}checked{% endif %}> Activer les e-mails automatiques (notifications, rappels, récapitulatifs, bilan)</label>
+      <label class="switch mb"><input type="checkbox" name="enabled" value="1" {% if cfg.enabled %}checked{% endif %}> Activer les e-mails automatiques des projets (notifications de tickets, rappels d’échéance, récapitulatifs, bilan)</label>
+      <p class="help" style="margin-top:-4px">Le résumé quotidien et les rappels de l’agenda se règlent par chaque personne, dans Agenda › Rappels et e-mails. Un membre réglé sur « Aucun e-mail » ne reçoit aucun e-mail automatique.</p>
       <div class="field"><label>Mode d’envoi</label>
         <div class="flex gap-16 wrap">
           <label class="checkbox"><input type="radio" name="mode" value="outbox" {% if cfg.mode != 'smtp' %}checked{% endif %} data-mail-mode> Boîte d’envoi locale (fichiers .eml, aucun envoi réel)</label>

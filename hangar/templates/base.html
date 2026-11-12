@@ -55,7 +55,7 @@
   <div class="app">
     <nav class="rail" aria-label="Sections">
       {% for key, label, ic, endpoint in [('agenda', 'Agenda', 'calendar', 'agenda.dashboard'), ('travail', 'Travail', 'layers', 'home.index'), ('wiki', 'Wiki', 'book', 'wiki.home'), ('qcm', 'QCM', 'graduation', 'qcm.index'), ('ia', 'IA', 'sparkle', 'ai.index')] %}
-      <a class="rail-item {% if nav == key %}active{% endif %}" href="{{ url_for(endpoint) }}" title="{{ label }}"><span class="rail-ic">{{ icon(ic, 18) }}</span><span class="rail-l">{{ label }}</span>{% if key == 'agenda' and agcfg.due %}<span class="rail-badge {% if agcfg.overdue %}danger{% endif %}">{{ agcfg.due }}</span>{% endif %}</a>
+      <a class="rail-item {% if nav == key %}active{% endif %}" href="{{ url_for(endpoint) }}" title="{{ label }}"><span class="rail-ic">{{ icon(ic, 18) }}</span><span class="rail-l">{{ label }}</span>{% if key == 'agenda' and agcfg.due %}<span class="rail-badge {% if agcfg.overdue %}danger{% endif %}">{{ agcfg.due }}</span>{% elif key == 'travail' and agcfg.tickets and agcfg.tickets[0] %}<span class="rail-badge {% if agcfg.tickets[1] %}danger{% endif %}" title="Tickets en retard ou à rendre aujourd’hui">{{ agcfg.tickets[0] }}</span>{% endif %}</a>
       {% endfor %}
       <span class="rail-sp"></span>
       <a class="rail-item {% if nav == 'reglages' %}active{% endif %}" href="{{ url_for('settings.profile') }}" title="Réglages"><span class="rail-ic">{{ icon('settings', 18) }}</span><span class="rail-l">Réglages</span></a>

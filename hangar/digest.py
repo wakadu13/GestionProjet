@@ -145,30 +145,78 @@ def pluriel(n: int, mot: str, mots: str | None = None) -> str:
 # Section : tickets des projets (échéances)
 # ---------------------------------------------------------------------------
 
-@section("projets.tickets", ordre=60)
-def _tickets(ctx: Contexte) -> Section | None:
+def tickets_assignes(user) -> list | None:
+    """Tickets (ouverts ou non) assignés à `user` dans les projets qu'il voit ; None s'il ne voit aucun projet."""
     from . import issue_query as IQ
-    from .mailer import issue_card
     from .models import Issue, User
     from .utils import visible_projects
-    pids = [p.id for p in visible_projects(ctx.user)]
+    pids = [p.id for p in visible_projects(user)]
     if not pids:
         return None
-    issues = [i for i in IQ.base_query().filter(Issue.project_id.in_(pids),
-                                                 Issue.assignees.any(User.id == ctx.user.id)).all()
-              if not i.is_closed and i.target_date]
-    jour = ctx.jour
-    retard = sorted([i for i in issues if i.target_date < ctx.aujourdhui], key=lambda i: i.target_date)
-    du_jour = [i for i in issues if i.target_date == jour]
-    bientot = sorted([i for i in issues if jour < i.target_date <= jour + timedelta(days=3)], key=lambda i: i.target_date)
-    if not (retard or du_jour or bientot):
+    return IQ.base_query().filter(Issue.project_id.in_(pids), Issue.assignees.any(User.id == user.id)).all()
+
+
+def tickets_a_echeance(user, jour: date, aujourdhui: date | None = None, horizon: int = 3,
+                       issues: list | None = None) -> dict | None:
+    """Tickets ouverts assignés à `user`, avec une échéance, classés pour le jour `jour` :
+
+    - « retard » : échéance passée (avant `aujourdhui`) ;
+    - « aujourdhui » : à rendre aujourd'hui, quand le jour regardé est un autre jour (résumé du soir) ;
+    - « du_jour » : à rendre le jour `jour` ;
+    - « bientot » : à rendre dans les `horizon` jours qui suivent `jour`.
+
+    Partagé par le résumé quotidien, le tableau de bord de l'agenda et l'accueil « Travail ».
+    None si l'utilisateur ne voit aucun projet (`issues` : liste déjà chargée par `tickets_assignes`)."""
+    if issues is None:
+        issues = tickets_assignes(user)
+        if issues is None:
+            return None
+    aujourdhui = aujourdhui or jour
+    ouverts = [i for i in issues if not i.is_closed and i.target_date]
+    par_date = (lambda i: (i.target_date, i.sequence_id))
+    return {
+        "retard": sorted([i for i in ouverts if i.target_date < aujourdhui], key=par_date),
+        "aujourdhui": sorted([i for i in ouverts if i.target_date == aujourdhui != jour], key=par_date),
+        "du_jour": sorted([i for i in ouverts if i.target_date == jour and jour >= aujourdhui], key=par_date),
+        "bientot": sorted([i for i in ouverts if jour < i.target_date <= jour + timedelta(days=horizon)],
+                          key=par_date),
+    }
+
+
+def nb_tickets_dus(user, aujourdhui: date) -> tuple[int, int]:
+    """(à rendre au plus tard aujourd'hui, dont en retard) : tickets ouverts assignés à `user`, pour la pastille
+    de l'icône « Travail ». Une seule requête légère (elle tourne sur chaque page)."""
+    from .extensions import db
+    from .models import CLOSED_GROUPS, Issue, State, User
+    from .utils import visible_projects
+    pids = [p.id for p in visible_projects(user)]
+    if not pids:
+        return 0, 0
+    dates = (Issue.query.outerjoin(State, Issue.state_id == State.id)
+             .filter(Issue.archived_at.is_(None), Issue.is_visible_clause(), Issue.project_id.in_(pids),
+                     Issue.assignees.any(User.id == user.id), Issue.target_date.isnot(None),
+                     Issue.target_date <= aujourdhui,
+                     db.or_(State.group.is_(None), State.group.notin_(CLOSED_GROUPS)))
+             .with_entities(Issue.target_date).all())
+    return len(dates), sum(1 for (d,) in dates if d < aujourdhui)
+
+
+@section("projets.tickets", ordre=60)
+def _tickets(ctx: Contexte) -> Section | None:
+    from .mailer import issue_card
+    t = tickets_a_echeance(ctx.user, ctx.jour, ctx.aujourdhui)
+    if t is None:
+        return None
+    retard, reste, du_jour, bientot = t["retard"], t["aujourdhui"], t["du_jour"], t["bientot"]
+    if not (retard or reste or du_jour or bientot):
         return None
     html = ""
-    for titre, lst, couleur in (("En retard", retard, "#dc2626"), ("À rendre ce jour", du_jour, "#d97706"),
+    for titre, lst, couleur in (("Reste à rendre aujourd’hui", reste, "#d97706"), ("En retard", retard, "#dc2626"),
+                                ("À rendre ce jour", du_jour, "#d97706"),
                                 ("Dans les 3 jours suivants", bientot, "#4a5260")):
         if lst:
             html += f'<div style="font-size:12.5px;font-weight:600;color:{couleur};margin:8px 0 2px">{titre} ({len(lst)})</div>'
             html += "".join(issue_card(i, ctx.cfg) for i in lst[:8])
-    n = len(retard) + len(du_jour)
+    n = len(retard) + len(reste) + len(du_jour)
     return Section("projets.tickets", "Tickets de projet", html, compte=n or len(bientot),
                    libelle=pluriel(n or len(bientot), "ticket"), couleur="#3f76ff")

@@ -79,7 +79,7 @@
       <a class="stat accent" href="{{ url_for('agenda.calendar', view='list') }}"><div class="v">{{ agenda_today|selectattr('type', 'equalto', 'event')|rejectattr('obj.cancelled')|list|length }}</div><div class="l">{{ icon('graduation', 13) }} Séances aujourd’hui{% if today_minutes %} · {{ A.duration_label(today_minutes) }}{% endif %}</div></a>
       <a class="stat" href="{{ url_for('agenda.calendar', view='week') }}"><div class="v">{{ A.duration_label(week_minutes) if week_minutes else '0 h' }}</div><div class="l">{{ icon('clock', 13) }} De cours cette semaine</div></a>
       <a class="stat" href="{{ url_for('agenda.tasks') }}"><div class="v">{{ open_count }}</div><div class="l">{{ icon('list-check', 13) }} Tâches à faire</div></a>
-      <a class="stat {% if groups.overdue %}danger{% endif %}" href="{{ url_for('agenda.tasks') }}#overdue"><div class="v">{{ groups.overdue|length }}</div><div class="l">{{ icon('alert', 13) }} En retard</div></a>
+      <a class="stat {% if groups.overdue %}danger{% endif %}" href="{{ url_for('agenda.tasks') }}#overdue"><div class="v">{{ groups.overdue|length }}</div><div class="l">{{ icon('alert', 13) }} Tâches en retard</div></a>
       <a class="stat" href="{{ url_for('agenda.settings') }}#rappels"><div class="v">{{ pending_reminders }}</div><div class="l">{{ icon('bell', 13) }} Rappels programmés</div>{% if next_reminder %}<div class="tiny muted" style="margin-top:2px">prochain {{ A.due_label(next_reminder.remind_at.date()) }} {{ A.hm(next_reminder.remind_at) }}</div>{% endif %}</a>
     </div>
   </div>
@@ -145,9 +145,31 @@
           <div class="tk-group-h {% if key == 'overdue' %}danger-text{% endif %}">{{ label }} <span class="count-pill">{{ groups[key]|length }}</span></div>
           {% for t in groups[key][:8] %}{{ ag.task_row(t, show_date=key in ('overdue', 'week')) }}{% set shown.n = shown.n + 1 %}{% endfor %}
           {% endfor %}
-          {% if not shown.n %}<div class="empty sm">Rien à faire dans les 7 prochains jours. 🎉{% if groups.later or groups.nodate %}<br><a href="{{ url_for('agenda.tasks') }}" class="small" style="color:var(--accent-text)">{{ groups.later|length + groups.nodate|length }} tâche(s) plus tard ou sans date</a>{% endif %}</div>{% endif %}
+          {% if not shown.n %}<div class="empty sm">{% if tickets and tickets.total %}Aucune tâche dans les 7 prochains jours.{% else %}Aucune tâche dans les 7 prochains jours. 🎉{% endif %}{% if groups.later or groups.nodate %}<br><a href="{{ url_for('agenda.tasks') }}" class="small" style="color:var(--accent-text)">{{ groups.later|length + groups.nodate|length }} tâche(s) plus tard ou sans date</a>{% endif %}</div>{% endif %}
         </div>
       </div>
+
+      {% if tickets is not none %}
+      <div class="panel" id="tickets">
+        <div class="panel-h">{{ icon('layers', 16) }}<h3>Mes tickets</h3>{% if tickets.total %}<span class="count-pill">{{ tickets.total }}</span>{% endif %}<a class="btn btn-xs btn-ghost right" href="{{ url_for('home.workspace_issues', scope='assigned') }}">Tout voir</a></div>
+        <div class="tk-list">
+          {% if tickets.total %}
+          {% if tickets.retard %}<div class="tk-group-h danger-text">Tickets en retard <span class="count-pill">{{ tickets.retard|length }}</span></div>{% endif %}
+          {% for i in tickets.liste %}
+          {% if loop.index0 == tickets.retard|length and tickets.a_rendre %}<div class="tk-group-h">À rendre dans les 7 jours <span class="count-pill">{{ tickets.a_rendre|length }}</span></div>{% endif %}
+          <a class="mini-issue" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">
+            {{ state_icon(i.state_group, i.state.color if i.state else None) }}
+            <span class="key">{{ i.key }}</span><span class="t">{{ i.title }}</span>
+            <span class="small nowrap {% if i.is_overdue %}danger-text{% elif i.due_soon %}warning-text{% else %}muted{% endif %}">{{ i.target_date|due }}</span>
+          </a>
+          {% endfor %}
+          {% if tickets.total > tickets.liste|length %}<a href="{{ url_for('home.workspace_issues', scope='assigned') }}" class="small" style="color:var(--accent-text);display:block;padding:6px 10px">{{ tickets.total - tickets.liste|length }} autre(s) ticket(s)</a>{% endif %}
+          {% else %}
+          <div class="empty sm">Aucun ticket en retard ni à rendre dans les 7 prochains jours.</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
 
       {% if qcm and (qcm.cartes_dues or qcm.nouvelles or qcm.nouvelles_disponibles or qcm.objectifs or qcm.serie) %}
       <div class="panel ag-qcm">

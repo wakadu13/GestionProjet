@@ -1142,6 +1142,8 @@ class AgendaImport(db.Model):
     unchanged = db.Column(db.Integer, default=0)
     details_json = db.Column(db.Text, default="[]")
     warnings = db.Column(db.Text, default="")
+    exam_notes = db.Column(db.Text, default="")  # dates d'examen des QCM recalées par cet import (une par ligne)
+    exam_quota_sets = db.Column(db.Text, default="")  # sets dont cet import a coupé l'ajustement auto (un par ligne)
     created_at = db.Column(db.DateTime, default=now, index=True)
     undone_at = db.Column(db.DateTime)
 
@@ -1239,7 +1241,8 @@ class AgendaSettings(db.Model):
     reminder_channel = db.Column(db.String(10), default="email")
     daily_mode = db.Column(db.String(10), default="morning")  # off | morning (résumé du jour) | evening (du lendemain)
     daily_hour = db.Column(db.Integer, default=7)
-    last_daily_date = db.Column(db.Date)
+    last_daily_date = db.Column(db.Date)                  # jour du dernier envoi du résumé
+    last_daily_day = db.Column(db.Date)                   # jour couvert par ce résumé (demain en mode soir)
     import_email = db.Column(db.Boolean, default=False)   # e-mail récapitulatif des changements après un import
     exam_reminder = db.Column(db.Integer, default=0)      # rappel automatique des contrôles (minutes, 0 = non)
     weekly_import_nudge = db.Column(db.Boolean, default=True)

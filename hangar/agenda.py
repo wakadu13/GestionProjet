@@ -20,7 +20,7 @@ import re
 import unicodedata
 from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 
 from flask import current_app
 from markupsafe import escape
@@ -339,6 +339,10 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
     for ev, since in revived:
         _revive_reminders(ev, since, at)
     ensure_exam_reminders(user, at)
+    db.session.flush()
+    quota_off: list[str] = []
+    imp.exam_notes = "\n".join(sync_exam_objectives(user, at, exam_changes(details), quota_off))
+    imp.exam_quota_sets = "\n".join(quota_off)
     db.session.commit()
     if s.import_email and imp.changed:
         queue_import_email(user, imp, at)
@@ -351,9 +355,10 @@ def latest_import(user: User) -> AgendaImport | None:
             .order_by(AgendaImport.id.desc()).first())
 
 
-def undo_import(imp: AgendaImport, at: datetime | None = None) -> None:
+def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
     """Rétablit l'état d'avant l'import (uniquement pour le dernier import), rappels compris : les rappels
-    automatiques des contrôles sont recréés et les rappels ignorés pendant le retrait repartent."""
+    automatiques des contrôles sont recréés et les rappels ignorés pendant le retrait repartent. Les dates
+    d'examen des QCM suivent aussi (retourne les phrases qui le disent)."""
     at = at or now()
     last = AgendaImport.query.filter_by(user_id=imp.user_id, undone_at=None).order_by(AgendaImport.id.desc()).first()
     if last is None or last.id != imp.id:
@@ -374,9 +379,14 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> None:
     imp.undone_at = at
     db.session.flush()
     user = db.session.get(User, imp.user_id)
+    notes = []
     if user is not None:
         ensure_exam_reminders(user, at)
+        db.session.flush()
+        notes = sync_exam_objectives(user, at, exam_changes(imp.details, undo=True))
+        notes += _restore_auto_quota(user, (imp.exam_quota_sets or "").splitlines())
     db.session.commit()
+    return notes
 
 
 def recent_import_ids(user: User, at: datetime | None = None, days: int = 7) -> set[int]:
@@ -926,7 +936,7 @@ def send_reminder(r: AgendaReminder, user: User, at: datetime):
     short = when.split(" · ")[-1] if " · " in when else when
     db.session.add(Notification(user_id=user.id, kind="reminder", message=f"⏰ Rappel : {title} — {when}"[:500],
                                 url=path, created_at=at))
-    if r.channel == "email" and m.valid_email(user.contact_email):
+    if r.channel == "email" and m.accepte_emails(user):  # « Aucun e-mail » : la notification dans l'appli suffit
         html = m.layout(f"⏰ {title}", f"<p>Petit rappel ({escape(r.label.lower())}) :</p>{body}",
                         button=("Ouvrir mon agenda", m.absolute(path, cfg)), cfg=cfg)
         return m.queue_email(user.contact_email, f"⏰ Rappel : {title} — {short}"[:300], html, kind="reminder",
@@ -989,22 +999,38 @@ def _digest_taches(ctx):
                                        AgendaTask.due_date < ctx.aujourdhui).order_by(AgendaTask.due_date).all())
     listed = {o.task.id for o in occs}  # une tâche répétée déjà listée pour le jour n'est pas relistée en retard
     overdue = [t for t in overdue if t.id not in listed]
-    if not (occs or overdue):
+    # Résumé du soir (jour résumé = demain) : ce qui reste à faire aujourd'hui n'est ni « demain » ni « en retard »
+    rest = []
+    if ctx.jour > ctx.aujourdhui:
+        rest = [o for o in task_occurrences(ctx.user, ctx.aujourdhui, ctx.aujourdhui, include_done=False)
+                if o.task.id not in listed]
+        rest.sort(key=lambda o: (o.task.start_time or time(23, 59), o.task.title.lower()))
+    if not (occs or overdue or rest):
         return None
     html = ""
     if occs:
         occs.sort(key=lambda o: (o.task.start_time or time(23, 59), cle_tri(o.task.title)))
         html += ('<ul style="padding-left:18px;margin:0">'
                  + "".join(_task_line(o.task, ctx.aujourdhui, o.date) for o in occs) + "</ul>")
+    if rest:
+        html += ('<div style="font-size:12.5px;font-weight:600;color:#d97706;margin:10px 0 2px">'
+                 f'Reste à faire aujourd’hui ({len(rest)})</div><ul style="padding-left:18px;margin:0">'
+                 + "".join(_task_line(o.task, ctx.aujourdhui, o.date) for o in rest[:12]) + "</ul>")
     if overdue:
         html += ('<div style="font-size:12.5px;font-weight:600;color:#dc2626;margin:10px 0 2px">'
                  f'En retard ({len(overdue)})</div><ul style="padding-left:18px;margin:0">'
                  + "".join(_task_line(t, ctx.aujourdhui) for t in overdue[:12]) + "</ul>")
     n = len(occs)
-    libelle = digest.pluriel(n, "tâche") if n else digest.pluriel(len(overdue), "en retard", "en retard")
-    if n and overdue:
-        libelle += f" (+{len(overdue)} en retard)"
-    return digest.Section("agenda.taches", "Tâches", html, compte=n or len(overdue), libelle=libelle,
+    if n:
+        libelle, extra = digest.pluriel(n, "tâche"), [(rest, "aujourd’hui"), (overdue, "en retard")]
+    elif rest:
+        libelle, extra = digest.pluriel(len(rest), "tâche") + " aujourd’hui", [(overdue, "en retard")]
+    else:
+        libelle, extra = digest.pluriel(len(overdue), "en retard", "en retard"), []
+    extra = [f"+{len(x)} {lab}" for x, lab in extra if x]
+    if extra:
+        libelle += f" ({', '.join(extra)})"
+    return digest.Section("agenda.taches", "Tâches", html, compte=n or len(rest) or len(overdue), libelle=libelle,
                           couleur="#dc2626" if overdue else "#8b5cf6")
 
 
@@ -1051,20 +1077,73 @@ def build_day_email(user: User, day: date, at: datetime) -> tuple[str, str] | No
     return (built[0], built[1]) if built else None
 
 
+DAILY_LATEST_HOUR = 18  # après 18 h, plus de résumé « de la journée » : elle est presque finie
+
+
+def daily_covered(s: AgendaSettings) -> date | None:
+    """Dernier jour couvert par un résumé déjà envoyé. Les versions précédentes ne gardaient que le jour de
+    l'envoi : en mode soir, le résumé envoyé ce jour-là couvrait le lendemain."""
+    if s.last_daily_day is not None:
+        return s.last_daily_day
+    if s.last_daily_date is None:
+        return None
+    return s.last_daily_date + timedelta(days=1) if s.daily_mode == "evening" else s.last_daily_date
+
+
+def daily_target(s: AgendaSettings, at: datetime) -> date | None:
+    """Jour à résumer maintenant, ou None.
+
+    - Le matin : le jour même, à partir de l'heure choisie et jusqu'à 18 h (au-delà, la journée est presque
+      finie : on n'envoie plus le programme d'une journée passée).
+    - La veille au soir : le lendemain, à partir de l'heure choisie. Si Hangar était fermé hier soir, le résumé
+      du jour part à la première ouverture, jusqu'à 18 h (rattrapage).
+    Un jour déjà couvert par un résumé n'est jamais renvoyé."""
+    if s.daily_mode not in ("morning", "evening"):
+        return None
+    today, hour = at.date(), s.daily_hour or 0
+    if s.daily_mode == "morning":
+        day = today if hour <= at.hour < max(DAILY_LATEST_HOUR, hour + 1) else None
+    elif at.hour >= hour:
+        day = today + timedelta(days=1)
+    else:
+        day = today if at.hour < min(DAILY_LATEST_HOUR, hour) else None
+    covered = daily_covered(s)
+    if day is None or (covered is not None and covered >= day):
+        return None
+    return day
+
+
+def set_daily_schedule(s: AgendaSettings, mode: str, hour: int, at: datetime) -> None:
+    """Change le mode ou l'heure du résumé quotidien sans envoi immédiat : le jour que le résumé couvrirait
+    tout de suite est noté comme déjà couvert (activé à 10 h pour 7 h : premier résumé demain). Un jour déjà
+    couvert le reste (changer l'heure après avoir reçu le résumé du jour ne le renvoie pas)."""
+    if mode == s.daily_mode and hour == s.daily_hour:
+        return
+    covered = daily_covered(s)
+    sent_on, s.last_daily_date, s.last_daily_day = s.last_daily_date, None, None
+    s.daily_mode, s.daily_hour = mode, hour
+    target = daily_target(s, at)
+    s.last_daily_date = sent_on
+    s.last_daily_day = max((d for d in (covered, target) if d is not None), default=None)
+
+
 def send_daily_programs(at: datetime | None = None) -> int:
-    """Envoie le résumé quotidien aux comptes qui l'ont activé (une fois par jour, à l'heure choisie)."""
+    """Envoie le résumé quotidien aux comptes qui l'ont activé (une fois par jour résumé, voir `daily_target`).
+
+    Rien pour un compte qui a choisi « Aucun e-mail » dans son profil, ni pour un compte qui n'a jamais ouvert
+    Hangar (pas encore de préférences d'agenda : le résumé n'est pas activé à son insu)."""
     at = at or now()
     m = _mail()
     n = 0
     for user in User.query.filter(User.active.is_(True), User.contact_email.isnot(None)).all():
-        if not m.valid_email(user.contact_email):
+        if not m.accepte_emails(user):
             continue
-        s = settings_of(user)
-        if s.daily_mode not in ("morning", "evening") or at.hour < (s.daily_hour or 0) or s.last_daily_date == at.date():
+        s = db.session.get(AgendaSettings, user.id)
+        day = daily_target(s, at) if s is not None else None
+        if day is None:
             continue
-        day = at.date() if s.daily_mode == "morning" else at.date() + timedelta(days=1)
         built = build_day_email(user, day, at)
-        s.last_daily_date = at.date()
+        s.last_daily_date, s.last_daily_day = at.date(), day
         if built:  # en cas de panne passagère, nouvel essai jusqu'à la fin de la journée résumée
             m.queue_email(user.contact_email, built[0], built[1], kind="agenda", to_user=user,
                           expires_at=datetime.combine(day + timedelta(days=1), time(0)))
@@ -1074,14 +1153,14 @@ def send_daily_programs(at: datetime | None = None) -> int:
 
 
 def digest_enabled(user: User) -> bool:
+    """Le résumé quotidien part-il pour ce compte ? (il remplace alors le rappel quotidien des échéances)"""
     s = db.session.get(AgendaSettings, user.id)
-    mode = s.daily_mode if s is not None else AgendaSettings.daily_mode.default.arg
-    return mode in ("morning", "evening")
+    return s is not None and s.daily_mode in ("morning", "evening")
 
 
 def queue_import_email(user: User, imp: AgendaImport, at: datetime) -> None:
     m = _mail()
-    if not m.valid_email(user.contact_email):
+    if not m.accepte_emails(user):
         return
     cfg = m._cfg()
     items = []
@@ -1489,31 +1568,37 @@ def day_events_payload(user: User, d: date) -> list[dict]:
 # Export iCalendar (pour l'ajouter à Google Agenda, Outlook, téléphone…)
 # ---------------------------------------------------------------------------
 
-def _ics_text(s: str) -> str:
-    return (s or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
-
-
-def _fold(line: str) -> list[str]:
-    out, cur = [], ""
-    for ch in line:
-        if len((cur + ch).encode("utf-8")) > 74:
-            out.append(cur)
-            cur = " " + ch
-        else:
-            cur += ch
-    out.append(cur)
-    return out
-
+# Écriture iCalendar : voir hangar/ics.py (noms gardés pour le code existant)
+_ics_text = ics.escape_text
+_fold = ics.fold
 
 RRULES = {"daily": "FREQ=DAILY", "weekdays": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", "weekly": "FREQ=WEEKLY",
           "biweekly": "FREQ=WEEKLY;INTERVAL=2", "monthly": "FREQ=MONTHLY"}
 
 
-def export_ics(user: User, include_events: bool = True, include_tasks: bool = True) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+def export_ics(user: User, include_events: bool = True, include_tasks: bool = True,
+               at: datetime | None = None) -> str:
+    """Agenda au format iCalendar (RFC 5545) : lignes repliées à 75 octets, textes échappés, DTSTAMP en UTC,
+    fuseau Europe/Paris décrit (VTIMEZONE), fin de répétition en UTC pour une tâche à heure fixe, rappels
+    des tâches sans heure calés sur l'heure de référence (8 h par défaut) comme dans Hangar."""
+    at = at or now()
+    stamp = ics.utc_stamp()
+    tz = ics.DEFAULT_TZ
+    s = settings_of_id(user.id)
+    allday = s.allday_hour if s.allday_hour is not None else 8
+    esc = ics.escape_text
+
+    def alarm(text: str, trig: str) -> list[str]:
+        return ["BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{esc(text)}", trig, "END:VALARM"]
+
+    def fixed(r: AgendaReminder) -> str | None:  # rappel à date fixe encore à venir : déclencheur absolu
+        if r.offset_minutes is not None or r.remind_at is None or r.status != "pending" or r.remind_at < at:
+            return None
+        return f"TRIGGER;VALUE=DATE-TIME:{ics.utc_value(ics.local_to_utc(r.remind_at, tz))}"
+
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Hangar//Agenda//FR", "CALSCALE:GREGORIAN",
-             "METHOD:PUBLISH", f"X-WR-CALNAME:{_ics_text('Agenda de ' + user.display_name)}",
-             f"X-WR-TIMEZONE:{ics.DEFAULT_TZ}"]
+             "METHOD:PUBLISH", f"X-WR-CALNAME:{esc('Agenda de ' + user.display_name)}", f"X-WR-TIMEZONE:{tz}"]
+    lines += ics.vtimezone(tz)
     if include_events:
         for ev in AgendaEvent.query.filter_by(user_id=user.id, status="active").order_by(AgendaEvent.start):
             if ev.cancelled:
@@ -1521,21 +1606,23 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
             desc = "\n".join(x for x in (
                 kind_label(ev.kind), f"Intervenants : {ev.teachers}" if ev.teachers else "",
                 f"Groupes : {ev.groups}" if ev.groups else "", ev.description, ev.note) if x)
-            lines += ["BEGIN:VEVENT", f"UID:{_ics_text(ev.uid)}@hangar", f"DTSTAMP:{stamp}"]
+            lines += ["BEGIN:VEVENT", f"UID:{esc(ev.uid)}@hangar", f"DTSTAMP:{stamp}"]
             if ev.all_day:
-                lines += [f"DTSTART;VALUE=DATE:{ev.start:%Y%m%d}", f"DTEND;VALUE=DATE:{ev.end:%Y%m%d}"]
+                end = ev.end if ev.end.date() > ev.start.date() else ev.start + timedelta(days=1)
+                lines += [f"DTSTART;VALUE=DATE:{ev.start:%Y%m%d}", f"DTEND;VALUE=DATE:{end:%Y%m%d}"]
             else:
-                lines += [f"DTSTART;TZID={ics.DEFAULT_TZ}:{ev.start:%Y%m%dT%H%M%S}",
-                          f"DTEND;TZID={ics.DEFAULT_TZ}:{ev.end:%Y%m%dT%H%M%S}"]
+                lines.append(f"DTSTART;TZID={tz}:{ev.start:%Y%m%dT%H%M%S}")
+                if ev.end > ev.start:  # sans DTEND : séance d'un instant (une fin égale au début est interdite)
+                    lines.append(f"DTEND;TZID={tz}:{ev.end:%Y%m%dT%H%M%S}")
             title = ev.title + (f" ({kind_label(ev.kind, True)})" if ev.kind else "")
-            lines += [f"SUMMARY:{_ics_text(title)}", f"LOCATION:{_ics_text(ev.location)}",
-                      f"DESCRIPTION:{_ics_text(desc)}"]
+            lines += [f"SUMMARY:{esc(title)}", f"LOCATION:{esc(ev.location)}", f"DESCRIPTION:{esc(desc)}"]
             if ev.tentative:
                 lines.append("STATUS:TENTATIVE")
             for r in ev.reminders:
-                if r.offset_minutes is not None:
-                    lines += ["BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{_ics_text(title)}",
-                              f"TRIGGER:-PT{r.offset_minutes}M", "END:VALARM"]
+                if r.offset_minutes is not None:  # Hangar cale ces rappels sur le début de la séance
+                    lines += alarm(title, ics.trigger(-r.offset_minutes))
+                elif fixed(r):
+                    lines += alarm(title, fixed(r))
             lines.append("END:VEVENT")
     if include_tasks:
         for t in AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.due_date.isnot(None),
@@ -1544,29 +1631,35 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
             if t.start_time:
                 st = datetime.combine(t.due_date, t.start_time)
                 en = task_end(t)
-                lines += [f"DTSTART;TZID={ics.DEFAULT_TZ}:{st:%Y%m%dT%H%M%S}",
-                          f"DTEND;TZID={ics.DEFAULT_TZ}:{en:%Y%m%dT%H%M%S}"]
+                lines.append(f"DTSTART;TZID={tz}:{st:%Y%m%dT%H%M%S}")
+                if en and en > st:
+                    lines.append(f"DTEND;TZID={tz}:{en:%Y%m%dT%H%M%S}")
             else:
                 lines += [f"DTSTART;VALUE=DATE:{t.due_date:%Y%m%d}",
                           f"DTEND;VALUE=DATE:{t.due_date + timedelta(days=1):%Y%m%d}"]
-            lines += [f"SUMMARY:{_ics_text('✓ ' + t.title)}", f"DESCRIPTION:{_ics_text(t.notes)}"]
+            lines += [f"SUMMARY:{esc('✓ ' + t.title)}", f"DESCRIPTION:{esc(t.notes)}"]
             if t.category:
-                lines.append(f"CATEGORIES:{_ics_text(t.category)}")
-            if t.recurrence in RRULES:
+                lines.append(f"CATEGORIES:{esc(t.category)}")
+            repeated = t.recurrence in RRULES
+            if repeated:
                 rule = RRULES[t.recurrence]
                 if t.recurrence_until:
-                    rule += f";UNTIL={t.recurrence_until:%Y%m%d}"
+                    if t.start_time:  # début avec fuseau : la RFC exige une fin en date-heure UTC
+                        last = ics.local_to_utc(datetime.combine(t.recurrence_until, t.start_time), tz)
+                        rule += f";UNTIL={ics.utc_value(last)}"
+                    else:
+                        rule += f";UNTIL={t.recurrence_until:%Y%m%d}"
                 lines.append(f"RRULE:{rule}")
             for r in t.reminders:
                 if r.offset_minutes is not None:
-                    lines += ["BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{_ics_text(t.title)}",
-                              f"TRIGGER:-PT{r.offset_minutes}M", "END:VALARM"]
+                    # Tâche sans heure : Hangar rappelle par rapport à l'heure de référence (8 h), pas à minuit
+                    lead = 0 if t.start_time else allday * 60
+                    lines += alarm(t.title, ics.trigger(lead - r.offset_minutes))
+                elif not repeated and fixed(r):
+                    lines += alarm(t.title, fixed(r))
             lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")
-    out = []
-    for ln in lines:
-        out += _fold(ln)
-    return "\r\n".join(out) + "\r\n"
+    return ics.serialize(lines)
 
 
 __all__ = ["IMPORT_MODES", "RECURRENCES", "REMINDER_OFFSETS", "import_calendar", "undo_import", "week_view",
@@ -1792,19 +1885,148 @@ def set_subject_link(user, title: str, wiki_path: str | None = None, qcm_categor
     return link
 
 
+def _category_decks(user, category: str, create: bool = True) -> list:
+    """Réglages de révision (QuizDeck) des sets d'une catégorie de QCM, créés au besoin. Sans valider la base."""
+    from .qcm.models import QuizDeck
+    from .qcm.services import bibliotheque
+    sets = bibliotheque(user.id).categories().get(category, [])
+    have = {d.set_id: d for d in QuizDeck.query.filter(QuizDeck.user_id == user.id,
+                                                        QuizDeck.set_id.in_([st.id for st in sets] or [""]))}
+    out = []
+    for st in sets:
+        deck = have.get(st.id)
+        if deck is None and create:
+            deck = QuizDeck(user_id=user.id, set_id=st.id)
+            db.session.add(deck)
+        if deck is not None:
+            out.append(deck)
+    return out
+
+
 def set_exam_objective(user, ev: AgendaEvent) -> int:
     """Date d'examen des sets de la catégorie de QCM liée = jour du contrôle. Retourne le nombre de sets."""
     link = _subject_link(user, ev.title)
     if link is None or not link.qcm_category:
         return 0
-    from .qcm.models import QuizDeck
-    from .qcm.services import bibliotheque
-    sets = bibliotheque(user.id).categories().get(link.qcm_category, [])
-    for s in sets:
-        deck = QuizDeck.query.filter_by(user_id=user.id, set_id=s.id).first()
-        if deck is None:
-            deck = QuizDeck(user_id=user.id, set_id=s.id)
-            db.session.add(deck)
+    decks = _category_decks(user, link.qcm_category)
+    for deck in decks:
         deck.date_objectif = ev.start.date()
     db.session.commit()
-    return len(sets)
+    return len(decks)
+
+
+def _exam_snap(snap: dict | None) -> tuple[str, date] | None:
+    """(clé de matière, jour) d'un instantané de séance s'il s'agit d'un contrôle actif, sinon None."""
+    if not snap or not snap.get("start") or snap.get("cancelled") or snap.get("status", "active") != "active":
+        return None
+    if not ics.is_exam(snap.get("kind") or "", snap.get("title") or ""):
+        return None
+    return subject_key(snap.get("title") or ""), datetime.fromisoformat(snap["start"]).date()
+
+
+def exam_changes(details: list, undo: bool = False) -> dict[str, dict]:
+    """Contrôles touchés par un import : {matière: {"old": jours quittés, "moves": {ancien jour: nouveau jour},
+    "touched": un contrôle ajouté ou modifié}}. `undo` : pour l'annulation, l'état « après » de l'import est
+    celui qu'on quitte et l'état « avant » celui qu'on retrouve."""
+    out: dict[str, dict] = {}
+    for d in details:
+        before, after = d.get("before"), d.get("after")
+        if undo:
+            before, after = after, (d.get("before") if d.get("type") != "added" else None)
+        old, new = _exam_snap(before), _exam_snap(after)
+        for ex in (old, new):
+            if ex is not None:
+                out.setdefault(ex[0], {"old": set(), "moves": {}, "touched": False})
+        if old is not None:
+            out[old[0]]["old"].add(old[1])
+        if new is not None:
+            out[new[0]]["touched"] = True
+            if old is not None and old[0] == new[0] and old[1] != new[1]:
+                out[old[0]]["moves"][old[1]] = new[1]
+    return out
+
+
+def _restore_auto_quota(user, set_ids: list[str]) -> list[str]:
+    """Annulation d'un import : remet l'ajustement automatique des sets que cet import avait coupé (quand ils
+    ont retrouvé une date d'examen)."""
+    if not set_ids:
+        return []
+    from .qcm.models import QuizDeck
+    n = 0
+    for deck in QuizDeck.query.filter(QuizDeck.user_id == user.id, QuizDeck.set_id.in_(set_ids)):
+        if deck.date_objectif is not None and not deck.auto_quota:
+            deck.auto_quota = True
+            n += 1
+    return [f"Ajustement automatique (« Ajuster auto. ») réactivé pour {n} set(s) de QCM."] if n else []
+
+
+def sync_exam_objectives(user, at: datetime, changes: dict[str, dict],
+                         quota_off: list[str] | None = None) -> list[str]:
+    """Fait suivre le planning à la date d'examen des sets de QCM des matières reliées (sans valider la base).
+
+    Pour chaque matière touchée (voir `exam_changes`) et reliée à une catégorie de QCM, on vise le prochain
+    contrôle à venir :
+    - une date d'examen qui valait l'ancien jour d'un contrôle déplacé suit le contrôle ;
+    - un contrôle retiré : la date passe au prochain contrôle ; s'il n'y en a plus, elle est effacée et
+      l'ajustement automatique coupé (les sets concernés sont ajoutés à `quota_off`, pour l'annulation) ;
+    - un set sans date (ou avec une date passée) est préparé pour le prochain contrôle ;
+    - une date saisie à la main (qui ne vaut aucun ancien jour de contrôle) n'est jamais modifiée.
+    Retourne les phrases à afficher dans le compte rendu de l'import."""
+    if not changes:
+        return []
+    links = [lk for lk in AgendaSubjectLink.query.filter_by(user_id=user.id)
+             if lk.qcm_category and lk.subject in changes]
+    if not links:
+        return []
+    today = at.date()
+    upcoming: dict[str, list[date]] = {}
+    for e in AgendaEvent.query.filter(AgendaEvent.user_id == user.id, AgendaEvent.status == "active",
+                                      AgendaEvent.cancelled.is_(False),
+                                      AgendaEvent.start >= datetime.combine(today, time(0))):
+        if is_exam(e):
+            upcoming.setdefault(subject_key(e.title), []).append(e.start.date())
+    notes = []
+    for link in links:
+        row = changes[link.subject]
+        dates = sorted(set(upcoming.get(link.subject, [])))
+        nxt = dates[0] if dates else None
+        old = row["old"] - set(dates)  # jours qui ne portent plus aucun contrôle de la matière
+        touched = row["touched"]
+        if not old and not (touched and nxt):
+            continue
+        try:
+            decks = _category_decks(user, link.qcm_category, create=nxt is not None and touched)
+        except Exception:  # noqa: BLE001 - module QCM indisponible : l'import passe quand même
+            current_app.logger.exception("Dates d'examen des QCM après un import")
+            continue
+        moved, carried, prepared, cleared = {}, {}, 0, 0
+        for deck in decks:
+            d = deck.date_objectif
+            if d in old:  # la date suivait un contrôle qui a bougé ou disparu
+                target = row["moves"].get(d)
+                bucket = moved if target in dates else carried  # contrôle déplacé, ou retiré
+                target = target if target in dates else nxt
+                if target is None:
+                    if deck.auto_quota and quota_off is not None:
+                        quota_off.append(deck.set_id)
+                    deck.date_objectif, deck.auto_quota = None, False
+                    cleared += 1
+                else:
+                    deck.date_objectif = target
+                    bucket[(d, target)] = bucket.get((d, target), 0) + 1
+            elif touched and nxt is not None and (d is None or d < today):
+                deck.date_objectif = nxt
+                prepared += 1
+        name = link.title or link.subject
+        for (d, target), n in sorted(moved.items()):
+            notes.append(f"{name} : contrôle déplacé du {d:%d/%m} au {target:%d/%m}, date d’examen recalée pour "
+                         f"{n} set(s) de QCM.")
+        for (d, target), n in sorted(carried.items()):
+            notes.append(f"{name} : contrôle du {d:%d/%m} retiré : date d’examen reportée au prochain contrôle "
+                         f"({target:%d/%m}) pour {n} set(s) de QCM.")
+        if prepared:
+            notes.append(f"{name} : date d’examen fixée au {nxt:%d/%m} (prochain contrôle) pour {prepared} set(s) "
+                         "de QCM.")
+        if cleared:
+            notes.append(f"{name} : plus de contrôle prévu, date d’examen effacée pour {cleared} set(s) de QCM.")
+    return notes

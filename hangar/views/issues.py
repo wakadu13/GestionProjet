@@ -627,26 +627,27 @@ def import_issues(pid):
 @bp.route("/projects/<int:pid>/calendar.ics")
 @login_required
 def ical(pid):
+    from .. import ics
     project = get_project(pid)
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Hangar//FR", "CALSCALE:GREGORIAN",
-             f"X-WR-CALNAME:{project.name}"]
-    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    esc = ics.escape_text
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Hangar//Tickets//FR", "CALSCALE:GREGORIAN",
+             "METHOD:PUBLISH", f"X-WR-CALNAME:{esc(project.name)}"]
+    stamp = ics.utc_stamp()
     for i in IQ.base_query().filter(Issue.project_id == pid, Issue.target_date.isnot(None)).all():
-        start = i.start_date or i.target_date
+        start = min(i.start_date or i.target_date, i.target_date)  # un début saisi après l'échéance est ignoré
         end = i.target_date + timedelta(days=1)
-        summary = f"{i.key} {i.title}".replace(",", "\\,").replace(";", "\\;")
+        desc = (f"État : {i.state.name if i.state else ''}\n"
+                f"Assignés : {', '.join(u.display_name for u in i.assignees) or 'personne'}")
         lines += ["BEGIN:VEVENT", f"UID:hangar-{i.id}@local", f"DTSTAMP:{stamp}",
                   f"DTSTART;VALUE=DATE:{start:%Y%m%d}", f"DTEND;VALUE=DATE:{end:%Y%m%d}",
-                  f"SUMMARY:{summary}",
-                  f"DESCRIPTION:État : {i.state.name if i.state else ''} - "
-                  f"Assignés : {', '.join(u.display_name for u in i.assignees) or 'personne'}",
+                  f"SUMMARY:{esc(f'{i.key} {i.title}')}", f"DESCRIPTION:{esc(desc)}",
                   f"URL:{request.host_url.rstrip('/')}{issue_url(i)}", "END:VEVENT"]
     for c in project.cycles:
         if c.start_date and c.end_date:
+            first, last = min(c.start_date, c.end_date), max(c.start_date, c.end_date)
             lines += ["BEGIN:VEVENT", f"UID:hangar-cycle-{c.id}@local", f"DTSTAMP:{stamp}",
-                      f"DTSTART;VALUE=DATE:{c.start_date:%Y%m%d}",
-                      f"DTEND;VALUE=DATE:{c.end_date + timedelta(days=1):%Y%m%d}",
-                      f"SUMMARY:Cycle : {c.name}", "END:VEVENT"]
+                      f"DTSTART;VALUE=DATE:{first:%Y%m%d}", f"DTEND;VALUE=DATE:{last + timedelta(days=1):%Y%m%d}",
+                      f"SUMMARY:{esc('Cycle : ' + c.name)}", "END:VEVENT"]
     lines.append("END:VCALENDAR")
-    return Response("\r\n".join(lines), mimetype="text/calendar",
+    return Response(ics.serialize(lines), mimetype="text/calendar",
                     headers={"Content-Disposition": f"attachment; filename={project.identifier}.ics"})
