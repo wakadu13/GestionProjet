@@ -33,11 +33,20 @@ def tableau_de_bord(d: dict) -> dict:
     return out
 
 
+def _own_controle(eid: int) -> AgendaEvent:
+    """Séance de l'utilisateur qui est un contrôle (sinon 404 : ces pages n'ont pas de sens pour un cours).
+    Une séance déjà notée reste accessible (lien de la page des notes), même si elle n'est plus un contrôle."""
+    ev = _own_event(eid)
+    if not A.is_exam(ev) and C.note_de(current_user, ev) is None:
+        abort(404)
+    return ev
+
+
 @bp.route("/agenda/events/<int:eid>/preparer")
 @login_required
 def event_prepare(eid):
     """Tout ce qu'il faut pour préparer un contrôle, au même endroit."""
-    ev = _own_event(eid)
+    ev = _own_controle(eid)
     at = now()
     p = C.preparer(current_user, ev, at)
     plan = C.proposer(current_user, ev, at) if not p["passe"] else None
@@ -55,7 +64,7 @@ def event_prepare(eid):
 @login_required
 def event_plan(eid):
     """Crée (ou retire) les blocs de révision proposés sur la page du contrôle."""
-    ev = _own_event(eid)
+    ev = _own_controle(eid)
     page = url_for("agenda.event_prepare", eid=ev.id)
     if request.form.get("action") == "retirer":
         n = C.retirer(current_user, ev)
@@ -85,8 +94,9 @@ def _form_note():
 @bp.route("/agenda/events/<int:eid>/resultat", methods=["POST"])
 @login_required
 def event_grade(eid):
-    """Note d'un contrôle passé (fenêtre de la séance ou page du contrôle), ou « pas de note »."""
-    ev = _own_event(eid)
+    """Note d'un contrôle passé (fenêtre de la séance ou page du contrôle), ou « pas de note »
+    (possible aussi avant : contrôle annulé ou non noté)."""
+    ev = _own_controle(eid)
     default = url_for("agenda.event_prepare", eid=ev.id)
     if request.form.get("skip"):
         g = C.note_de(current_user, ev) or C._nouvelle_note(current_user.id, ev, now())
@@ -99,6 +109,8 @@ def event_grade(eid):
         return redirect(back_url(default))
     value, scale, coef = _form_note()
     err = C.verifier_note(value, scale, coef)
+    if not err and ev.start > now():
+        err = "Ce contrôle n’a pas encore eu lieu : tu pourras saisir ta note après."
     if err:
         if _fetch():
             return jsonify(ok=False, error=err), 400

@@ -21,6 +21,7 @@ import unicodedata
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from types import SimpleNamespace
 
 from flask import current_app
 from markupsafe import escape
@@ -364,11 +365,18 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
     last = AgendaImport.query.filter_by(user_id=imp.user_id, undone_at=None).order_by(AgendaImport.id.desc()).first()
     if last is None or last.id != imp.id:
         raise ValueError("Seul le dernier import peut être annulé.")
+    blocs_notes: list[str] = []
     for d in reversed(imp.details):
         ev = db.session.get(AgendaEvent, d.get("event_id"))
         if ev is None:
             continue
         if d["type"] == "added":
+            # Blocs « Réviser … » générés pour cette séance (hangar/controles.py) : ils partent avec elle,
+            # sinon ils resteraient dans l'agenda sans contrôle ; ceux déjà faits restent (historique).
+            n = AgendaTask.query.filter(AgendaTask.event_id == ev.id, AgendaTask.revision_auto.is_(True),
+                                        AgendaTask.done_at.is_(None)).delete(synchronize_session="fetch")
+            if n:
+                blocs_notes.append(f"{ev.title} : contrôle retiré du planning, {n} bloc(s) de révision supprimé(s).")
             AgendaTask.query.filter_by(event_id=ev.id).update({"event_id": None})
             AgendaGrade.query.filter_by(event_id=ev.id).update({"event_id": None})  # la note reste
             db.session.delete(ev)
@@ -389,7 +397,7 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
         notes += _restore_auto_quota(user, (imp.exam_quota_sets or "").splitlines())
         notes += _replanifier_revisions(user, at)
     db.session.commit()
-    return notes
+    return blocs_notes + notes
 
 
 def _replanifier_revisions(user: User, at: datetime) -> list[str]:
@@ -1602,7 +1610,19 @@ def task_payload(t: AgendaTask, url_for) -> dict:
         "channel": (t.reminders[0].channel if t.reminders else ""),
         "urls": {"save": url_for("agenda.task_update", tid=t.id), "delete": url_for("agenda.task_delete", tid=t.id),
                  "toggle": url_for("agenda.task_toggle", tid=t.id)},
+        "revise": _revise_url(t, url_for),
     }
+
+
+def _revise_url(t: AgendaTask, url_for) -> str:
+    """Bloc « Réviser … » d'un contrôle dont la matière est reliée à une catégorie de QCM : adresse de la
+    révision de cette catégorie (bouton « Réviser » de la fenêtre de la tâche) ; sinon vide."""
+    if not t.revision_auto or t.event is None:
+        return ""
+    link = _subject_link(SimpleNamespace(id=t.user_id), t.event.title)
+    if link is None or not link.qcm_category:
+        return ""
+    return url_for("qcm.play", revision=1, categorie=link.qcm_category)
 
 
 def day_events_payload(user: User, d: date) -> list[dict]:

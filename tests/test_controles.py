@@ -349,6 +349,56 @@ class ControlesTests(unittest.TestCase):
         c.post(f"/agenda/events/{passe.id}/resultat", data={"_csrf": token, "skip": "1"})
         self.assertEqual(C.a_noter(self.user), [])
 
+    # -- Relecture ----------------------------------------------------------------------------------------
+    def test_annuler_import_supprime_les_blocs_du_controle_ajoute(self):
+        """L'import qui avait ajouté le contrôle est annulé : ses blocs de révision disparaissent avec lui."""
+        from hangar.models import AgendaImport
+        self.importer(self.planning(exam=False))
+        self.importer(at=self.at + timedelta(minutes=1))
+        self.relier()
+        fait = AgendaTask(user_id=self.user.id, title="Déjà révisé", due_date=self.today, revision_auto=True,
+                          event_id=self.ev("exam1").id, done_at=self.at)
+        db.session.add(fait)
+        r = C.appliquer(self.user, self.ev("exam1"), self.at)
+        db.session.commit()
+        self.assertGreater(r["crees"], 0)
+        imp = AgendaImport.query.order_by(AgendaImport.id.desc()).first()
+        notes = A.undo_import(imp, at=self.at + timedelta(minutes=2))
+        self.assertEqual(AgendaEvent.query.filter_by(uid="exam1").count(), 0)
+        restes = AgendaTask.query.filter_by(revision_auto=True).all()
+        self.assertEqual([t.title for t in restes], ["Déjà révisé"])  # un bloc déjà fait reste (historique)
+        self.assertTrue(any("bloc(s) de révision supprimé(s)" in n for n in notes), notes)
+
+    def test_note_refusee_hors_controle_passe(self):
+        self.importer()
+        c, token = self.client()
+        futur, cours = self.ev("exam1"), self.ev("m1")
+        r = c.post(f"/agenda/events/{futur.id}/resultat", data={"_csrf": token, "value": "12", "scale": "20"})
+        self.assertIn(r.status_code, (302, 400))
+        self.assertEqual(AgendaGrade.query.filter_by(event_id=futur.id).count(), 0)
+        # « Pas de note » reste possible sur un contrôle à venir (annulé, pas noté…)
+        c.post(f"/agenda/events/{futur.id}/resultat", data={"_csrf": token, "skip": "1"})
+        self.assertTrue(AgendaGrade.query.filter_by(event_id=futur.id).one().skipped)
+        r = c.post(f"/agenda/events/{cours.id}/resultat", data={"_csrf": token, "value": "12", "scale": "20"})
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(AgendaGrade.query.filter_by(event_id=cours.id).count(), 0)
+        self.assertEqual(c.get(f"/agenda/events/{cours.id}/preparer").status_code, 404)
+
+    def test_bloc_de_revision_propose_la_revision_de_la_categorie(self):
+        self.importer()
+        self.relier()
+        C.appliquer(self.user, self.ev("exam1"), self.at)
+        db.session.commit()
+        bloc = AgendaTask.query.filter_by(revision_auto=True).first()
+        url = lambda ep, **kw: ep + "?" + "&".join(f"{k}={v}" for k, v in sorted(kw.items()))
+        self.assertEqual(A.task_payload(bloc, url)["revise"], "qcm.play?categorie=TECHNIQUES_NUM&revision=1")
+        simple = AgendaTask(user_id=self.user.id, title="Courses", event_id=self.ev("exam1").id)
+        db.session.add(simple)
+        db.session.commit()
+        self.assertEqual(A.task_payload(simple, url)["revise"], "")
+        c, _ = self.client()
+        self.assertIn("data-tm-revise", c.get("/agenda/").get_data(as_text=True))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1577,6 +1577,8 @@
     doneWrap.classList.toggle('hide', !edit);
     $('[data-tm-done]', form).checked = !!d.done;
     $('[data-tm-done]', form).dataset.url = edit ? d.urls.toggle : '';
+    const revise = $('[data-tm-revise]', form);
+    if (revise) { revise.classList.toggle('hide', !d.revise); revise.href = d.revise || '#'; }
     syncTaskForm(form);
     loadDayEvents(form, form.date.value, d.event);
     $$('.dd.open').forEach((x) => x.classList.remove('open'));
