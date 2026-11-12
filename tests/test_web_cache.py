@@ -11,6 +11,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from urllib.parse import unquote
 from unittest import mock
 
 from flask import Response, g, url_for
@@ -163,6 +164,36 @@ class MenuWikiTests(WebTestCase):
     def test_service_worker_garde_les_dossiers_ouverts(self):
         sw = self.client.get("/sw.js").get_data(as_text=True)
         self.assertIn(r"/^\/menu-wiki\/$/", sw)
+
+    def test_dossier_garde_hors_ligne_reste_navigable_par_le_menu(self):
+        # Avant : « ⤓ Hors ligne » gardait les pages mais pas le menu chargé à la demande ; hors ligne,
+        # chaque sous-dossier affichait « Impossible d'afficher ce dossier ».
+        self.write("Hack/Web Request/Été (v2)!.md", "# Été\n")
+        d = self.client.get("/hors-ligne/dossier.json?dossier=Hack").get_json()
+        menus = [u for u in d["urls"] if u.startswith("/menu-wiki/")]
+        # Écrites exactement comme menu_wiki.js les demande : encodeURIComponent(data-menu-dossier).
+        self.assertIn("/menu-wiki/?dossier=Hack%2F", menus)
+        self.assertIn("/menu-wiki/?dossier=Hack%2FLinux%2F", menus)
+        self.assertIn("/menu-wiki/?dossier=Hack%2FWeb%20Request%2F", menus)
+        self.assertEqual(len(menus), 3)
+        self.assertEqual(d["pages"], 3)  # le compte des pages ne change pas
+        # Chaque adresse annoncée correspond à un dossier présent dans le menu (data-menu-dossier) et répond.
+        annonces = set(re.findall(r'data-menu-dossier="([^"]+)"', self.client.get("/wiki/Accueil").get_data(as_text=True)))
+        annonces |= set(re.findall(r'data-menu-dossier="([^"]+)"', self.client.get("/menu-wiki/?dossier=Hack%2F").get_data(as_text=True)))
+        for u in menus:
+            self.assertIn(unquote(u.split("=", 1)[1]), annonces)
+            self.assertEqual(self.client.get(u).status_code, 200, u)
+        # Sous-dossier gardé seul : son menu, pas celui des dossiers voisins.
+        linux = self.client.get("/hors-ligne/dossier.json?dossier=Hack/Linux").get_json()["urls"]
+        self.assertEqual([u for u in linux if u.startswith("/menu-wiki/")], ["/menu-wiki/?dossier=Hack%2FLinux%2F"])
+        # Tout le coffre : tous les dossiers.
+        tout = self.client.get("/hors-ligne/dossier.json").get_json()["urls"]
+        self.assertEqual(len([u for u in tout if u.startswith("/menu-wiki/")]), 6)
+
+    def test_menu_dit_quand_la_connexion_manque(self):
+        js = (Path(self.app.static_folder) / "wiki" / "menu_wiki.js").read_text(encoding="utf-8")
+        self.assertIn("navigator.onLine === false", js)
+        self.assertIn("Pas de connexion : ce dossier n’a pas été gardé sur cet appareil", js)
 
 
 class IconesTests(WebTestCase):
@@ -328,7 +359,10 @@ class CompressionTests(WebTestCase):
         r = self.client.get("/", headers={"Accept-Encoding": "gzip"}, environ_base=distant)
         self.assertEqual(r.headers.get("Content-Encoding"), "gzip")
         self.assertIn("Accept-Encoding", r.headers["Vary"])
-        self.assertIn("Bonjour", gzip.decompress(r.get_data()).decode())
+        # Texte stable de la page (pas la salutation, qui dépend de l'heure).
+        corps = gzip.decompress(r.get_data()).decode()
+        self.assertIn("<title>", corps)
+        self.assertIn("</html>", corps)
         # Même machine : pas de compression (aucun gain).
         self.assertNotIn("Content-Encoding", self.client.get("/", headers={"Accept-Encoding": "gzip"}).headers)
         # Navigateur qui ne la demande pas.

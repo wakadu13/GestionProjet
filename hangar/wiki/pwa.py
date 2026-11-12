@@ -9,6 +9,7 @@ application (``/qcm/…``), jamais touchée par ce service worker.
 from __future__ import annotations
 
 import json
+from urllib.parse import quote
 
 from flask import abort, jsonify, make_response, render_template, request, url_for
 
@@ -100,10 +101,30 @@ def hors_connexion():
     return render_template("wiki/hors_connexion.html", cache=CACHE, theme_color=THEME)
 
 
+def _menus(arbre, dossier: str) -> list[str]:
+    """Adresses du menu de gauche (route wiki.menu_dossier) pour le dossier et tous ses sous-dossiers,
+    écrites exactement comme menu_wiki.js les demande (encodeURIComponent de data-menu-dossier, barre
+    finale comprise) : le service worker retrouve ainsi la copie gardée."""
+    noeud = arbre
+    for partie in dossier.split("/") if dossier else []:
+        noeud = next((f for f in noeud["folders"] if f["name"] == partie), None)
+        if noeud is None:
+            return []
+    base = url_for("wiki.menu_dossier")
+    urls = []
+    pile = [noeud] if dossier else list(noeud["folders"])
+    while pile:
+        n = pile.pop(0)
+        urls.append(base + "?dossier=" + quote(n["path"], safe="!~*'()"))  # comme encodeURIComponent
+        pile.extend(n["folders"])
+    return urls
+
+
 @bp.route("/hors-ligne/dossier.json")
 def dossier_hors_ligne():
     """Adresses à mettre en cache pour lire un dossier sans connexion : ses pages, images et PDF (et le
-    lecteur de PDF s'il y en a)."""
+    lecteur de PDF s'il y en a), plus le contenu du menu de gauche pour ce dossier et ses sous-dossiers
+    (chargé à la demande par menu_wiki.js : sans lui, on ne pourrait pas y naviguer hors ligne)."""
     vault = get_vault()
     dossier = request.args.get("dossier", "").replace("\\", "/").strip("/")
     prefixe = f"{dossier}/" if dossier else ""
@@ -119,4 +140,4 @@ def dossier_hors_ligne():
     if not pages and not fichiers:
         abort(404, description="Dossier introuvable ou vide")
     outils = fichiers_lecteur_pdf() if pdf else []
-    return jsonify(dossier=dossier, urls=pages + fichiers + outils, pages=len(pages), pdf=pdf, cache=CACHE)
+    return jsonify(dossier=dossier, urls=pages + fichiers + _menus(vault.tree, dossier) + outils, pages=len(pages), pdf=pdf, cache=CACHE)
