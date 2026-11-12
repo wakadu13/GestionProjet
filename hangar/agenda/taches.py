@@ -147,10 +147,32 @@ def task_end(task: AgendaTask, d: date | None = None) -> datetime | None:
     return datetime.combine(d, task.start_time) + timedelta(hours=1)
 
 
+def bloc_manque(t: AgendaTask, today: date) -> bool:
+    """Bloc « Réviser … » placé par « Planifier mes révisions » (hangar/controles.py) dont le jour est passé sans
+    être coché : il est **manqué**, pas en retard. Il reste dans l'agenda à son jour (historique), mais ne compte
+    ni dans « En retard », ni dans la pastille des tâches, ni dans le résumé quotidien : la charge restante est
+    déjà répartie sur les blocs à venir, et après le contrôle il n'a plus d'objet."""
+    return bool(t.revision_auto) and t.done_at is None and t.due_date is not None and t.due_date < today
+
+
+def tache_en_retard(t: AgendaTask, today: date) -> bool:
+    """Tâche non faite dont l'échéance est passée (les blocs de révision manqués exceptés)."""
+    return t.done_at is None and t.due_date is not None and t.due_date < today and not t.revision_auto
+
+
+def compte_taches_dues(user: User, today: date) -> tuple[int, int]:
+    """(tâches pour aujourd'hui ou en retard, dont en retard) : pastille des tâches. Blocs manqués exclus."""
+    due = [t for t in AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.done_at.is_(None),
+                                               AgendaTask.due_date <= today) if not bloc_manque(t, today)]
+    return len(due), sum(1 for t in due if t.due_date < today)
+
+
 def open_task_groups(user: User, today: date) -> dict[str, list[AgendaTask]]:
     tasks = AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.done_at.is_(None)).all()
     groups = {"overdue": [], "today": [], "tomorrow": [], "week": [], "later": [], "nodate": []}
     for t in tasks:
+        if bloc_manque(t, today):
+            continue  # bloc de révision manqué : ni à faire ni en retard (voir bloc_manque)
         if t.due_date is None:
             groups["nodate"].append(t)
         elif t.due_date < today:

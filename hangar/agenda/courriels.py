@@ -202,7 +202,7 @@ def _digest_taches(ctx):
     overdue = (AgendaTask.query.filter(AgendaTask.user_id == ctx.user.id, AgendaTask.done_at.is_(None),
                                        AgendaTask.due_date < ctx.aujourdhui).order_by(AgendaTask.due_date).all())
     listed = {o.task.id for o in occs}  # une tâche répétée déjà listée pour le jour n'est pas relistée en retard
-    overdue = [t for t in overdue if t.id not in listed]
+    overdue = [t for t in overdue if t.id not in listed and not A.bloc_manque(t, ctx.aujourdhui)]
     # Résumé du soir (jour résumé = demain) : ce qui reste à faire aujourd'hui n'est ni « demain » ni « en retard »
     rest = []
     if ctx.jour > ctx.aujourdhui:

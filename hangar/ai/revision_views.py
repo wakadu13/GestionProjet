@@ -773,7 +773,7 @@ def kit_revision():
         try:
             faits = kit.lancer(current_user, vault, dossier, request.form.getlist("fiche"),
                                request.form.getlist("qcm"), nombre=nombre, lot=lot, categorie=categorie,
-                               date_examen=date_examen)
+                               date_examen=date_examen, evenement=eid)
         except AIError as e:
             faits = getattr(e, "faits", None)
             if faits and (faits["fiches"] or faits["qcm"]):

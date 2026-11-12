@@ -19,6 +19,7 @@ import uuid
 from datetime import date, datetime, time
 
 from .. import heure
+from ..controles import PAGES_IA
 from ..extensions import db
 from ..models import now
 from ..texte import cle_tri, plier
@@ -30,7 +31,7 @@ SORTIE_FICHE = 6000          # jetons de sortie prévus pour une fiche (réflexi
 SORTIE_QCM_BASE = 4000       # … pour un QCM : réflexion, puis environ 300 jetons par question
 SORTIE_PAR_QUESTION = 300
 NOMBRE_DEFAUT = 15
-_IGNOREES = re.compile(r"sommaire|\((fiche|ia(?: \d+)?)\)\s*$", re.I)
+_IGNOREES = re.compile(r"sommaire|" + PAGES_IA.pattern, re.I)  # fiches et versions IA : même règle que les contrôles
 
 
 def pages_de(vault, dossier: str) -> list:
@@ -162,7 +163,7 @@ def plan(user, vault, dossier: str, nombre: int = NOMBRE_DEFAUT, categorie: str 
 
 
 def lancer(user, vault, dossier: str, fiches: list[str], qcms: list[str], *, nombre: int, lot: bool,
-           categorie: str = "", date_examen: date | None = None) -> dict:
+           categorie: str = "", date_examen: date | None = None, evenement: int | None = None) -> dict:
     """Vérifie le coût des pages cochées face au plafond restant, puis crée les travaux du kit. Renvoie
     {fiches, qcm, cout} ; lève AIError (code « plafond ») si l'estimation dépasse ce qui reste."""
     row = core.pick("chat")
@@ -187,13 +188,40 @@ def lancer(user, vault, dossier: str, fiches: list[str], qcms: list[str], *, nom
             faits["fiches"] += 1
         for note in qcms:
             travaux.demander_qcm(note=note, nombre=nombre, categorie=travaux.dossier_valide(categorie) or "",
-                                 user=user, lot=lot, date_examen=date_examen, kit=kit)
+                                 user=user, lot=lot, date_examen=date_examen, kit=kit,
+                                 evenement=evenement if date_examen else None)
             faits["qcm"] += 1
     except AIError as e:
         e.faits = faits  # plafond atteint en route : ce qui est déjà lancé continue
         raise
     db.session.commit()
     return faits
+
+
+def jour_du_controle(user_id: int, eid, matiere: str = "") -> date | None:
+    """Jour actuel du contrôle choisi pour le kit, relu à la publication d'un QCM (un import a pu le déplacer ou le
+    retirer entre-temps) : le contrôle s'il est toujours à venir, sinon le prochain contrôle de la même matière
+    (comme ``sync_exam_objectives`` pour les sets existants), sinon None (pas de date d'examen)."""
+    from ..agenda import is_exam, subject_key
+    from ..models import AgendaEvent
+
+    debut = datetime.combine(now().date(), time(0))
+    try:
+        e = db.session.get(AgendaEvent, int(eid)) if eid else None
+    except (TypeError, ValueError):
+        e = None
+    if e is not None and e.user_id == user_id:
+        matiere = subject_key(e.title)
+        if e.is_active and not e.cancelled and is_exam(e) and e.start >= debut:
+            return e.start.date()
+    if not matiere:
+        return None
+    for e in (AgendaEvent.query.filter(AgendaEvent.user_id == user_id, AgendaEvent.status == "active",
+                                       AgendaEvent.cancelled.is_(False), AgendaEvent.start >= debut)
+              .order_by(AgendaEvent.start).limit(400)):
+        if is_exam(e) and subject_key(e.title) == matiere:
+            return e.start.date()
+    return None
 
 
 def date_controle(user, eid) -> tuple[date | None, str]:

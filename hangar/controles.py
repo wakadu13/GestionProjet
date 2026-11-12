@@ -43,6 +43,10 @@ CRENEAU_CONFORT = timedelta(minutes=45)  # créneau préféré : assez long pour
 CATEGORIE_TACHE = "Révisions"
 JOURS_FIGER = 3                # maîtrise figée jusqu'à 3 jours après le contrôle (appli fermée ce jour-là)
 JOURS_A_NOTER = 45             # contrôles passés sans note rappelés au tableau de bord
+# Pages écrites par l'IA à côté d'une page du cours : fiches du kit de révision (« Page (Fiche) ») et versions
+# proposées (« Page (IA) », « Page (IA 2) »). Ce ne sont pas des pages du cours à lire (même règle que le kit,
+# hangar/ai/kit.py) : elles ne comptent ni dans les pages lues, ni dans le temps de lecture restant.
+PAGES_IA = re.compile(r"\((?:fiche|ia(?: \d+)?)\)\s*$", re.I)
 
 
 def libelle(statut: str | None) -> str:
@@ -90,7 +94,7 @@ def lecture(user, wiki_path: str) -> dict | None:
     prefix = path.lower() + "/"
     seule = vault.notes.get(path.lower().removesuffix(".md"))
     notes = [seule] if seule is not None else [n for n in vault.notes.values()
-                                              if str(n.path).lower().startswith(prefix)]
+                                              if str(n.path).lower().startswith(prefix) and not PAGES_IA.search(n.name)]
     notes.sort(key=lambda n: cle_tri(str(n.path)))
     pdfs = [] if seule is not None else [a for a in vault.attachments.values()
                                          if a.suffix == ".pdf" and str(a.path).lower().startswith(prefix)]
@@ -375,7 +379,7 @@ def _blocs_auto(user, ev: AgendaEvent, at: datetime, futurs: bool = True) -> lis
     for t in q:
         if futurs and t.due_date is not None and (t.due_date < at.date() or (
                 t.due_date == at.date() and t.start_time and datetime.combine(t.due_date, t.start_time) < at)):
-            continue  # bloc passé non coché : gardé tel quel
+            continue  # bloc passé non coché : gardé tel quel, « manqué » (agenda.taches.bloc_manque), pas en retard
         out.append(t)
     return out
 
@@ -434,13 +438,50 @@ def appliquer(user, ev: AgendaEvent, at: datetime | None = None) -> dict:
             "total": prop["total"]}
 
 
-def retirer(user, ev: AgendaEvent, at: datetime | None = None) -> int:
-    """Supprime les blocs générés à venir d'un contrôle. Sans valider."""
+def _photo_bloc(t: AgendaTask) -> dict:
+    return {"title": t.title, "due_date": t.due_date.isoformat() if t.due_date else None,
+            "start_time": t.start_time.isoformat(timespec="minutes") if t.start_time else None,
+            "end_time": t.end_time.isoformat(timespec="minutes") if t.end_time else None,
+            "category": t.category or "", "notes": t.notes or "", "color": t.color or "",
+            "priority": t.priority or ""}
+
+
+def retirer(user, ev: AgendaEvent, at: datetime | None = None, journal: dict | None = None) -> int:
+    """Supprime les blocs générés à venir d'un contrôle. Sans valider. `journal` ({id de séance : [blocs]}) reçoit
+    la photo des blocs supprimés : l'annulation de l'import qui a retiré le contrôle les rend (`rendre_blocs`)."""
     at = at or now()
     blocs = _blocs_auto(user, ev, at)
+    if journal is not None and blocs:
+        journal.setdefault(ev.id, []).extend(_photo_bloc(t) for t in blocs)
     for t in blocs:
         db.session.delete(t)
     return len(blocs)
+
+
+def rendre_blocs(user, ev: AgendaEvent, photos: list[dict], at: datetime | None = None) -> int:
+    """Annulation d'un import : recrée les blocs que cet import avait supprimés (voir `retirer`), sauf ceux dont
+    le moment est passé entre-temps ou si le contrôle n'est plus à venir. Sans valider."""
+    at = at or now()
+    if not photos or not ev.is_active or ev.start <= at:
+        return 0
+    n = 0
+    for p in photos:
+        try:
+            jour = date.fromisoformat(p["due_date"]) if p.get("due_date") else None
+            debut = time.fromisoformat(p["start_time"]) if p.get("start_time") else None
+            fin = time.fromisoformat(p["end_time"]) if p.get("end_time") else None
+        except (TypeError, ValueError):
+            continue
+        if jour is not None and (jour < at.date() or (jour == at.date() and debut and datetime.combine(jour, debut) < at)):
+            continue
+        db.session.add(AgendaTask(user_id=user.id, title=(p.get("title") or f"Réviser {ev.title}")[:300],
+                                  due_date=jour, start_time=debut, end_time=fin,
+                                  category=p.get("category") or CATEGORIE_TACHE, notes=p.get("notes") or "",
+                                  color=p.get("color") or "", priority=p.get("priority") or "none",
+                                  event_id=ev.id, revision_auto=True, created_at=at, updated_at=at))
+        n += 1
+    db.session.flush()
+    return n
 
 
 def _en_conflit(user, t: AgendaTask) -> bool:
@@ -458,10 +499,10 @@ def _en_conflit(user, t: AgendaTask) -> bool:
     return False
 
 
-def replanifier_apres_import(user, at: datetime | None = None) -> list[str]:
+def replanifier_apres_import(user, at: datetime | None = None, journal: dict | None = None) -> list[str]:
     """Après un import (ou son annulation) : les blocs générés qui tombent sur un cours, ou après un contrôle
-    déplacé, sont replacés ; ceux d'un contrôle retiré sont supprimés. Retourne les phrases du compte rendu.
-    Sans valider la base."""
+    déplacé, sont replacés ; ceux d'un contrôle retiré sont supprimés (photographiés dans `journal`, voir
+    `retirer`). Retourne les phrases du compte rendu. Sans valider la base."""
     at = at or now()
     blocs = AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.revision_auto.is_(True),
                                     AgendaTask.done_at.is_(None), AgendaTask.event_id.isnot(None),
@@ -476,7 +517,7 @@ def replanifier_apres_import(user, at: datetime | None = None) -> list[str]:
             continue
         nom = ev.title
         if not ev.is_active or ev.start <= at:
-            n = retirer(user, ev, at)
+            n = retirer(user, ev, at, journal)
             if n:
                 notes.append(f"{nom} : contrôle retiré du planning, {n} bloc(s) de révision supprimé(s).")
             continue

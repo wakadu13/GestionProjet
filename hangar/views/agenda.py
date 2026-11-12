@@ -57,14 +57,13 @@ def _agenda_context():
             return {}
         s = A.settings_of(current_user)
         today = now().date()
-        due = AgendaTask.query.filter(AgendaTask.user_id == current_user.id, AgendaTask.done_at.is_(None),
-                                      AgendaTask.due_date <= today).all()
+        due, overdue = A.compte_taches_dues(current_user, today)  # blocs de révision manqués exclus
         g.agenda_cfg = {
             "default_reminder": s.default_reminder if s.default_reminder is not None else -1,
             "channel": s.reminder_channel or "email",
             "categories": A.categories(current_user),
             "has_email": bool(A._mail().valid_email(current_user.contact_email)),
-            "due": len(due), "overdue": sum(1 for t in due if t.due_date < today),
+            "due": due, "overdue": overdue,
             "tickets": _nb_tickets_dus(today),  # pastille de « Travail » : (dus, dont en retard)
         }
         return g.agenda_cfg

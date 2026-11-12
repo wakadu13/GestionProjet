@@ -1206,7 +1206,9 @@ class AgendaTask(db.Model):
 
     @property
     def is_overdue(self) -> bool:
-        return not self.is_done and self.due_date is not None and self.due_date < heure.today()
+        # Un bloc de révision généré passé sans être coché est « manqué », pas en retard (agenda.taches.bloc_manque)
+        return (not self.is_done and self.due_date is not None and self.due_date < heure.today()
+                and not self.revision_auto)
 
 
 class AgendaReminder(db.Model):
