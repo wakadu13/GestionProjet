@@ -35,7 +35,7 @@ Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochai
 - Rappels par tâche ou par séance : à l'heure, 15 min, 1 h, la veille, 2 jours, 1 semaine avant… ou à une date précise ; par **e-mail + notification** dans l'application, ou notification seule.
 - **Résumé quotidien** par e-mail (activé par défaut à 7 h) : un seul message avec tout ce qu'il y a à faire — cours du jour (horaires, salles), tâches du jour et en retard, tickets de projet à échéance, cartes de QCM à réviser et examens proches, contrôles de la semaine, changements récents du planning, initiatives à risque. Le matin pour la journée, ou la veille au soir pour le lendemain ; rien n'est envoyé les jours vides ; aperçu dans *Agenda › Résumé quotidien*.
 - **Rappel automatique des contrôles** (la veille, 2 jours, 1 semaine avant), e-mail récapitulatif des **changements après chaque import**.
-- Pour recevoir réellement les e-mails : renseigne ton adresse dans *Rappels et e-mails*, puis (administrateur) configure l'envoi dans *menu de l'espace › E-mails automatiques* — mode **SMTP**, préréglage Gmail avec un [mot de passe d'application](https://myaccount.google.com/apppasswords). Sinon, les messages sont seulement enregistrés en `.eml` dans `data/outbox/`.
+- Pour recevoir réellement les e-mails : renseigne ton adresse dans *Rappels et e-mails*, puis (administrateur) configure l'envoi dans *Réglages › Envoi des e-mails* (aussi dans le menu de l'espace) — mode **SMTP**, préréglage Gmail avec un [mot de passe d'application](https://myaccount.google.com/apppasswords). Sinon, les messages sont seulement enregistrés en `.eml` dans `data/outbox/`.
 - Les rappels partent tant que Hangar est lancé (`uv run hangar`). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée (un rappel « à une date précise » part encore jusqu'à 24 h après son heure, même après l'échéance de la tâche). Une tâche répétée a un rappel à chaque occurrence, même si tu n'as pas coché la précédente.
 - Si un e-mail ne part pas à cause d'une panne passagère (Wi-Fi pas encore revenu au réveil du portable, serveur injoignable), Hangar réessaie seul après 1, 5, 15 puis 60 minutes, jusqu'à la fin de la séance ou de la tâche pour un rappel, jusqu'à la fin de la journée pour le résumé (24 h pour les autres e-mails). Un mot de passe refusé ou une adresse rejetée ne sont pas réessayés. Les e-mails en échec s'affichent dans *Rappels et e-mails* et sur le tableau de bord, avec un bouton « Renvoyer les échecs ».
 
@@ -51,7 +51,7 @@ Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaqu
 - Menu façon Plane : collections (les dossiers), favoris, pages récentes, sommaire, tags, graphe, recherche (pages **et texte des PDF**).
 - Éditeur CodeMirror (aperçu en direct, côte à côte, Ctrl+S, collage d'images, liens suggérés, brouillon de secours), historique des versions avec différences et restauration (une version au début de chaque séance d'écriture puis toutes les 10 minutes ; avec le temps, une par heure, par jour, par semaine puis par mois ; la corbeille, les restaurations, les imports et l'IA gardent toujours leur version ; au plus 100 versions et 20 Mo par page), import de fichiers (.md, PDF, images, LaTeX), lecteur PDF avec annotations, conversion LaTeX → page.
 - **Lecture** comme dans Revision : le menu se cache pendant la lecture (languette ›, bord de l'écran, ou bouton ▯ pour le garder), plein écran, impression propre (Ctrl+P), palette de commandes intégrée à Ctrl+K (pages, PDF, sets de QCM, sessions de langue, commandes).
-- **Hors ligne et installable** : le wiki s'installe sur téléphone (« Ajouter à l'écran d'accueil ») ; les pages lues restent lisibles sans réseau, et « ⤓ Hors ligne » sur un dossier du sommaire garde d'un coup ses pages, images et PDF.
+- **Hors ligne et installable** : le wiki s'installe sur téléphone (« Ajouter à l'écran d'accueil »). Les pages lues restent lisibles sans réseau : un bandeau « Copie gardée sur cet appareil du … » te le signale. « ⤓ Hors ligne » sur un dossier du sommaire garde d'un coup ses pages, images et PDF, sans toucher à tes « Récents ». Le menu de gauche ne contient que la branche de la page ouverte, et les autres dossiers se chargent quand tu les ouvres : une page pèse environ 3 fois moins, un dossier gardé hors ligne aussi.
 - Sous chaque page : « Réviser ce cours » (QCM écrits d'après la page, cartes, QCM et fiche par l'IA) et le **tuteur** (questions sur la page, « 📷 Corriger ma copie »). Le menu du wiki donne aussi accès à tout Revision : Aujourd'hui, QCM, Langues, Demander au wiki, Corriger ma copie, Transformer un cours, Travaux de l'IA, Documentation.
 - Documentation intégrée (`/documentation/`), page des erreurs du serveur pour les administrateurs, anciennes adresses de Revision redirigées.
 
@@ -59,14 +59,16 @@ Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaqu
 
 Section séparée du wiki. Tout fichier `.json` du coffre contenant une clé `questions` est un set (catégorie = dossier, `QCM/` par défaut, comme dans Revision).
 - Types QCM, QCR, texte à trous, réponse rédigée, flashcards, images masquées ; langues (vocabulaire, conjugaison, grammaire).
+- Réponses tapées (textes à trous, réponses rédigées) : majuscules, accents, apostrophe et ligatures ne comptent pas (« noeud » est juste pour « nœud »), en ligne comme hors ligne.
 - Algorithme **FSRS** : chaque carte revient juste avant d'être oubliée ; « Réviser tout ce qui est dû » ; quotas par set, **date d'examen** avec quotas ajustés automatiquement (« Ajuster auto. ») : si tu es en retard, plus de nouvelles questions par jour et des révisions sans limite ; si l'examen est trop proche pour tout savoir, les questions jamais vues sont réparties pour que tu les aies toutes vues avant la veille de l'examen.
+- Le planning estime quand tu seras prêt pour ton examen sans ralentir Hangar, même quand tu rates encore beaucoup de questions : l'accueil, le calendrier et les pages QCM restent rapides quand une date d'examen est posée.
 - **Ranger tes fichiers sans perdre ta progression** : la progression suit un set déplacé ou renommé, même dans Obsidian ou l'explorateur de fichiers (Hangar le reconnaît à son contenu, sans toucher au fichier). Si Hangar ne peut pas trancher (deux copies identiques, set très modifié), la page *Statistiques* liste les « progressions sans fichier », avec « Rattacher à… » et « Oublier ».
 - Statistiques (calendrier d'activité, série de jours, temps par matière), espace personnel, import/export JSON, CSV et Anki (`.apkg`), signalements.
 - Les cartes dues apparaissent sur le tableau de bord et dans le résumé quotidien. `uv run hangar qcm-verifier` contrôle les fichiers.
 - **QCM hors ligne** (`/qcm/hors-ligne/`, installable) : télécharge des sets et des paquets de langue, révise sans réseau ; les réponses rejoignent ta progression au retour de la connexion, même si le set a été renommé ou déplacé entre-temps. Si son fichier est introuvable pour l'instant (en cours de modification, par exemple), elles restent sur l'appareil jusqu'à ce qu'il revienne.
 - **Rappel quotidien par notification** du navigateur, à l'heure choisie (page « Aujourd'hui ») : ce qu'il reste à réviser et ta série de jours.
-- **Appli Android de Revision** : Hangar répond aux mêmes adresses (connexion par jeton d'appareil, QCM hors ligne, rappel, widget, partage vers le wiki) ; il suffit d'indiquer l'adresse de Hangar dans les réglages de l'appli. Les appareils connectés se révoquent depuis *Mon profil*.
-- Connexion protégée : blocage de 30 minutes après 5 mauvais mots de passe (déblocage par un administrateur ou `uv run hangar connexions-debloquer`).
+- **Appli Android de Revision** : Hangar répond aux mêmes adresses (connexion par jeton d'appareil, QCM hors ligne, rappel, widget, partage vers le wiki) ; il suffit d'indiquer l'adresse de Hangar dans les réglages de l'appli. Les appareils connectés se révoquent depuis *Réglages › Profil*.
+- Connexion protégée : à partir de 3 essais restants, la page de connexion annonce combien il en reste ; après 5 mauvais mots de passe, la connexion est bloquée 30 minutes. Le message reste affiché sur la page et donne la façon de débloquer tout de suite : sur le PC qui fait tourner Hangar, `uv run hangar connexions-debloquer`, ou un administrateur depuis son profil (Connexions bloquées).
 
 ## Assistant IA (Claude ou IA open source)
 
@@ -129,6 +131,12 @@ L'adresse à partager (ex. `http://192.168.1.20:5000`) s'affiche dans le termina
 
 **Garde-fous pour l'usage à plusieurs.** Les couleurs (états, étiquettes, projets, avatars, pense-bêtes) ne sont acceptées qu'au format `#rrggbb`. Une pièce jointe de ticket ne s'ouvre dans le navigateur que si c'est une image PNG, JPEG, GIF, WebP ou un PDF (d'après son extension) : tout le reste, SVG compris, est téléchargé et ne peut rien exécuter. Hangar n'affiche aucune image venue d'Internet : dans un ticket, un commentaire, une page ou une réponse de l'IA, `![texte](https://…)` devient un simple lien. La déconnexion se fait avec le bouton du menu (l'ancienne adresse `/deconnexion/` demande une confirmation), et « Télécharger la base actuelle » est un bouton : une image piégée ne peut ni te déconnecter ni créer de copie de la base.
 
+Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse ses pages. Les fichiers de l'application (styles, scripts, icônes) restent dans le navigateur jusqu'à leur prochaine modification, même après un `git pull`. `HANGAR_COMPRESSION=jamais` (ou `toujours`) change ce réglage.
+
+**Appareil partagé** : « Se déconnecter » (menu de l'espace) propose « Effacer aussi les pages gardées sur cet appareil ». La case est cochée d'office, sauf sur la machine qui fait tourner Hangar. Elle efface les pages du wiki lues ou gardées hors ligne, les QCM téléchargés et les brouillons de l'éditeur. S'il reste des réponses de QCM pas encore envoyées, Hangar essaie de les envoyer, et te prévient sinon. Quand un autre compte se connecte sur le même navigateur, les pages du wiki gardées pour le compte précédent sont effacées.
+
+**Sécurité des pages** : chaque réponse porte les en-têtes nosniff, X-Frame-Options et Referrer-Policy, et une politique de contenu (CSP) qui n'exécute que les scripts de Hangar, ne charge que ses images et ne se connecte qu'à Hangar. En cas de souci avec une page : `HANGAR_CSP=rapport` (les blocages sont seulement signalés dans la console du navigateur) ou `HANGAR_CSP=non`.
+
 ## Fonctionnalités
 
 **Tickets (work items)**
@@ -158,11 +166,11 @@ L'adresse à partager (ex. `http://192.168.1.20:5000`) s'affiche dans le termina
 - **Bilans enregistrés** (chiffres figés) avec sections rédigées : faits marquants, difficultés, décisions, prochaines étapes. Un bilan enregistré n'est visible que par les personnes qui ont accès à tous les projets qu'il couvre ; sinon il reste réservé à son auteur et aux administrateurs. « Actualiser » recalcule le bilan sur ses projets d'origine.
 - Export **Word (.docx)**, Markdown, impression / PDF, et **envoi par e-mail**.
 
-**E-mails automatiques** (menu de l'espace › E-mails automatiques)
+**Envoi des e-mails** (*Réglages › Envoi des e-mails*, aussi dans le menu de l'espace)
 - Notifications instantanées (assignation, mention, commentaire…), rappel quotidien des échéances, récapitulatif hebdomadaire, bilan hebdomadaire envoyé aux responsables, e-mails manuels avec modèles (relance, convocation, compte rendu, demande de documents).
 - Mode **boîte d'envoi locale** par défaut : rien ne sort de la machine, les messages sont enregistrés en `.eml` dans `data/outbox/` (ouvrables avec Thunderbird/Outlook). Mode **SMTP** pour un envoi réel (préréglages Gmail avec mot de passe d'application, Outlook, Orange, Free).
 - En cas de panne passagère, nouvel essai automatique (1, 5, 15 puis 60 min) jusqu'à la date limite du message ; bouton **« Renvoyer les échecs »** après avoir corrigé les réglages (par exemple un mot de passe d'application). Les incidents du fil d'arrière-plan sont notés sur la page des erreurs du serveur (`/erreurs/`).
-- Chaque membre renseigne son adresse de notification et ses préférences dans **Mon profil** (l'adresse ne sert pas à la connexion).
+- Chaque membre renseigne son adresse de notification et ses préférences dans **Réglages › Profil** (l'adresse ne sert pas à la connexion).
 
 **Équipe**
 - Rôles d'espace (administrateur, membre, invité) et de projet, invitations avec mot de passe provisoire, désactivation, réinitialisation.
@@ -171,12 +179,14 @@ L'adresse à partager (ex. `http://192.168.1.20:5000`) s'affiche dans le termina
 - Notifications (assignation, mention, commentaire, changement d'état), mise en sommeil, archivage.
 
 **Confort**
-- Palette de commandes `Ctrl+K`, raccourcis clavier (`C` créer, `/` rechercher, `G` puis `H/I/P/N/A/T`, `?` aide), thème clair / sombre, pense-bêtes sur l'accueil, interface responsive.
+- Palette de commandes `Ctrl+K`, qui trouve aussi les réglages (« réglages », « paramètres », « sauvegarde », « e-mails »…). Raccourcis clavier : `C` créer, `/` rechercher, `G` puis `H/I/P/N/A/T`, `?` aide, `Échap` ferme un menu, le menu latéral ou le panneau IA. Après un changement fait au clavier, le focus reste sur la case modifiée, même après le rechargement de la liste. Lien « Aller au contenu » au premier `Tab`. Contrastes conformes à WCAG AA (4,5:1) en thème clair et sombre. Thème clair / sombre, pense-bêtes sur l'accueil, interface responsive.
+- Un seul menu **Réglages** (icône en bas de la barre de gauche), avec les mêmes noms dans le menu de l'espace et dans la palette. « → Agenda », « → IA » et « → Travail » signalent les réglages rangés dans une autre section (Rappels et e-mails, Fournisseurs d'IA, Membres).
+- **Recherche à la française**, partout (palette `Ctrl+K`, filtres des listes, liaison de tickets, pages, wiki, QCM, assistant IA, « @ ») : majuscules, accents, forme de l'apostrophe (’ ou ') et ligatures ne comptent pas — « etablir » trouve « Établir le plan d’actions », « noeud » trouve « Nœud ». « % » et « _ » sont cherchés tels quels. Les listes sont triées à la française : « anglais, Droit, École, Tactique, Zèbre », « Linux 2 » avant « Linux 10 ».
 
 **Données**
 - Import Excel / CSV / JSON (détection automatique des colonnes : Titre/Tâche, Statut, Priorité, Responsable, Appui, Début, Échéance, Phase, Partie, Dépend de…), export Excel (avec feuille de synthèse), CSV, JSON, Markdown, calendrier iCalendar (.ics). Un fichier exporté par Hangar se réimporte sans perte, dans le même projet ou dans un autre : étiquettes, modules (un nom qui contient une virgule est écrit entre guillemets), parent et « bloqué par » visent les tickets du fichier. L'option « Mettre à jour les tickets existants » est décochée par défaut. Cochée, elle ne change que les cellules remplies (une colonne absente ou vide garde la valeur du ticket), ne touche jamais aux tickets d'un autre projet (une clé `EAE-…` importée dans `MEM` devient un nouveau ticket) et fait une sauvegarde de la base juste avant.
 - **Sauvegarde complète (.zip)** en un clic ou en ligne de commande (base, wiki, sets de QCM, copies, pièces jointes, agenda), sauvegardes de la base restaurables en un clic, export JSON des projets (Travail).
-- **API REST** `/api/v1` avec jetons personnels (voir *Paramètres › Jetons d'API*). Pour modifier une description sans écraser celle d'un autre, renvoie `description_version` (lu dans le ticket) avec la nouvelle `description` : la réponse est 409 si elle a changé entre-temps.
+- **API REST** `/api/v1` avec jetons personnels (voir *Réglages › Jetons d'API*). Pour modifier une description sans écraser celle d'un autre, renvoie `description_version` (lu dans le ticket) avec la nouvelle `description` : la réponse est 409 si elle a changé entre-temps.
 
 ## Commandes
 
@@ -240,10 +250,12 @@ hangar/
 ├── pyproject.toml          dépendances (uv)
 ├── hangar/
 │   ├── __init__.py         application Flask, sécurité (CSRF), aides de gabarits
+│   ├── web.py              en-têtes de sécurité (CSP), cache des fichiers statiques, feuille d'icônes, compression
 │   ├── cli.py              ligne de commande
 │   ├── models.py           modèle de données (SQLAlchemy)
 │   ├── services.py         logique métier : tickets, historique, notifications
 │   ├── issue_query.py      filtres, tris, regroupements, calendrier, Gantt
+│   ├── texte.py            recherche et tri à la française (accents, apostrophes, ligatures ; « École » avant « Zèbre »)
 │   ├── ics.py              lecture des fichiers .ics (format de l'école et iCalendar standard)
 │   ├── digest.py           résumé quotidien par e-mail (chaque module y ajoute sa section)
 │   ├── workgraph.py        initiatives : avancement, santé, graphe
@@ -262,3 +274,5 @@ hangar/
 ├── tests/                  tests de l'agenda (uv run python -m unittest discover -s tests)
 └── data/                   base et fichiers (créé au premier lancement)
 ```
+
+Pour les développeurs : dans les gabarits, écris `url_for('static', filename=…)` sans `?v=` : l'empreinte du fichier est ajoutée toute seule. Un bloc `<script>` écrit dans un gabarit porte `nonce="{{ csp_nonce() }}"`. Pas d'attribut `onclick=` ni de lien `javascript:` : utilise `data-imprimer`, `data-retour`, `data-confirm` ou `data-confirm-msg`.
