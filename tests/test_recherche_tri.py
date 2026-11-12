@@ -422,6 +422,26 @@ class CompatibiliteTests(BaseTestCase):
         ancienne = int(hashlib.md5(b"manuvre").hexdigest()[:8], 16)
         self.assertEqual(A.event_color(ev), A.SUBJECT_COLORS[ancienne % len(A.SUBJECT_COLORS)])
 
+    def test_lien_qcm_de_la_seance_ouvre_la_categorie(self):
+        """Le lien « QCM » d'une séance vise l'ancre posée par la page QCM, même avec « œ » ou « ’ »."""
+        from datetime import datetime
+
+        from flask import render_template_string
+
+        from hangar import agenda as A
+
+        gabarit = (Path(self.app.root_path) / "templates" / "qcm" / "_categorie.html").read_text(encoding="utf-8")
+        self.assertIn('id="cat-{{ cat.nom|qcm_slug }}"', gabarit)
+        for i, categorie in enumerate(["Œuvre d’art", "Cœur de réseau", "Droit de l'homme", "Tactique"]):
+            ev = AgendaEvent(user_id=self.moi.id, uid=f"seance-qcm-{i}", title=f"Matière {i}",
+                             start=datetime(2026, 11, 12, 8), end=datetime(2026, 11, 12, 10))
+            db.session.add(ev)
+            A.set_subject_link(self.moi, ev.title, qcm_category=categorie)
+            db.session.commit()
+            url = A.subject_links(self.moi, ev)["qcm"]["url"]
+            attendu = render_template_string("cat-{{ n|qcm_slug }}", n=categorie)
+            self.assertEqual(url.split("#", 1)[1], attendu, categorie)
+
 
 if __name__ == "__main__":
     unittest.main()

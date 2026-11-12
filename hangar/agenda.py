@@ -1380,8 +1380,10 @@ def subject_links(user, ev: AgendaEvent) -> dict:
         out["wiki"] = _wiki_target(link.wiki_path)
     if link and link.qcm_category:
         from flask import url_for as _url
+
+        from .qcm.views import _qcm_slug  # même ancre que la page QCM (id="cat-{{ cat.nom|qcm_slug }}")
         out["qcm"] = {"label": link.qcm_category, "due": cats.get(link.qcm_category, 0),
-                      "url": _url("qcm.index") + "#cat-" + re.sub(r"[^a-z0-9]+", "-", normalize(link.qcm_category)).strip("-")}
+                      "url": _url("qcm.index") + "#cat-" + _qcm_slug(link.qcm_category)}
     teachers = [w for w in _words(ev.teachers or "") if len(w) > 3]
 
     def score(cand: str) -> int:
