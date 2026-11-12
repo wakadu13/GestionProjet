@@ -50,22 +50,45 @@ def paris_sans_base(utc: datetime) -> datetime:
     return u + timedelta(hours=2 if debut <= u < fin else 1)
 
 
+def vers_agenda(quand: datetime) -> datetime:
+    """Date « aware » (avec fuseau) → heure naïve de l'agenda. Une date naïve est supposée déjà dans
+    l'heure de l'agenda et rendue telle quelle."""
+    if quand.tzinfo is None:
+        return quand
+    nom = nom_configure()
+    zone = _zone(nom)
+    if zone is not None:
+        return quand.astimezone(zone).replace(tzinfo=None)
+    if nom == DEFAUT:
+        return paris_sans_base(quand.astimezone(timezone.utc))
+    return quand.astimezone().replace(tzinfo=None)  # heure de la machine
+
+
+def depuis_agenda(naive: datetime) -> datetime:
+    """Heure naïve de l'agenda → date « aware » portant le décalage du fuseau de l'agenda."""
+    if naive.tzinfo is not None:
+        return naive
+    nom = nom_configure()
+    zone = _zone(nom)
+    if zone is not None:
+        return naive.replace(tzinfo=zone)
+    if nom == DEFAUT:
+        # Sans base des fuseaux : décalage +1 h (hiver) ou +2 h (été), celui qui retombe sur la même heure.
+        for heures in (1, 2):
+            utc = naive - timedelta(hours=heures)
+            if paris_sans_base(utc) == naive:
+                return naive.replace(tzinfo=timezone(timedelta(hours=heures)))
+        return naive.replace(tzinfo=timezone(timedelta(hours=2)))  # heure sautée au passage à l'été
+    return naive.astimezone()  # heure de la machine
+
+
 def _maintenant_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
 def now() -> datetime:
     """Maintenant, heure naïve de l'agenda (à la seconde)."""
-    nom = nom_configure()
-    utc = _maintenant_utc()
-    zone = _zone(nom)
-    if zone is not None:
-        t = utc.astimezone(zone).replace(tzinfo=None)
-    elif nom == DEFAUT:
-        t = paris_sans_base(utc)
-    else:
-        t = utc.astimezone().replace(tzinfo=None)  # heure de la machine
-    return t.replace(microsecond=0)
+    return vers_agenda(_maintenant_utc()).replace(microsecond=0)
 
 
 def today() -> date:

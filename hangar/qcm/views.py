@@ -17,6 +17,7 @@ from flask import (Blueprint, abort, current_app, flash, jsonify, redirect, rend
                    send_file, url_for)
 from flask_login import current_user, login_required
 
+from .. import heure
 from ..extensions import db
 from ..icons import ICONS
 from ..texte import cle_tri
@@ -311,7 +312,7 @@ def _date_reponse(valeur, now):
     except ValueError:
         return None
     if d.tzinfo is not None:
-        d = d.astimezone().replace(tzinfo=None)
+        d = heure.vers_agenda(d)
     return d if now - timedelta(days=30) <= d <= now else None
 
 

@@ -202,6 +202,37 @@ class FuseauMachineUTCTests(unittest.TestCase):
             self.assertEqual(r.stdout.split(), ["2026-11-12", "07:46:00", "1", "sent"])
 
 
+class QcmDatesMachineUTCTests(unittest.TestCase):
+    def test_dates_echangees_avec_l_appareil_et_reprise_en_heure_de_paris(self):
+        """Machine en UTC : les échéances envoyées à l'appli, les réponses faites hors ligne et les dates
+        reprises de Revision sont dans l'heure de l'agenda (Paris), comme quiz.maintenant()."""
+        r = _python("""
+            import time
+            from datetime import datetime, timezone
+            from unittest import mock
+            if hasattr(time, "tzset"):
+                time.tzset()
+            from hangar import heure
+            from hangar.qcm import hors_ligne, quiz, reprise
+            from hangar.qcm import views as qv
+            utc = datetime(2026, 11, 12, 17, 12, 19, tzinfo=timezone.utc)
+            with mock.patch.object(heure, "_maintenant_utc", return_value=utc):
+                m = quiz.maintenant()
+                iso = hors_ligne._date_iso(m)
+                print(m.isoformat(), iso, datetime.fromisoformat(iso) == utc)
+                print(hors_ligne._date_reponse(utc.isoformat(), m) == m,
+                      hors_ligne._date_reponse("2026-11-12T17:12:19Z", m) == m,
+                      qv._date_reponse("2026-11-12T17:12:19.000Z", m) == m,
+                      reprise._date_heure("2026-11-12 17:12:19.123456") == m)
+                ete = datetime(2026, 7, 1, 23, 30)
+                print(hors_ligne._date_iso(ete), heure.vers_agenda(datetime.fromisoformat(hors_ligne._date_iso(ete))) == ete)
+        """, env={"TZ": "UTC", "HANGAR_TZ": ""})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.split(), ["2026-11-12T18:12:19", "2026-11-12T18:12:19+01:00", "True",
+                                            "True", "True", "True", "True",
+                                            "2026-07-01T23:30:00+02:00", "True"])
+
+
 class HeureCommuneTests(unittest.TestCase):
     def setUp(self):
         from hangar import heure
@@ -256,6 +287,25 @@ class HeureCommuneTests(unittest.TestCase):
         with self._a(utc):
             self.assertEqual(self.heure.now(), utc.astimezone().replace(tzinfo=None))
             self.assertTrue(self.heure.description()["introuvable"])
+
+    def test_aller_retour_vers_et_depuis_l_agenda(self):
+        """vers_agenda et depuis_agenda sont réciproques, avec ou sans base des fuseaux."""
+        from datetime import datetime, timedelta, timezone
+        from unittest import mock
+        os.environ.pop("HANGAR_TZ", None)
+        cas = ((datetime(2026, 1, 15, 12, 0), "+01:00"), (datetime(2026, 7, 15, 12, 0), "+02:00"),
+               (datetime(2026, 10, 25, 3, 30), "+01:00"), (datetime(2026, 3, 29, 1, 59), "+01:00"))
+        for sans_base in (False, True):
+            with mock.patch.object(self.heure, "_zone", return_value=None) if sans_base else mock.patch.object(
+                    self.heure, "nom_configure", return_value="Europe/Paris"):
+                for naive, decalage in cas:
+                    aware = self.heure.depuis_agenda(naive)
+                    self.assertTrue(aware.isoformat().endswith(decalage), (sans_base, aware))
+                    self.assertEqual(self.heure.vers_agenda(aware), naive)
+                    self.assertEqual(self.heure.vers_agenda(aware.astimezone(timezone.utc)), naive)
+                self.assertEqual(self.heure.vers_agenda(datetime(2026, 1, 1, 9)), datetime(2026, 1, 1, 9))
+                autre = datetime(2026, 1, 1, 9, tzinfo=timezone(timedelta(hours=-5)))
+                self.assertEqual(self.heure.vers_agenda(autre), datetime(2026, 1, 1, 15))
 
     def test_tzdata_dans_les_dependances(self):
         """Sous Windows, zoneinfo n'a pas de base des fuseaux sans le paquet tzdata."""

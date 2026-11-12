@@ -732,9 +732,9 @@ SET_PERSO = {"titre": "Mes fiches", "questions": [{"id": "f1", "type": "FLASHCAR
 
 
 def _local(texte_utc):
-    """Heure locale naïve d'une date-heure UTC de Django (comme la reprise)."""
-    return (datetime.fromisoformat(texte_utc).replace(tzinfo=timezone.utc).astimezone()
-            .replace(tzinfo=None, microsecond=0))
+    """Heure naïve de l'agenda (Paris) d'une date-heure UTC de Django (comme la reprise)."""
+    from hangar import heure
+    return heure.vers_agenda(datetime.fromisoformat(texte_utc).replace(tzinfo=timezone.utc)).replace(microsecond=0)
 
 
 class RepriseRevisionTests(BaseTestCase):

@@ -21,6 +21,7 @@ from pathlib import Path
 from flask import current_app, jsonify, make_response, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from .. import heure
 from ..extensions import db
 from ..icons import ICONS
 from . import fsrs, langues, planning, quiz, rattachement, services
@@ -39,8 +40,8 @@ ICONS.setdefault("bell-ring", '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8.5 3 8.5H3S6 
 
 
 def _date_iso(d):
-    """Date locale naïve → ISO 8601 avec le décalage horaire (lue sans ambiguïté par l'appareil)."""
-    return d.astimezone().isoformat() if d else None
+    """Heure naïve de l'agenda → ISO 8601 avec le décalage horaire (lue sans ambiguïté par l'appareil)."""
+    return heure.depuis_agenda(d).isoformat() if d else None
 
 
 def _sans_cache(reponse):
@@ -175,12 +176,12 @@ def hl_sets():
 
 
 def _date_reponse(valeur, now):
-    """Date d'une réponse envoyée par l'appareil (ISO 8601) → heure locale naïve, jamais dans le futur.
+    """Date d'une réponse envoyée par l'appareil (ISO 8601) → heure naïve de l'agenda (Paris), jamais dans le futur.
     Une date sans fuseau est lue en UTC (toISOString() du navigateur)."""
     quand = datetime.fromisoformat(str(valeur).replace("Z", "+00:00"))
     if quand.tzinfo is None:
         quand = quand.replace(tzinfo=timezone.utc)
-    return min(quand.astimezone().replace(tzinfo=None), now)
+    return min(heure.vers_agenda(quand), now)
 
 
 @bp.route("/qcm/hors-ligne/synchro/", methods=["POST"])
