@@ -420,7 +420,7 @@ class MessagesEtConnexion(AppCase):
         html = r.get_data(as_text=True)
         self.assertIn('lang="fr"', html)
         self.assertNotIn("Method Not Allowed", html)
-        self.assertIn("Action non disponible", html)
+        self.assertIn("Action impossible ici", html)
         self.assertIn("POST", r.headers.get("Allow", ""))
         r = c.get("/api/reactions")
         self.assertEqual(r.status_code, 405)

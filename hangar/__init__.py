@@ -73,13 +73,13 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
         u = db.session.get(models.User, int(uid))
         return u if u and u.active else None
 
-    from . import web
+    from . import securite, web
+    # securite d'abord : ses fonctions after_request passent après celles de web (ordre inverse de Flask)
+    securite.init_app(app)
     web.init_app(app)  # sécurité, cache des fichiers statiques, icônes, compression (avant les blueprints)
     _register_blueprints(app)
     _register_template_helpers(app)
     _register_hooks(app)
-    from . import securite
-    securite.init_app(app)
     return app
 
 

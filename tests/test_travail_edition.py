@@ -390,7 +390,6 @@ class PageConcurrencyTests(TravailCase):
     def test_editor_keeps_app_version_for_scripts(self):
         """L'empreinte de la page ne remplace pas la version de l'appli dans les adresses de app.css / app.js :
         sinon ces fichiers seraient retéléchargés à chaque modification de la page."""
-        from hangar import __version__
         from hangar.views.pages import page_version
         a, ta = self.client("wacogne")
         b, tb = self.client("lazaro")
@@ -402,7 +401,8 @@ class PageConcurrencyTests(TravailCase):
         for html in (a.get(self.url).get_data(as_text=True), conflict.get_data(as_text=True)):
             assets = re.findall(r"(app\.(?:css|js))\?v=([^\"'&]+)", html)
             self.assertEqual({name for name, _ in assets}, {"app.css", "app.js"})
-            self.assertEqual({v for _, v in assets}, {__version__})
+            # Version de l'appli ou empreinte du fichier statique (cache), jamais celle de la page
+            self.assertNotIn(page_version(self.page), {v for _, v in assets})
             db.session.expire_all()  # le champ caché porte toujours l'empreinte de la page
             self.assertEqual(re.search(r'name="version" value="([^"]*)"', html).group(1), page_version(self.page))
 

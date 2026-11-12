@@ -211,6 +211,9 @@ class PagesQcmAgendaTests(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _get(self, url):
+        # Régime normal : la bibliothèque des QCM est déjà chargée (son premier chargement enregistre
+        # les empreintes des sets, ce qui valide la session et relit ensuite les objets de la page).
+        self.c.get(url)
         with mock.patch.object(planning, "estimer", wraps=planning.estimer) as estimer, \
                 mock.patch.object(services, "etat", wraps=services.etat) as etat, \
                 requetes_sql(self.app) as sql:
@@ -303,7 +306,10 @@ class TicketsTests(unittest.TestCase):
         with cls.app.test_request_context("/"):
             from hangar.models import Project
             from hangar.seed import seed_demo
-            seed_demo(None, verbose=False)
+            seed_demo(None, verbose=False, password="perf-essai-2026")
+            for u in User.query.all():
+                u.must_change_password = False
+            db.session.commit()
             cls.pid = (Project.query.filter_by(identifier="EAE").first() or Project.query.first()).id
 
     @classmethod
@@ -314,7 +320,7 @@ class TicketsTests(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def setUp(self):
-        self.c, _ = connexion(self.app, "wacogne", "hangar2026")
+        self.c, _ = connexion(self.app, "wacogne", "perf-essai-2026")
 
     def _requetes(self, url):
         self.c.get(url)  # premier affichage (caches)

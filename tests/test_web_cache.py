@@ -462,7 +462,7 @@ class EntetesTests(WebTestCase):
 
 class DeconnexionTests(WebTestCase):
     def test_lien_get_ne_deconnecte_pas(self):
-        r = self.client.get("/logout")
+        r = self.client.get("/logout", follow_redirects=True)  # page de confirmation /deconnexion/
         self.assertEqual(r.status_code, 200)  # avant : déconnexion par un simple lien
         html = r.get_data(as_text=True)
         self.assertIn("data-deconnexion", html)

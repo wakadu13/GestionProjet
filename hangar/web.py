@@ -122,14 +122,14 @@ def csp_nonce() -> str:
 def politique(nonce: str, appli: bool = False) -> str:
     """Politique de sécurité du contenu (CSP) des pages de Hangar.
 
-    Images : celles d'autres sites restent permises (Markdown des tickets et des pages de projet) ;
-    tout le reste ne vient que de Hangar. ``'wasm-unsafe-eval'`` : décodeurs WebAssembly du lecteur PDF."""
+    Tout ne vient que de Hangar, images comprises : une image d'un autre site glissée dans un texte
+    (ticket, page, réponse de l'IA) n'est pas chargée (elle est d'ailleurs déjà changée en lien). ``'wasm-unsafe-eval'`` : décodeurs WebAssembly du lecteur PDF."""
     formulaires = "'self'" + (f" {APPLI_ANDROID}" if appli else "")
     return "; ".join((
         "default-src 'self'",
         f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob: https: http:",
+        "img-src 'self' data: blob:",
         "font-src 'self' data:",
         "media-src 'self' data: blob:",
         "connect-src 'self'",

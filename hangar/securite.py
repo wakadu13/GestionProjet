@@ -163,6 +163,10 @@ def init_app(app) -> None:
     @app.after_request
     def _images_locales(response):
         """Hangar n'affiche aucune image venue d'ailleurs (aucun CDN) : même si un texte en glissait une,
-        le navigateur ne la chargerait pas. Les fichiers servis gardent leur politique plus stricte."""
-        response.headers.setdefault("Content-Security-Policy", PAGE_CSP)
+        le navigateur ne la chargerait pas. La politique complète des pages (hangar/web.py, avec
+        « img-src 'self' data: blob: ») passe avant ; celle-ci ne sert que si elle est désactivée
+        (réglage CSP « non »). Les fichiers servis gardent leur politique plus stricte."""
+        h = response.headers
+        if "Content-Security-Policy" not in h and "Content-Security-Policy-Report-Only" not in h:
+            h["Content-Security-Policy"] = PAGE_CSP
         return response

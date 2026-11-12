@@ -383,7 +383,7 @@ class DeconnexionTests(Base):
 
     def test_bouton_du_menu_reste_un_formulaire(self):
         html = self.login("moi").get("/home").get_data(as_text=True)
-        self.assertRegex(html, r'<form method="post" action="/logout">\s*<input type="hidden" name="_csrf"')
+        self.assertRegex(html, r'<form method="post" action="/logout"[^>]*>\s*<input type="hidden" name="_csrf"')
         for gabarit in (ROOT / "hangar/templates").rglob("*.html"):
             texte = gabarit.read_text(encoding="utf-8")
             self.assertNotRegex(texte, r"<a[^>]+href=\"\{\{ url_for\('auth\.logout'\)", str(gabarit))

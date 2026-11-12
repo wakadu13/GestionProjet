@@ -365,9 +365,9 @@ def stats():
     temps_max = max([l["total"] for l in temps] + [1])
     # Progressions restées sans fichier (set renommé ou supprimé hors de Hangar) : « Rattacher à… ».
     can_edit = peut_modifier(current_user)
-    orphelins = rattachement.orphelins(uid, library)
+    orphelins = rattachement.orphelins(uid, library, tous=e["tous"])
     choix = [(el.id, f"{rattachement.libelle(el.id)} · {el.titre}")
-             for el in sorted((*library.sets.values(), *library.langues.values()), key=lambda el: el.id.lower())
+             for el in sorted((*library.sets.values(), *library.langues.values()), key=lambda el: cle_tri(el.id))
              ] if orphelins else []
     return render_template(
         "qcm/stats.html", categories=sorted(categories.items(), key=lambda t: cle_tri(t[0])),

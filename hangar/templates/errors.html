@@ -6,7 +6,7 @@
 <div class="error-page">
   <div>
     <div class="code">{{ error.code }}</div>
-    <h2>{{ {400: 'Requête invalide', 403: 'Accès refusé', 404: 'Page introuvable', 405: 'Action non disponible', 413: 'Fichier trop volumineux', 500: 'Erreur interne'}.get(error.code, 'Erreur') }}</h2>
+    <h2>{{ {400: 'Requête invalide', 403: 'Accès refusé', 404: 'Page introuvable', 405: 'Action impossible ici', 413: 'Fichier trop volumineux', 500: 'Erreur interne'}.get(error.code, 'Erreur') }}</h2>
     <p class="muted mt">{{ description if error.code != 500 else 'Une erreur inattendue s’est produite. Réessaie ou consulte le terminal du serveur.' }}</p>
     <div class="mt-lg flex gap center"><a class="btn" href="{{ request.referrer or url_for('agenda.dashboard') }}" data-retour>{{ icon('arrow-left', 14) }} Retour</a><a class="btn btn-primary" href="{{ url_for('agenda.dashboard') }}">Accueil</a></div>
   </div>

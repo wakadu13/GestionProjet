@@ -313,15 +313,18 @@ def verifier(library):
         if s.new or s.dirty or s.deleted or _ecriture_en_cours(s):
             return  # la requête a des écritures en cours : on recommencera au prochain accès
         try:
-            _reconcilier(s, library)
-            s.commit()
+            # Valider seulement si quelque chose a changé : une validation expire tous les objets déjà
+            # chargés par la page (rappels de l'agenda…), qui seraient alors relus un par un.
+            if _reconcilier(s, library) or s.new or s.dirty or s.deleted:
+                s.commit()
         except Exception:  # noqa: BLE001
             s.rollback()
             current_app.logger.warning("QCM : rattachement des sets renommés impossible", exc_info=True)
         library._rattachement_fait = True
 
 
-def _reconcilier(s, library):
+def _reconcilier(s, library) -> bool:
+    """Renvoie True si des progressions ont été rattachées (mises à jour en masse, invisibles pour la session)."""
     now = quiz.maintenant()
     presents = {el.id: el for el in (*library.sets.values(), *library.langues.values())}
     calcul = {sid: empreinte(el) for sid, el in presents.items()}
@@ -338,6 +341,7 @@ def _reconcilier(s, library):
     for ancien, nouveau in apparier(disparus, neufs):
         rattacher(s, ancien, nouveau)
         rattaches.add(ancien)
+    bouge = bool(rattaches)
 
     # 2. Progressions restées sans fichier : nom actuel connu (alias), ou même chemin à la casse
     #    et aux accents près (cas le plus courant sous Windows, et progression d'avant les empreintes).
@@ -357,6 +361,7 @@ def _reconcilier(s, library):
             cible = memes[0] if len(memes) == 1 else None
         if cible is not None:
             rattacher(s, sid, cible)
+            bouge = True
 
     # 3. Empreintes des sets présents.
     lignes = {e.set_id: e for e in s.query(EmpreinteSet)}
@@ -369,7 +374,8 @@ def _reconcilier(s, library):
             e.empreinte, e.questions, e.langue, e.disparu_le = emp, " ".join(cles), est_langue(el), None
 
     # 4. Sets disparus : gardés tant qu'une progression les attend, sinon JOURS_EMPREINTE jours.
-    avec_progression = _ids_avec_progression(s)
+    if bouge:
+        avec_progression = _ids_avec_progression(s)
     for sid, e in lignes.items():
         if sid in presents or sid in invalides:
             continue
@@ -377,11 +383,13 @@ def _reconcilier(s, library):
             e.disparu_le = now
         elif sid not in avec_progression and e.disparu_le < now - timedelta(days=JOURS_EMPREINTE):
             s.delete(e)
+    return bouge
 
 
 # ---------------------------------------------------------------------------
 # Synchronisation et page des statistiques
 # ---------------------------------------------------------------------------
+
 def resoudre(library, set_id, user_id=None):
     """Identifiant actuel d'un set : le sien s'il est dans la bibliothèque, sinon celui auquel sa
     progression a été rattachée (set déplacé ou renommé), s'il y en a un. L'alias propre au compte
@@ -430,15 +438,19 @@ def _suggestion(sid, emp, cible_alias, elements, empreintes):
     return memes[0] if len(memes) == 1 else None
 
 
-def orphelins(user_id, library, suggestions=True):
+def orphelins(user_id, library, suggestions=True, tous=None):
     """Progressions d'un compte sans fichier dans le coffre (set renommé, déplacé ou supprimé hors
     de Hangar, et pas reconnu tout seul) : [{id, libelle, nom, dossier, commun, vues, derniere,
     suggestion}] (`libelle`, `dossier` : chemins affichés ; `commun` : hors de l'espace personnel)."""
     presents = set(library.sets) | set(library.langues)
     ecartes = presents | set(getattr(library, "ids_invalides", ()))
     infos: dict = {}
-    lignes = (db.session.query(QuizProgress.set_id, func.count(QuizProgress.id), func.max(QuizProgress.last_review))
-              .filter(QuizProgress.user_id == user_id).group_by(QuizProgress.set_id))
+    if tous is not None:  # progression du compte déjà lue par la page ({set_id: {question_id: QuizProgress}})
+        lignes = [(sid, len(ps), max((p.last_review for p in ps.values() if p.last_review), default=None))
+                  for sid, ps in tous.items()]
+    else:
+        lignes = (db.session.query(QuizProgress.set_id, func.count(QuizProgress.id), func.max(QuizProgress.last_review))
+                  .filter(QuizProgress.user_id == user_id).group_by(QuizProgress.set_id))
     for sid, vues, derniere in lignes:
         if sid not in ecartes:
             infos[sid] = {"vues": vues, "derniere": derniere}
