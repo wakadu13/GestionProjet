@@ -236,6 +236,21 @@ class MailMembresTests(Base):
         self.assertEqual(self.nb(), 101, "100 par jour au plus : rien n'est envoyé")
         self.assertIn("24 heures", r.get_data(as_text=True))
 
+    def test_envoi_refuse_garde_destinataires_et_aide_adaptee(self):
+        c = self.connecter()
+        page = c.get("/mail/compose").get_data(as_text=True)
+        self.assertIn("un administrateur doit l’autoriser dans Réglages › E-mails", page)
+        self.assertNotIn("interlocuteurs extérieurs", page)
+        r = self.composer(c, others="a@ext.example, b@ext.example", user_ids=[self.admin_id])
+        page = r.get_data(as_text=True)
+        self.assertEqual(self.nb(), 0)
+        self.assertIn('value="a@ext.example, b@ext.example"', page)
+        self.assertRegex(page, r'name="user_ids" value="%d"\s+checked' % self.admin_id)
+        with self.app.app_context():
+            MailConfig.get().members_external = True
+            db.session.commit()
+        self.assertIn("interlocuteurs extérieurs", c.get("/mail/compose").get_data(as_text=True))
+
     def test_administrateur_sans_plafond(self):
         c = self.connecter("chef", "secret-chef")
         self.composer(c, others=", ".join(f"x{i}@ext.example" for i in range(25)))
@@ -453,6 +468,19 @@ class ErreursMasqueesTests(Base):
         self.assertNotIn("s3cr3t", masquer("/x?password=s3cr3t&q=1"))
         self.assertIn("q=1", masquer("/x?password=s3cr3t&q=1"))
         self.assertNotIn("sk-ant", masquer("api_key='sk-ant-123'"))
+
+    def test_masquer_garde_code_des_traces_et_sql_lisibles(self):
+        from hangar.wiki.erreurs import masquer
+        trace = ('Traceback (most recent call last):\n'
+                 '  File "hangar/views/auth.py", line 12, in changer\n'
+                 '    u.password_hash = generate_password_hash(password)\n'
+                 'ValueError: password=hunter2 refusé\n')
+        t = masquer(trace)
+        self.assertIn("    u.password_hash = generate_password_hash(password)\n", t)
+        self.assertNotIn("hunter2", t)
+        t = masquer("[SQL: UPDATE x SET smtp_password=? WHERE token = :token_1] [parameters: ('MotDePasse', 1)]")
+        self.assertIn("SET smtp_password=? WHERE token = :token_1]", t)
+        self.assertNotIn("MotDePasse", t)
 
 
 # ---------------------------------------------------------------------------

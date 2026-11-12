@@ -42,10 +42,18 @@ _MOTIFS = (
     (re.compile(r"(?i)\b(Bearer|Basic)\s+[\w.~+/=-]+"), r"\1 " + MASQUE),
     # « 'password': 'valeur' » (dictionnaire, JSON)
     (re.compile(r"""(?i)(['"]""" + _SENSIBLE + r"""['"]\s*:\s*)('[^']*'|"[^"]*")"""), r"\1'" + MASQUE + "'"),
-    # « password=valeur » (adresse, formulaire, appel de fonction)
-    (re.compile(r"""(?i)\b(""" + _SENSIBLE + r""")(\s*=\s*)('[^']*'|"[^"]*"|[^&\s,;)\]'"]+)"""),
-     r"\1\2" + MASQUE),
 )
+# « password=valeur » (adresse, formulaire, message) : pas appliqué aux lignes de code des traces, et une valeur
+# qui n'est qu'un emplacement de paramètre SQL (« ? », « :nom », « %(nom)s ») est laissée telle quelle.
+_NOM_VALEUR = re.compile(r"""(?i)\b(""" + _SENSIBLE + r""")(\s*=\s*)('[^']*'|"[^"]*"|[^&\s,;)\]'"]+)""")
+_PARAM_SQL = re.compile(r"\?|:\w+|%\(\w+\)s")
+_LIGNE_FILE = re.compile(r'^\s*File "[^\n]*", line \d+')
+
+
+def _nom_valeur(m: re.Match) -> str:
+    if _PARAM_SQL.fullmatch(m.group(3)):
+        return m.group(0)
+    return m.group(1) + m.group(2) + MASQUE
 
 
 def masquer(texte) -> str:
@@ -53,7 +61,12 @@ def masquer(texte) -> str:
     texte = "" if texte is None else str(texte)
     for motif, remplacement in _MOTIFS:
         texte = motif.sub(remplacement, texte)
-    return texte
+    lignes, code = [], False
+    for ligne in texte.splitlines(keepends=True):
+        # La ligne qui suit « File "…", line N » est du code source de Hangar : rien de secret, on la garde lisible.
+        lignes.append(ligne if code else _NOM_VALEUR.sub(_nom_valeur, ligne))
+        code = bool(_LIGNE_FILE.match(ligne))
+    return "".join(lignes)
 
 
 def noter(exc: BaseException | None = None, contexte: str = "", request=None, user=None) -> None:

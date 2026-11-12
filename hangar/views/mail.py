@@ -295,9 +295,12 @@ def compose():
                 db.session.commit()
                 return redirect(url_for("issues.detail", pid=linked.project_id, seq=linked.sequence_id))
             return redirect(url_for("mail.compose"))
-    prefill_subject, prefill_body = "", ""
-    if request.method == "POST":  # envoi refusé : le texte tapé n'est pas perdu
+    prefill_subject, prefill_body, prefill_others = "", "", ""
+    checked_ids = {u.id for u in issue.assignees} if issue is not None else set()
+    if request.method == "POST":  # envoi refusé : ce qui a été tapé ou coché n'est pas perdu
         prefill_subject, prefill_body = request.form.get("subject", ""), request.form.get("body", "")
+        prefill_others = request.form.get("others", "")
+        checked_ids = {to_int(i) for i in request.form.getlist("user_ids")}
     elif issue is not None:
         prefill_subject = f"[{issue.key}] {issue.title}"
         prefill_body = (f"Bonjour,\n\nJe vous écris au sujet du ticket **{issue.key} — {issue.title}**.\n\n…\n\n"
@@ -308,4 +311,5 @@ def compose():
     return render_template("mail/compose.html", issue=issue, members=members, with_email=with_email,
                            templates=templates, templates_json=json.dumps(templates, ensure_ascii=False),
                            prefill_subject=prefill_subject, prefill_body=prefill_body,
+                           prefill_others=prefill_others, checked_ids=checked_ids,
                            cfg=MailConfig.get(), today=date.today())
