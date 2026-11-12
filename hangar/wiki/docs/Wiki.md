@@ -64,9 +64,10 @@ sur CodeMirror 6 comme Obsidian lui-même :
   précédent, hors du coffre ; différences ligne à ligne, texte complet, **restauration**. Quand tu écris d'une
   traite (Ctrl+S, enregistrement auto), une version est gardée au début de la séance puis toutes les 10 minutes ;
   en vieillissant, il en reste une par heure sur un jour, une par jour sur un mois, une par semaine sur six mois,
-  puis une par mois. Une restauration, une mise à la corbeille, un import ou un passage de l'IA garde toujours
-  sa propre version. Au plus 100 versions et 20 Mo par page : au-delà, les plus anciennes partent, sauf la
-  toute première (le texte d'origine).
+  puis une par mois. Une restauration, une mise à la corbeille, un import ou une page modifiée par l'assistant IA
+  garde toujours sa propre version ; après **✦ Améliorer**, l'enregistrement suivant garde aussi le texte d'avant
+  l'IA. Au plus 100 versions et 20 Mo par page : au-delà, partent d'abord les versions de la dernière heure qui
+  seraient de toute façon éclaircies, puis les plus anciennes, sauf la toute première (le texte d'origine).
 
 ## Lire hors ligne, installer le wiki sur un téléphone
 

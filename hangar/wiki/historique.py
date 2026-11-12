@@ -16,8 +16,14 @@ version courante. Deux sortes de versions, d'après le séparateur du nom de fic
   PALIERS : on garde dans chaque tranche la plus ancienne version, c'est-à-dire l'état de la
   page avant les changements de cette tranche.
 
-Plafonds par page : MAX_VERSIONS fichiers et MAX_OCTETS ; au-delà, les plus anciennes
-partent, sauf la toute première (le texte d'origine de la page) et la plus récente.
+Plafonds par page : MAX_VERSIONS fichiers et MAX_OCTETS ; au-delà, partent d'abord les
+versions d'édition de moins d'une heure qui seront de toute façon éclaircies dans l'heure,
+puis les plus anciennes, sauf la toute première (le texte d'origine de la page) et la plus
+récente.
+
+Horloge qui recule (passage à l'heure d'hiver, heure du PC corrigée) : une dernière version
+datée « dans le futur » est regroupée comme une version récente, sinon chaque enregistrement
+de la séance créerait une version.
 
 Ce module ne dépend ni des modèles ni des vues (port de ``wiki/historique.py`` de
 Revision ; heures locales naïves, comme le reste de Hangar).
@@ -111,7 +117,9 @@ def sauvegarder(rel, contenu: str, auteur: str = "", edition: bool = False, regr
         versions = _versions(d)
         if versions:
             _, date, auteur_derniere, _ = versions[-1]
-            if auteur_derniere == qui and timedelta(0) <= maintenant - date < REGROUPEMENT:
+            # Écart négatif : l'horloge a reculé depuis (heure d'hiver, heure du PC corrigée) ;
+            # on regroupe aussi, sinon chaque enregistrement de la séance créerait une version.
+            if auteur_derniere == qui and maintenant - date < REGROUPEMENT:
                 return None
     sorte = "_" if edition or regrouper else "-"
     horodatage = maintenant
@@ -125,7 +133,7 @@ def sauvegarder(rel, contenu: str, auteur: str = "", edition: bool = False, regr
 
 def _eclaircir(d: Path, maintenant: datetime) -> None:
     """Éclaircit les versions d'édition d'une page (PALIERS), puis applique les plafonds."""
-    gardees, tranches = [], set()
+    gardees, tranches, heures, en_sursis = [], set(), set(), []
     for v in _versions(d):
         f, date, _, edition = v
         age = maintenant - date
@@ -138,6 +146,10 @@ def _eclaircir(d: Path, maintenant: datetime) -> None:
             continue
         if cle is not None:
             tranches.add(cle)
+        heure = (date.date(), date.hour)
+        if cle is None and edition and heure in heures:
+            en_sursis.append(f)  # moins d'une heure, mais une plus ancienne garde déjà son heure
+        heures.add(heure)
         gardees.append(f)
     tailles = {}
     for f in gardees:
@@ -146,9 +158,14 @@ def _eclaircir(d: Path, maintenant: datetime) -> None:
         except OSError:
             tailles[f] = 0
     total = sum(tailles.values())
-    # Plafonds : les plus anciennes partent, sauf la toute première (texte d'origine) et la plus récente.
+    # Plafonds : d'abord les versions en sursis (éclaircies de toute façon dans l'heure : une rafale
+    # d'enregistrements ne chasse pas l'historique ancien), puis les plus anciennes ; jamais la toute
+    # première (texte d'origine) ni la plus récente.
+    if en_sursis and en_sursis[-1] == gardees[-1]:
+        en_sursis.pop()
     while len(gardees) > 2 and (len(gardees) > MAX_VERSIONS or total > MAX_OCTETS):
-        f = gardees.pop(1)
+        f = en_sursis.pop(0) if en_sursis else gardees[1]
+        gardees.remove(f)
         total -= tailles[f]
         _retirer(f)
 

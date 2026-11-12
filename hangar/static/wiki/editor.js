@@ -1117,6 +1117,9 @@
         scrollIntoView: true,
         userEvent: "input",
       });
+      // Le prochain enregistrement ouvre une nouvelle séance : l'historique garde le texte d'avant l'IA.
+      nouvelleSeance = true;
+      if (seanceInput) seanceInput.value = "";
       status("Texte amélioré par l’IA : relis-le, Ctrl+Z pour annuler.", "dirty");
     } catch (e) {
       status(e.message, "error");
@@ -1210,6 +1213,8 @@
   let conflict = false;
   let submitting = false;
   let autosaveTimer = null;
+  // Vrai après « ✦ Améliorer » jusqu'à ce qu'un enregistrement parti sans séance aboutisse.
+  let nouvelleSeance = false;
   const isDirty = () => !view.state.doc.eq(savedDoc);
 
   function refreshState() {
@@ -1223,6 +1228,7 @@
       return saving;
     }
     const doc = view.state.doc;
+    const coupe = nouvelleSeance;
     const data = new FormData();
     data.append("_csrf", csrf);
     data.append("version", versionInput.value);
@@ -1234,7 +1240,9 @@
         const json = await response.json().catch(() => ({}));
         if (response.ok && json.version) {
           versionInput.value = json.version;
-          if (seanceInput) seanceInput.value = json.seance || "";
+          if (coupe) nouvelleSeance = false;
+          // Un enregistrement parti avant « Améliorer » ne rouvre pas la séance.
+          if (seanceInput && !nouvelleSeance) seanceInput.value = json.seance || "";
           savedDoc = doc;
           oublierBrouillon();
           conflict = false;

@@ -7,6 +7,7 @@ Lancer : uv run python -m unittest discover -s tests -v
 import json
 import re
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest import mock
 
 from test_wiki import WikiTestCase, pdf_texte
@@ -152,6 +153,41 @@ class RegroupementTests(HistoriqueTestCase):
         self.assertEqual(len(self.textes("Cours/Notes.md")), 2)
 
 
+    def test_derniere_version_datee_dans_le_futur_regroupee(self):
+        # L'horloge du PC recule (heure corrigée, heure d'hiver) : la dernière version paraît « dans le
+        # futur ». Le même auteur est regroupé comme si elle était récente, pas un autre.
+        self.regler(2026, 11, 9, 10, 0)
+        historique.sauvegarder("Note.md", "avant la séance", "moi", edition=True)
+        self.regler(2026, 11, 9, 9, 0)
+        self.assertIsNone(historique.sauvegarder("Note.md", "frappe", "moi", regrouper=True))
+        self.assertIsNotNone(historique.sauvegarder("Note.md", "par bob", "bob", regrouper=True))
+        self.assertEqual(self.textes("Note.md"), ["par bob", "avant la séance"])
+
+    def test_passage_a_l_heure_d_hiver_pendant_une_seance(self):
+        # Constat de relecture : la nuit du 25/10/2026, de 3 h on revient à 2 h (heures locales). Avant, chaque
+        # enregistrement auto de l'heure rejouée créait une version, et le plafond chassait l'historique ancien,
+        # jusqu'au texte d'avant la séance.
+        for j in range(30):
+            self.regler(2026, 9, 1 + j, 18, 0)
+            historique.sauvegarder("Fiche.md", f"jour {j}", "moi", edition=True)
+        self.write("Fiche.md", "avant la nuit\n")
+        self.regler(2026, 10, 25, 2, 0)
+        version, seance, n = self.ouvrir("Fiche"), "", 0
+        for heure_rejouee in (False, True):
+            if heure_rejouee:
+                avant = self.textes("Fiche.md")
+                self.regler(2026, 10, 25, 2, 0)  # 3 h d'été -> 2 h d'hiver
+            for _ in range(120):  # une heure d'enregistrement auto, toutes les 30 s
+                n += 1
+                r = self.enregistrer("Fiche", f"frappe {n}\n", version, seance)
+                version, seance = r["version"], r["seance"]
+                self.avancer(seconds=30)
+        textes = self.textes("Fiche.md")
+        self.assertIn("avant la nuit\n", textes)
+        self.assertEqual([t for t in textes if t.startswith("jour")], [t for t in avant if t.startswith("jour")])
+        self.assertLessEqual(len(textes), len(avant) + 1)
+
+
 class RetentionTests(HistoriqueTestCase):
     def test_eclaircissage_par_paliers(self):
         def edition(texte):
@@ -208,6 +244,24 @@ class RetentionTests(HistoriqueTestCase):
             historique.sauvegarder("Note.md", "x" * 500, "moi")
         self.assertEqual([t[0] for t in self.textes("Note.md")], ["0", "x"])
 
+    def test_plafond_atteint_par_une_rafale_garde_l_historique_ancien(self):
+        # 98 versions anciennes (points de repère), puis 10 séances d'édition dans la même heure : au plafond,
+        # partent d'abord les versions de cette heure qui seraient de toute façon éclaircies, pas les anciennes.
+        for i in range(98):
+            self.regler(2026, 1, 1, 9, 0)
+            self.avancer(days=2 * i)
+            historique.sauvegarder("Note.md", f"ancienne {i}", "moi")
+        anciennes = [f"ancienne {i}" for i in range(98)]
+        self.regler(2026, 11, 9, 9, 0)
+        for i in range(10):
+            historique.sauvegarder("Note.md", f"séance {i}", "moi", edition=True)
+            self.avancer(minutes=5)
+        self.assertEqual(self.textes("Note.md"), anciennes + ["séance 0", "séance 9"])
+        # Une heure plus tard, l'éclaircissage n'en aurait de toute façon gardé qu'une.
+        self.regler(2026, 11, 9, 11, 0)
+        historique.sauvegarder("Note.md", "plus tard", "moi", edition=True)
+        self.assertEqual(self.textes("Note.md"), anciennes + ["séance 0", "plus tard"])
+
     def test_historique_deja_present_garde_tel_quel(self):
         # 50 versions écrites par la version précédente de Hangar (format <horodatage>-<auteur>.md).
         d = historique._dossier_page("Note.md")
@@ -259,3 +313,35 @@ class AffichageTests(HistoriqueTestCase):
         r = self.enregistrer("Note", "par autre", self.ouvrir("Note", client_autre), client=client_autre)
         self.assertEqual(self.textes("Note.md"), ["départ", "par moi"])
         self.assertEqual([v["auteur"] for v in historique.lister("Note.md")], ["autre", "moi"])
+
+
+class AmeliorerTests(HistoriqueTestCase):
+    """« ✦ Améliorer » réécrit le texte dans l'éditeur : l'historique doit garder le texte d'avant l'IA."""
+
+    def editor_js(self):
+        return (Path(self.app.root_path) / "static" / "wiki" / "editor.js").read_text(encoding="utf-8")
+
+    def test_ameliorer_ouvre_une_nouvelle_seance(self):
+        js = self.editor_js()
+        corps = re.search(r"async function ameliorerTexte\(\) \{\n(.*?)\n  \}\n", js, re.S).group(1)
+        apres_ia = corps[corps.index("view.dispatch("):]
+        self.assertIn("nouvelleSeance = true;", apres_ia)
+        self.assertIn('seanceInput.value = "";', apres_ia)
+        # Un enregistrement parti avant « Améliorer » ne doit pas rouvrir la séance à son retour.
+        enregistrer = re.search(r"\n  function save\(manuel\) \{\n(.*?)\n  \}\n", js, re.S).group(1)
+        self.assertIn("const coupe = nouvelleSeance;", enregistrer)
+        self.assertIn("if (coupe) nouvelleSeance = false;", enregistrer)
+        self.assertIn("if (seanceInput && !nouvelleSeance) seanceInput.value", enregistrer)
+
+    def test_texte_d_avant_l_ia_garde(self):
+        # Ce que l'éditeur envoie désormais : après « Améliorer », un enregistrement sans séance.
+        self.write("Fiche.md", "départ\n")
+        r = self.enregistrer("Fiche", "MON TEXTE A MOI\n", self.ouvrir("Fiche"))
+        self.avancer(minutes=3)
+        r = self.enregistrer("Fiche", "texte réécrit par l'IA\n", r["version"], "")
+        self.assertEqual(self.textes("Fiche.md"), ["départ\n", "MON TEXTE A MOI\n"])
+        # Puis la séance reprend : les frappes suivantes sont regroupées.
+        self.assertEqual(r["seance"], "1")
+        self.avancer(seconds=20)
+        self.enregistrer("Fiche", "texte réécrit par l'IA, retouché\n", r["version"], r["seance"])
+        self.assertEqual(len(self.textes("Fiche.md")), 2)
