@@ -232,6 +232,7 @@ def _register_template_helpers(app: Flask) -> None:
             "today": __import__("datetime").date.today(),
             "version": __version__,
             "can": utils.can,
+            "can_delete_issues": utils.can_delete_issues,
             "project_role": utils.project_role,
             "is_favorite": utils.is_favorite,
             "markdown_toc": utils.markdown_toc,
@@ -280,33 +281,28 @@ def _sidebar_data():
     """Données de la barre latérale (calculées une fois par requête)."""
     if "sidebar" in g:
         return g.sidebar
-    from .models import Cycle, Favorite, Module, Notification, Page, Project, SavedView
-    from .utils import joined_projects
+    from .models import Favorite, Notification
+    from .utils import favorite_target, joined_projects
 
     favs = []
     for f in Favorite.query.filter_by(user_id=current_user.id).order_by(Favorite.created_at):
+        # Seuls les objets encore visibles (accès retiré, page devenue privée…) : jamais un titre privé.
+        obj = favorite_target(current_user, f.entity_type, f.entity_id)
+        if obj is None:
+            continue
         if f.entity_type == "project":
-            p = db.session.get(Project, f.entity_id)
-            if p and not p.archived_at:
-                favs.append({"title": p.name, "emoji": p.emoji, "url": url_for("issues.index", pid=p.id)})
+            if not obj.archived_at:
+                favs.append({"title": obj.name, "emoji": obj.emoji, "url": url_for("issues.index", pid=obj.id)})
         elif f.entity_type == "cycle":
-            c = db.session.get(Cycle, f.entity_id)
-            if c:
-                favs.append({"title": c.name, "icon": "cycle", "url": url_for("cycles.detail", pid=c.project_id, cid=c.id)})
+            favs.append({"title": obj.name, "icon": "cycle", "url": url_for("cycles.detail", pid=obj.project_id, cid=obj.id)})
         elif f.entity_type == "module":
-            m = db.session.get(Module, f.entity_id)
-            if m:
-                favs.append({"title": m.name, "icon": "module", "url": url_for("modules.detail", pid=m.project_id, mid=m.id)})
+            favs.append({"title": obj.name, "icon": "module", "url": url_for("modules.detail", pid=obj.project_id, mid=obj.id)})
         elif f.entity_type == "page":
-            pg = db.session.get(Page, f.entity_id)
-            if pg:
-                favs.append({"title": pg.title, "emoji": pg.emoji, "url": url_for("pages.view", pid=pg.project_id, page_id=pg.id)})
+            favs.append({"title": obj.title, "emoji": obj.emoji, "url": url_for("pages.view", pid=obj.project_id, page_id=obj.id)})
         elif f.entity_type == "view":
-            v = db.session.get(SavedView, f.entity_id)
-            if v:
-                url = (url_for("saved_views.open", pid=v.project_id, vid=v.id) if v.project_id
-                       else url_for("saved_views.open_global", vid=v.id))
-                favs.append({"title": v.name, "icon": "eye", "url": url})
+            url = (url_for("saved_views.open", pid=obj.project_id, vid=obj.id) if obj.project_id
+                   else url_for("saved_views.open_global", vid=obj.id))
+            favs.append({"title": obj.name, "icon": "eye", "url": url})
     unread = Notification.query.filter(
         Notification.user_id == current_user.id, Notification.read_at.is_(None),
         Notification.archived_at.is_(None)).count()

@@ -20,7 +20,7 @@ from .models import (
 )
 from .services import add_relation, create_issue, ensure_member, get_or_create_label, get_or_create_module, \
     log_activity, update_issue
-from .utils import fmt_minutes, normalize, parse_date
+from .utils import FORMULA_START, csv_safe, fmt_minutes, normalize, parse_date, xml_safe
 
 # ---------------------------------------------------------------------------
 # Lecture de fichiers tabulaires
@@ -126,13 +126,21 @@ def read_table(stream, filename: str):
             delim = dialect.delimiter
         except csv.Error:
             delim = ";" if text.count(";") > text.count(",") else ","
-        matrix = list(csv.reader(io.StringIO(text), delimiter=delim))
+        matrix = [[_csv_cell(c) for c in r] for r in csv.reader(io.StringIO(text), delimiter=delim)]
         return _rows_from_matrix(matrix)
     if ext == "json":
         payload = json.loads(data.decode("utf-8"))
         items = payload.get("issues", payload) if isinstance(payload, dict) else payload
         return [_row_from_json(it) for it in items if isinstance(it, dict)]
     raise ValueError("Format non pris en charge (xlsx, csv ou json attendu).")
+
+
+def _csv_cell(value: str) -> str:
+    """Retire l'apostrophe que l'export CSV met devant un texte qui commence comme une formule (« '=1+1 »).
+    Une apostrophe suivie d'autre chose fait partie du texte et reste."""
+    if value[:1] == "'" and value[1:2] and value[1:2] in FORMULA_START:
+        return value[1:]
+    return value
 
 
 def _row_from_json(it: dict) -> dict:
@@ -270,6 +278,9 @@ def _key_parts(ref) -> tuple[str | None, int | None]:
 
 
 class UserMatcher:
+    """Retrouve les personnes citées dans un fichier. Avec `create`, un nom inconnu devient un compte
+    désactivé (un administrateur l'active ensuite dans Équipe)."""
+
     def __init__(self, project, create=False):
         self.project = project
         self.create = create
@@ -280,6 +291,7 @@ class UserMatcher:
                 if k and normalize(k):
                     self.index.setdefault(normalize(k), u)
         self.unknown = set()
+        self.created = []
 
     def find(self, name: str):
         n = normalize(name)
@@ -300,11 +312,12 @@ class UserMatcher:
             u = User(username=username, email=User.internal_email(username),
                      first_name=parts[0].capitalize() if len(parts) > 1 else "",
                      last_name=" ".join(parts[1:]).capitalize() if len(parts) > 1 else name.strip().capitalize(),
-                     avatar_color=random.choice(PALETTE), must_change_password=True)
+                     avatar_color=random.choice(PALETTE), must_change_password=True, active=False)
             u.set_password(secrets.token_urlsafe(8))
             db.session.add(u)
             db.session.flush()
             self.index[n] = u
+            self.created.append(u)
             return u
         self.unknown.add(name.strip())
         return None
@@ -350,7 +363,14 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
     « MEM ») n'est jamais rapprochée d'un ticket existant ; Parent et Bloqué par visent d'abord les tickets du
     fichier lui-même (table clé du fichier -> ticket créé ou mis à jour)."""
     report = {"created": 0, "updated": 0, "skipped": 0, "warnings": []}
-    users = UserMatcher(project, create=create_members)
+    # Mêmes droits que dans l'interface : seul un administrateur de l'espace crée des comptes, et seul un
+    # administrateur du projet y fait entrer quelqu'un (Paramètres > Membres). Pour les autres, seuls les
+    # membres actuels sont assignés.
+    from .utils import can
+    may_add_members = can(actor, "admin", project)
+    users = UserMatcher(project, create=create_members and actor.role == "admin")
+    member_ids = {m.user_id for m in project.members}
+    not_members, guests_added = set(), set()
     ident = (project.identifier or "").upper()
     by_ext: dict[str, Issue] = {}
     by_key: dict[str, Issue] = {}  # clé du fichier (« EAE-5 ») -> ticket créé ou mis à jour par cet import
@@ -398,9 +418,17 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
         people = []
         for name in _split(row.get("assignees")) + _split(row.get("support")):
             u = users.find(name)
-            if u and u not in people:
+            if u is None or u in people:
+                continue
+            if u.id not in member_ids:
+                if not may_add_members:
+                    not_members.add(u.display_name)
+                    continue
                 ensure_member(project, u)
-                people.append(u)
+                member_ids.add(u.id)
+                if u.role == "guest":
+                    guests_added.add(u.display_name)
+            people.append(u)
         db.session.flush()
         if people:
             data["assignee_ids"] = [u.id for u in people]
@@ -505,7 +533,19 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
         refresh_module(m)
     if users.unknown:
         report["warnings"].append("Membres non reconnus (ignorés) : " + ", ".join(sorted(users.unknown))
-                                  + ". Coche « créer les membres manquants » pour les ajouter.")
+                                  + (". Coche « créer les membres manquants » pour les ajouter." if actor.role == "admin"
+                                     else ". Un administrateur peut créer leurs comptes dans Équipe."))
+    if not_members:
+        report["warnings"].append("Personnes qui ne sont pas membres du projet (non assignées) : "
+                                  + ", ".join(sorted(not_members)) + ". Un administrateur du projet peut les "
+                                  "ajouter dans Paramètres > Membres, puis tu pourras réimporter.")
+    if guests_added:
+        report["warnings"].append("Invités ajoutés au projet (lecture et commentaires) : "
+                                  + ", ".join(sorted(guests_added)) + ".")
+    if users.created:
+        report["warnings"].append("Comptes créés, désactivés en attendant : "
+                                  + ", ".join(sorted(u.display_name for u in users.created))
+                                  + ". Active-les dans Équipe quand tu veux.")
     return report
 
 
@@ -536,8 +576,10 @@ EXPORT_COLUMNS = ["Identifiant", "Titre", "Description", "État", "Groupe d’é
 
 
 def _issue_row(i: Issue):
+    """Ligne d'export d'un ticket. Les textes sont nettoyés des caractères de contrôle qu'Excel refuse (saut de
+    ligne collé depuis PowerPoint…)."""
     blockers = [r.related.key for r in IssueRelation.query.filter_by(issue_id=i.id, relation_type="blocked_by")]
-    return [
+    return [xml_safe(v) for v in [
         i.key, i.title, i.description or "", i.state.name if i.state else "",
         STATE_GROUP_LABELS.get(i.state_group, ""), PRIORITY_LABELS.get(i.priority, ""),
         ", ".join(u.display_name for u in i.assignees), _join_names(l.name for l in i.labels),
@@ -545,7 +587,7 @@ def _issue_row(i: Issue):
         i.start_date, i.target_date, i.estimate, i.parent.key if i.parent else "", ", ".join(blockers),
         fmt_minutes(i.time_spent_minutes) if i.worklogs else "", i.created_by.display_name if i.created_by else "",
         i.created_at, i.updated_at, i.completed_at, i.external_id or "",
-    ]
+    ]]
 
 
 def export_csv(issues) -> str:
@@ -555,7 +597,8 @@ def export_csv(issues) -> str:
     for i in issues:
         row = _issue_row(i)
         w.writerow([v.strftime("%d/%m/%Y %H:%M") if isinstance(v, datetime) else
-                    v.strftime("%d/%m/%Y") if isinstance(v, date) else ("" if v is None else v) for v in row])
+                    v.strftime("%d/%m/%Y") if isinstance(v, date) else ("" if v is None else csv_safe(v))
+                    for v in row])
     return "﻿" + buf.getvalue()
 
 
@@ -588,7 +631,7 @@ def export_xlsx(issues, title="Tickets") -> io.BytesIO:
     ws.auto_filter.ref = ws.dimensions
     # Synthèse
     syn = wb.create_sheet("Synthèse")
-    syn.append([title])
+    syn.append([xml_safe(title)])
     syn["A1"].font = Font(bold=True, size=14)
     syn.append([f"Export du {date.today():%d/%m/%Y} — {len(issues)} tickets"])
     syn.append([])
@@ -600,7 +643,7 @@ def export_xlsx(issues, title="Tickets") -> io.BytesIO:
     people = {}
     for i in issues:
         for u in i.assignees or [None]:
-            name = u.display_name if u else "Non assigné"
+            name = xml_safe(u.display_name) if u else "Non assigné"
             d = people.setdefault(name, [0, 0, 0])
             d[0] += 0 if i.is_closed else 1
             d[1] += 1 if i.state_group == "completed" else 0
@@ -611,10 +654,22 @@ def export_xlsx(issues, title="Tickets") -> io.BytesIO:
         for c in syn[r]:
             c.font = Font(bold=True)
     syn.column_dimensions["A"].width = 28
+    _no_formulas(wb)
     out = io.BytesIO()
     wb.save(out)
     out.seek(0)
     return out
+
+
+def _no_formulas(wb) -> None:
+    """Un texte qui commence par « = » (titre « => relancer le fournisseur », étiquette « =1+1 ») serait
+    enregistré comme formule : il est forcé en texte, pour qu'Excel l'affiche tel quel et que le réimport le
+    retrouve. Les autres débuts (+, -, @) restent du texte dans un .xlsx."""
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                if isinstance(c.value, str) and c.value.startswith("="):
+                    c.data_type = "s"
 
 
 def export_json(issues) -> str:

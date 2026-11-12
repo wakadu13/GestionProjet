@@ -9,7 +9,7 @@ from ..models import (
     ESTIMATE_TYPES, PALETTE, ROLES, STATE_GROUP_LABELS, Issue, Label, Project, ProjectMember, State, User, now,
 )
 from ..securite import clean_color
-from ..services import create_project, ensure_member, log_activity, to_int
+from ..services import create_project, ensure_member, log_activity, to_int, unsubscribe_from_project
 from ..utils import back_url, contient_plie, get_project, parse_date, project_role, tri_fr, visible_projects
 
 bp = Blueprint("projects", __name__, url_prefix="/projects")
@@ -122,6 +122,7 @@ def leave(pid):
         if m.role == "admin" and len(admins) == 1 and len(p.members) > 1:
             flash("Tu es le seul administrateur : nomme un autre administrateur avant de quitter.", "error")
             return redirect(back_url(url_for("projects.index")))
+        unsubscribe_from_project(p, current_user)
         db.session.delete(m)
         db.session.commit()
         flash(f"Tu as quitté « {p.name} ».", "info")
@@ -235,6 +236,7 @@ def _save_members(p):
             else:
                 for i in Issue.query.filter(Issue.project_id == p.id, Issue.assignees.any(User.id == m.user_id)):
                     i.assignees = [u for u in i.assignees if u.id != m.user_id]
+                unsubscribe_from_project(p, m.user)
                 db.session.delete(m)
                 flash("Membre retiré du projet.", "info")
 

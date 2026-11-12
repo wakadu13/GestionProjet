@@ -204,9 +204,12 @@ def toggle_favorite(etype, eid):
         abort(400)
     f = Favorite.query.filter_by(user_id=current_user.id, entity_type=etype, entity_id=eid).first()
     if f:
-        db.session.delete(f)
+        db.session.delete(f)  # retirer un favori reste toujours possible, même devenu invisible
         state = False
     else:
+        from ..utils import favorite_target
+        if favorite_target(current_user, etype, eid) is None:
+            abort(404)  # objet inexistant ou que tu n'as pas le droit de voir
         db.session.add(Favorite(user_id=current_user.id, entity_type=etype, entity_id=eid))
         state = True
     db.session.commit()

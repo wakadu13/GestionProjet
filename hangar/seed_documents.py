@@ -136,6 +136,7 @@ def load_documents(project: Project, actor: User, data: dict | None = None, atta
         return labels[name]
 
     db.session.flush()
+    historic_updated = {}
     by_ref, report = {}, {"tickets": 0, "attachments": 0, "relations": 0, "missing_docs": []}
     tickets = data.get("tickets", [])
     for t in tickets:
@@ -172,6 +173,8 @@ def load_documents(project: Project, actor: User, data: dict | None = None, atta
             issue.modules.append(m)
         for ln in t.get("labels") or []:
             issue.labels.append(label(ln))
+        # log_activity date le ticket d'aujourd'hui : on garde la date historique, restaurée en fin de chargement.
+        historic_updated[issue.id] = issue.updated_at
         a = log_activity(issue, actor, "imported", new="documents du projet")
         a.created_at = created
         if issue.completed_at:
@@ -220,6 +223,10 @@ def load_documents(project: Project, actor: User, data: dict | None = None, atta
             if ref and c.start_date <= ref <= c.end_date:
                 issue.cycle = c
                 break
+    # Les traces ci-dessus (activité, relations) ne doivent pas faire passer ces tickets pour modifiés aujourd'hui.
+    for issue in by_ref.values():
+        if issue.id in historic_updated:
+            issue.updated_at = historic_updated[issue.id]
     # Pages proposées (comptes rendus, synthèses)
     existing = {p.title.lower() for p in project.pages}
     for pg in data.get("pages", []):

@@ -365,7 +365,8 @@
     <input type="date" class="input input-sm" data-bulk="target_date" style="width:auto" title="Échéance">
     <button type="button" class="btn btn-sm" data-bulk-btn="unassign">Désassigner</button>
     <button type="button" class="btn btn-sm" data-bulk-btn="archive">{{ icon('archive', 14) }} Archiver</button>
-    <button type="button" class="btn btn-sm btn-danger-ghost" data-bulk-btn="delete" data-confirm-msg="Supprimer définitivement les tickets sélectionnés ?">{{ icon('trash', 14) }}</button>
+    {% set del_ns = namespace(ok=false) %}{% for p in projects %}{% if can_delete_issues(current_user, p) %}{% set del_ns.ok = true %}{% endif %}{% endfor %}
+    {% if del_ns.ok %}<button type="button" class="btn btn-sm btn-danger-ghost" data-bulk-btn="delete" data-confirm-msg="Supprimer définitivement les tickets sélectionnés ?">{{ icon('trash', 14) }}</button>{% endif %}
     <button type="button" class="btn btn-sm btn-ghost btn-icon" data-bulk-clear title="Désélectionner">{{ icon('x', 14) }}</button>
   </div>
 </form>

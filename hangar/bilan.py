@@ -364,7 +364,11 @@ def bilan_docx(data: dict, manual: dict | None = None, title: str | None = None)
     from docx.oxml.ns import qn
     from docx.shared import Pt, RGBColor
 
-    manual = manual or {}
+    from .utils import xml_safe, xml_safe_deep
+
+    # Un caractère de contrôle collé depuis PowerPoint (titre de ticket, nom de module…) ferait échouer Word :
+    # tout le contenu est nettoyé ici, bilans enregistrés compris.
+    data, manual, title = xml_safe_deep(data), xml_safe_deep(manual or {}), xml_safe(title)
     k = data.get("kpis", {})
     h = data.get("health", {})
     doc = Document()

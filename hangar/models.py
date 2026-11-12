@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 
 from flask_login import UserMixin
 from sqlalchemy import func
+from sqlalchemy import inspect as sa_inspect
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .extensions import db
@@ -327,7 +328,14 @@ class Project(db.Model):
         return None
 
     def next_sequence(self) -> int:
-        self.issue_sequence = (self.issue_sequence or 0) + 1
+        """Numéro du prochain ticket. L'incrément est fait par la base (UPDATE … = issue_sequence + 1) puis relu
+        dans la même transaction : deux créations simultanées dans le projet obtiennent deux numéros
+        différents (la seconde attend que la première ait fini d'écrire)."""
+        if sa_inspect(self).persistent:
+            self.issue_sequence = db.func.coalesce(Project.issue_sequence, 0) + 1
+            db.session.flush()  # prend le verrou d'écriture ; l'attribut est relu depuis la base
+        else:  # projet pas encore enregistré : personne d'autre ne peut y créer de ticket
+            self.issue_sequence = (self.issue_sequence or 0) + 1
         return self.issue_sequence
 
     @property

@@ -24,7 +24,7 @@
       <td class="muted">{{ i.archived_at|ago }}</td>
       <td class="right">{% if can(current_user, 'edit', project) %}
         <form method="post" action="{{ url_for('issues.action', pid=project.id, seq=i.sequence_id, action='restore') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs">{{ icon('refresh', 13) }} Restaurer</button></form>
-        {{ ui.confirm_button(url_for('issues.action', pid=project.id, seq=i.sequence_id, action='delete'), '', 'Supprimer définitivement ' ~ i.key ~ ' ?', 'btn btn-xs btn-danger-ghost', 'trash') }}
+        {% if can_delete_issues(current_user, project) %}{{ ui.confirm_button(url_for('issues.action', pid=project.id, seq=i.sequence_id, action='delete'), '', 'Supprimer définitivement ' ~ i.key ~ ' ?', 'btn btn-xs btn-danger-ghost', 'trash') }}{% endif %}
       {% endif %}</td>
     </tr>
     {% endfor %}
