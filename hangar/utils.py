@@ -59,6 +59,32 @@ def can(user, action: str, project: Project) -> bool:
     return False
 
 
+def can_delete_issues(user, project: Project) -> bool:
+    """Suppression définitive d'un ticket (fiche, suppression en masse, API) : réservée à l'administrateur
+    du projet (ou de l'espace) et au responsable du projet. Les autres membres archivent."""
+    if not can(user, "edit", project):
+        return False
+    return can(user, "admin", project) or (project.lead_id is not None and project.lead_id == user.id)
+
+
+def favorite_target(user, entity_type: str, entity_id: int):
+    """Objet d'un favori (projet, cycle, module, vue, page) si `user` a le droit de le voir, sinon None.
+    Sert à l'ajout d'un favori et à la barre latérale : un titre privé ne doit jamais y apparaître."""
+    from .models import Cycle, Module, Page, SavedView
+    model = {"project": Project, "cycle": Cycle, "module": Module, "view": SavedView, "page": Page}.get(entity_type)
+    obj = db.session.get(model, entity_id) if model else None
+    if obj is None:
+        return None
+    project = obj if entity_type == "project" else obj.project
+    if project is not None and not can(user, "view", project):
+        return None
+    if entity_type == "page" and not (obj.is_public or obj.owner_id == user.id):
+        return None
+    if entity_type == "view" and not (obj.is_public or obj.owner_id == user.id):
+        return None
+    return obj
+
+
 def get_project(pid: int, need: str = "view") -> Project:
     project = db.session.get(Project, pid)
     if project is None:
@@ -116,6 +142,48 @@ def normalize(text: str) -> str:
 
 def slugify(text: str) -> str:
     return normalize(text).replace(" ", "-") or "x"
+
+
+# Caractères de contrôle refusés par Excel (openpyxl) et Word (python-docx) : les deux bibliothèques refusent
+# exactement ce jeu. La tabulation verticale (saut de ligne Maj+Entrée de PowerPoint) et le saut de page
+# deviennent un vrai retour à la ligne ; les autres sont retirés.
+_XML_ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_LINE_CONTROLS = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def xml_safe(value):
+    """Texte utilisable dans un fichier Excel ou Word. Les autres valeurs (nombres, dates…) passent telles
+    quelles."""
+    if not isinstance(value, str):
+        return value
+    return _XML_ILLEGAL.sub("", value.replace("\x0b", "\n").replace("\x0c", "\n"))
+
+
+def xml_safe_deep(value):
+    """`xml_safe` appliqué à toutes les chaînes d'un dict / d'une liste (données d'un bilan)."""
+    if isinstance(value, dict):
+        return {k: xml_safe_deep(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [xml_safe_deep(v) for v in value]
+    return xml_safe(value)
+
+
+def single_line(text: str) -> str:
+    """Titre sur une ligne : tout caractère de contrôle (tabulation, retour à la ligne collé…) devient une
+    espace."""
+    return _LINE_CONTROLS.sub(" ", text or "")
+
+
+# Tableurs (CSV) : une cellule qui commence par l'un de ces caractères serait lue comme une formule.
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value):
+    """Valeur de cellule CSV qu'un tableur affiche telle quelle : une apostrophe est ajoutée devant un texte
+    qui commence comme une formule (voir `importer.read_table`, qui la retire à l'import)."""
+    if isinstance(value, str) and value.startswith(FORMULA_START):
+        return "'" + value
+    return value
 
 
 ALLOWED_TAGS = {

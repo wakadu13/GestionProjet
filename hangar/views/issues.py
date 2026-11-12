@@ -17,10 +17,11 @@ from ..models import (
 from ..securite import attachment_type, protect_file
 from ..services import (
     add_relation, archive_issue, create_issue, description_conflict, description_conflict_message, duplicate_issue,
-    handle_mentions, log_activity, move_issue_to_project, notify_subscribers, restore_issue, run_automations,
-    text_version, to_int, update_issue,
+    delete_issue, handle_mentions, log_activity, move_issue_to_project, notify_subscribers, restore_issue,
+    run_automations, text_version, to_int, update_issue,
 )
-from ..utils import back_url, can, fmt_minutes, get_project, issue_url, parse_duration, visible_projects
+from ..utils import (back_url, can, can_delete_issues, fmt_minutes, get_project, issue_url, parse_duration,
+                     visible_projects)
 from .home import _layout_context
 
 bp = Blueprint("issues", __name__)
@@ -42,6 +43,8 @@ def index(pid):
     view = None
     if request.args.get("view"):
         view = db.session.get(SavedView, to_int(request.args.get("view")) or 0)
+        if view is not None and (view.project_id != pid or not (view.is_public or view.owner_id == current_user.id)):
+            view = None  # vue d'un autre projet, ou vue privée de quelqu'un d'autre : ni nom ni description
     f = IQ.parse_filters(request.args)
     opts = IQ.display_options(request.args, f"p:{pid}")
     q = IQ.apply_filters(IQ.base_query().filter(Issue.project_id == pid), f, current_user)
@@ -355,8 +358,10 @@ def _find_issue_ref(ref, default_project):
 @login_required
 def relation_add(pid, seq):
     issue = get_issue(pid, seq, "edit")
-    other = (db.session.get(Issue, to_int(request.form.get("related_id")) or 0)
-             or _find_issue_ref(request.form.get("ref"), issue.project))
+    other = db.session.get(Issue, to_int(request.form.get("related_id")) or 0)
+    if other is not None and not can(current_user, "view", other.project):
+        other = None  # ticket d'un projet qu'on ne voit pas : introuvable, comme par sa clé
+    other = other or _find_issue_ref(request.form.get("ref"), issue.project)
     rtype = request.form.get("relation_type", "relates_to")
     if other is None:
         flash("Ticket introuvable.", "error")
@@ -465,14 +470,12 @@ def action(pid, seq, action):
         flash(f"{issue.key} restauré.", "success")
         return redirect(issue_url(issue))
     if action == "delete":
+        if not can_delete_issues(current_user, project):
+            flash("Seuls l’administrateur et le responsable du projet peuvent supprimer un ticket. "
+                  "Tu peux l’archiver à la place.", "error")
+            return redirect(issue_url(issue))
         key = issue.key
-        from ..services import remove_attachment_file
-        own = [a.id for a in issue.attachments]
-        for a in issue.attachments:
-            remove_attachment_file(a.stored_name, exclude_ids=own)
-        IssueRelation.query.filter(db.or_(IssueRelation.issue_id == issue.id,
-                                          IssueRelation.related_id == issue.id)).delete()
-        db.session.delete(issue)
+        delete_issue(issue)
         db.session.commit()
         flash(f"{key} supprimé définitivement.", "info")
         return redirect(url_for("issues.index", pid=pid))
@@ -531,11 +534,9 @@ def bulk():
         elif act == "archive":
             archive_issue(issue, current_user)
         elif act == "delete":
-            if not can(current_user, "admin", issue.project):
+            if not can_delete_issues(current_user, issue.project):
                 continue
-            IssueRelation.query.filter(db.or_(IssueRelation.issue_id == issue.id,
-                                              IssueRelation.related_id == issue.id)).delete()
-            db.session.delete(issue)
+            delete_issue(issue)
         else:
             continue
         n += 1

@@ -8,9 +8,9 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from ..extensions import db
 from ..models import APIToken, Comment, Issue, Project, now
-from ..services import (create_issue, description_conflict, description_conflict_message, log_activity,
-                        serialize_issue, to_int, update_issue)
-from ..utils import can, visible_projects
+from ..services import (create_issue, delete_issue, description_conflict, description_conflict_message,
+                        log_activity, serialize_issue, to_int, update_issue)
+from ..utils import can, can_delete_issues, visible_projects
 
 bp = Blueprint("apiv1", __name__, url_prefix="/api/v1")
 
@@ -121,7 +121,10 @@ def issue(iid):
         return jsonify(ok=True, issue=serialize_issue(_issue(iid)))
     i = _issue(iid, "edit")
     if request.method == "DELETE":
-        db.session.delete(i)
+        if not can_delete_issues(g.api_user, i.project):
+            return jsonify(ok=False, error="Suppression réservée à l’administrateur et au responsable du projet "
+                                          "(archive le ticket à la place)."), 403
+        delete_issue(i)
         db.session.commit()
         return jsonify(ok=True)
     data = request.get_json(silent=True) or {}

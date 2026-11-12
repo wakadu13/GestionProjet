@@ -208,11 +208,13 @@ def _custom(issues, project):
     if request.args.get("format") == "csv":
         import csv
         import io
+
+        from ..utils import csv_safe
         buf = io.StringIO()
         w = csv.writer(buf, delimiter=";")
-        w.writerow([DIMENSIONS[x]] + [s[0] for s in segs.values()] + ["Total"])
+        w.writerow([DIMENSIONS[x]] + [csv_safe(s[0]) for s in segs.values()] + ["Total"])
         for row in table:
-            w.writerow([row["label"]] + row["values"] + [row["total"]])
+            w.writerow([csv_safe(row["label"])] + row["values"] + [row["total"]])
         return {"csv_response": Response("﻿" + buf.getvalue(), mimetype="text/csv",
                                          headers={"Content-Disposition": "attachment; filename=analytique.csv"})}
     return {"x": x, "segment": seg, "metric": metric,

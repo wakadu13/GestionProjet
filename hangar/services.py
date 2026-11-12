@@ -12,7 +12,7 @@ from .models import (
     PALETTE, PRIORITY_LABELS, Activity, Cycle, Issue, IssueRelation, Label, Module, Notification,
     Project, ProjectMember, State, User, estimate_label, now,
 )
-from .utils import extract_mentions, fmt_date, fmt_minutes, parse_date
+from .utils import can, extract_mentions, fmt_date, fmt_minutes, parse_date, single_line
 
 DEFAULT_STATES = [
     ("Backlog", "#a3a3a3", "backlog", False),
@@ -92,15 +92,31 @@ def log_activity(issue, actor, verb, field=None, old=None, new=None, project=Non
                  field=field, old_value=None if old is None else str(old),
                  new_value=None if new is None else str(new))
     db.session.add(a)
+    if issue is not None:
+        # Toute action tracée (temps saisi, sous-ticket, lien, pièce jointe, relation…) compte comme une
+        # activité du ticket : la fermeture automatique ne doit pas le croire abandonné.
+        issue.updated_at = now()
     return a
+
+
+def unsubscribe_from_project(project: Project, user: User) -> None:
+    """Retire `user` des abonnés de tous les tickets du projet (il le quitte ou en est retiré)."""
+    from .models import issue_subscribers
+    ids = [i for (i,) in db.session.query(Issue.id).filter(Issue.project_id == project.id)]
+    if ids:
+        db.session.execute(issue_subscribers.delete().where(issue_subscribers.c.user_id == user.id,
+                                                            issue_subscribers.c.issue_id.in_(ids)))
 
 
 def notify(users, actor, issue, kind, message, url=None, project=None):
     seen = set()
+    scope = project or (issue.project if issue else None)
     for u in users:
         if u is None or not u.active or (actor is not None and u.id == actor.id) or u.id in seen:
             continue
         seen.add(u.id)
+        if scope is not None and not can(u, "view", scope):
+            continue  # retiré du projet, parti, projet devenu privé, invité cité : rien ne doit lui parvenir
         n = Notification(
             user=u, actor=actor, issue=issue, project=project or (issue.project if issue else None),
             kind=kind, message=message[:500],
@@ -121,7 +137,7 @@ def notify_subscribers(issue, actor, activity, kind="update"):
 
 
 def handle_mentions(text, issue, actor, where="un commentaire"):
-    users = extract_mentions(text)
+    users = [u for u in extract_mentions(text) if can(u, "view", issue.project)]
     if users:
         for u in users:
             issue.subscribe(u)
@@ -296,7 +312,7 @@ def update_issue(issue: Issue, data: dict, actor: User, log: bool = True) -> lis
             acts.append(log_activity(issue, actor, "updated", field, old, new))
 
     if "title" in data:
-        t = (data.get("title") or "").strip()[:255]
+        t = single_line(data.get("title") or "").strip()[:255]
         if t and t != issue.title:
             rec("title", issue.title, t)
             issue.title = t
@@ -416,7 +432,7 @@ def update_issue(issue: Issue, data: dict, actor: User, log: bool = True) -> lis
 
 
 def create_issue(project: Project, data: dict, actor: User, intake: bool = False) -> Issue:
-    title = (data.get("title") or "").strip()[:255] or "Sans titre"
+    title = single_line(data.get("title") or "").strip()[:255] or "Sans titre"
     max_sort = db.session.query(db.func.max(Issue.sort_order)).filter(Issue.project_id == project.id).scalar()
     issue = Issue(sequence_id=project.next_sequence(), title=title, description=data.get("description") or "",
                   priority="none", created_by=actor, sort_order=(max_sort or 0) + 1000, project_id=project.id)
@@ -460,8 +476,11 @@ def duplicate_issue(issue: Issue, actor: User) -> Issue:
 def move_issue_to_project(issue: Issue, target: Project, actor: User) -> Issue:
     old_project = issue.project
     old_key = issue.key
+    # Numéro pris AVANT de changer le ticket de projet : next_sequence écrit en base (flush), et le ticket ne
+    # doit pas y arriver dans le projet cible avec son ancien numéro.
+    seq = target.next_sequence()
     issue.project = target
-    issue.sequence_id = target.next_sequence()
+    issue.sequence_id = seq
     st = target.first_state_of(issue.state_group) or target.default_state()
     issue.state = st
     issue.labels = [l2 for l in issue.labels for l2 in target.labels if l2.name.lower() == l.name.lower()]
@@ -490,8 +509,6 @@ def add_relation(issue: Issue, other: Issue, rtype: str, actor: User):
                db.and_(IssueRelation.issue_id == other.id, IssueRelation.related_id == issue.id))).first()
     if exists:
         return None
-    if rtype == "blocks":  # alias inverse
-        issue, other, rtype = other, issue, "blocked_by"
     rel = IssueRelation(issue=issue, related=other, relation_type=rtype)
     db.session.add(rel)
     label_src, label_dst = RELATION_TYPES[rtype]
@@ -554,6 +571,19 @@ def restore_issue(issue: Issue, actor: User):
     log_activity(issue, actor, "restored")
 
 
+def delete_issue(issue: Issue) -> None:
+    """Suppression définitive d'un ticket (fiche, suppression en masse, API) : ses fichiers joints quittent le
+    disque, ses relations disparaissent avec lui. Le droit est vérifié par l'appelant (utils.can_delete_issues)."""
+    own = [a.id for a in issue.attachments]
+    for a in issue.attachments:
+        remove_attachment_file(a.stored_name, exclude_ids=own)
+    IssueRelation.query.filter(db.or_(IssueRelation.issue_id == issue.id,
+                                      IssueRelation.related_id == issue.id)).delete()
+    for c in list(issue.children):
+        c.parent = None
+    db.session.delete(issue)
+
+
 def remove_attachment_file(stored_name: str, exclude_ids=()) -> None:
     """Supprime un fichier joint du disque s'il n'est plus utilisé par une autre pièce jointe."""
     import os
@@ -580,16 +610,23 @@ def run_automations(project: Project):
             i.archived_at = now()
             log_activity(i, None, "archived")
             changed += 1
-    if project.auto_close_months:
-        limit = now() - timedelta(days=30 * project.auto_close_months)
+    if project.auto_close_months and not project.is_archived:
+        months = project.auto_close_months
+        limit = now() - timedelta(days=30 * months)
         cancelled = project.first_state_of("cancelled")
+        open_groups = ("backlog", "unstarted", "started")
         if cancelled:
             for i in Issue.query.join(State, Issue.state_id == State.id).filter(
                     Issue.project_id == project.id, Issue.archived_at.is_(None),
-                    State.group.in_(("backlog", "unstarted", "started")), Issue.updated_at < limit):
+                    Issue.is_visible_clause(),  # une demande d'invité en attente n'est pas abandonnée
+                    State.group.in_(open_groups), Issue.updated_at < limit):
+                if any(c.archived_at is None and c.state_group in open_groups for c in i.children):
+                    continue  # le ticket avance par ses sous-tickets
                 old = i.state.name
                 i.state = cancelled
                 log_activity(i, None, "updated", "state", old, cancelled.name)
+                notify(list(i.assignees) + list(i.subscribers), None, i, "update",
+                       f"Fermé automatiquement après {months} mois sans activité · {i.key} {i.title}")
                 changed += 1
     if changed:
         db.session.commit()

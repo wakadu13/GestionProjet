@@ -175,7 +175,7 @@
       <div class="field"><label>Fichier (.xlsx, .csv ou .json exporté par Hangar)</label><input class="input" type="file" name="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.json" required style="padding:5px"></div>
       <label class="checkbox mb"><input type="checkbox" name="update_existing" value="1"> Mettre à jour les tickets existants (même ID d’origine, ou même clé {{ p.identifier }}-…)</label>
       <p class="help mb" style="margin-top:-6px">Seules les cellules remplies changent le ticket : une colonne absente ou vide garde la valeur actuelle. Une sauvegarde de la base est faite juste avant, et l’ancienne description reste dans l’historique du ticket. Sans cette case, chaque ligne devient un nouveau ticket.</p>
-      <label class="checkbox mb"><input type="checkbox" name="create_members" value="1"> Créer les membres manquants (comptes à activer ensuite)</label>
+      {% if current_user.is_admin %}<label class="checkbox mb"><input type="checkbox" name="create_members" value="1"> Créer les membres manquants (comptes désactivés, à activer ensuite dans Équipe)</label>{% endif %}
       <div class="help mb">
         La ligne d’en-tête est détectée automatiquement. Colonnes reconnues : <b>Titre / Tâche</b> (obligatoire), ID, Description, Livrable, Statut / État, Priorité, Responsable, Appui, Début, Échéance, Étiquettes / Partie, Module / Phase, Cycle / Sprint, Estimation / Durée, Dépend de (crée des relations « bloqué par »), Commentaires, Source, Parent.
       </div>
