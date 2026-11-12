@@ -5,12 +5,16 @@
 - piste 46 : annulation des travaux, lots dont la relève échoue, reprise au lancement ;
 - piste 47 : pages longues (extraits utiles au lieu du seul début, « page coupée » signalée) ;
 - piste 48 : Ollama (mémoire de contexte, aide pour Windows, appels d'outils sous le même index) ;
-- piste 61 : clé d'API liée à l'adresse du fournisseur.
+- piste 61 : clé d'API liée à l'adresse du fournisseur ;
+- après relecture : extraits qui remplissent le budget, réserves des lots limitées au dépôt des lots, clé d'une
+  variable d'environnement liée elle aussi à l'adresse, avertissements d'Ollama des demandes courtes.
 
 Lancer : uv run python -m unittest tests.test_ia -v
 """
 import io
 import json
+import os
+import re
 import shutil
 import socket
 import tempfile
@@ -243,25 +247,33 @@ class PlafondMensuelTests(IATestCase):
     def test_lots_en_cours_comptent_dans_le_plafond(self):
         self.claude()
         s = AISettings.get()
-        s.monthly_cap = 1.0
+        s.monthly_cap = 0.3
         db.session.commit()
         lots = [jobs.enqueue("essai_lot", {"n": n}, user=self.member, batch=True) for n in range(5)]
         jobs.run_pending()
         statuts = [db.session.get(AIJob, j.id).status for j in lots]
-        # Chaque lot réserve son coût au plus (64 000 jetons de sortie d'Opus 5.5 à moitié prix ≈ 0,64 $) :
-        # au-delà de 1 $ de réserves, les suivants sont refusés au lieu de partir tous.
+        # Chaque lot réserve son coût prévu (16 000 jetons de sortie d'Opus 5.5 à moitié prix ≈ 0,16 $, pour une
+        # entrée minuscule) : au-delà de 0,30 $ de réserves, les suivants sont refusés au lieu de partir tous.
         self.assertEqual(statuts, ["batch", "batch", "error", "error", "error"])
-        self.assertIn("Plafond", db.session.get(AIJob, lots[2].id).message)
+        message = db.session.get(AIJob, lots[2].id).message
+        self.assertIn("des lots en cours réservent 0.32 $", message)
+        self.assertIn("sans lot", message)
         self.assertEqual(len(self.fake.batches), 2)
-        self.assertTrue(core.cap_reached())
-        self.assertGreater(core.reserved_cost(), 1.0)
-        # Plafond atteint : un nouveau travail est refusé dès le dépôt
+        self.assertTrue(core.cap_reached(reserves=True))
+        self.assertGreater(core.reserved_cost(), 0.3)
+        # Un nouveau lot est refusé dès le dépôt…
         self.ecrire("Cours/Elec.pdf", __import__("test_ai").tiny_pdf("Electricite"))
         c = self.login()
-        r = c.post("/transformations/", data={"_csrf": c.token, "pdf": "Cours/Elec.pdf"})
+        r = c.post("/transformations/", data={"_csrf": c.token, "pdf": "Cours/Elec.pdf", "lot": "1"})
         self.assertEqual(r.status_code, 302)
-        self.assertIn("Plafond", self.flashes(c))
+        self.assertIn("des lots en cours réservent", self.flashes(c))
         self.assertEqual(AIJob.query.filter_by(kind="page").count(), 0)
+        # … mais pas le reste : la dépense réelle (0 $) est sous le plafond
+        self.assertFalse(core.cap_reached())
+        self.fake.replies.append(claude_msg(["Bonjour !"]))
+        self.chat(c, "Bonjour")
+        c.post("/transformations/", data={"_csrf": c.token, "pdf": "Cours/Elec.pdf"})
+        self.assertEqual(AIJob.query.filter_by(kind="page").count(), 1)
         page = c.get("/ia/reglages/").get_data(as_text=True)
         self.assertIn("réservés pour 2 lots en cours", page)
         # Au retour des lots, la réserve fait place au coût réel
@@ -270,7 +282,7 @@ class PlafondMensuelTests(IATestCase):
         self.fake.batch_reply = claude_msg(["Fait."])
         self.assertEqual(jobs.check_batches(), 2)
         self.assertEqual(core.reserved_cost(), 0)
-        self.assertFalse(core.cap_reached())
+        self.assertFalse(core.cap_reached(reserves=True))
 
     def test_reponse_interrompue_comptee(self):
         self.claude()
@@ -720,3 +732,241 @@ class CleFournisseurTests(IATestCase):
             self.assertEqual([g["auth"] for g in cible.gets if g["auth"]], [])
         finally:
             redir.close()
+
+
+# ---------------------------------------------------------------------------
+# Après relecture
+# ---------------------------------------------------------------------------
+
+def cours_chapitres(n=42, repetitions=28):
+    """Cours en chapitres « ## Chapitre N » dont le texte ne répète pas le titre (comme un vrai cours) ;
+    42 chapitres : à peine plus long que la limite de 80 000 caractères."""
+    blocs = ["# Cours\n\nIntroduction du cours de mécanique du vol."]
+    for i in range(1, n + 1):
+        blocs.append(f"## Chapitre {i}\n\n"
+                     + f"Contenu propre à la partie numéro-{i}-fin sur l’aérodynamique générale. " * repetitions)
+    blocs.append("## Synthèse\n\nLe décrochage survient au-delà de l’incidence critique.")
+    return "\n\n".join(blocs)
+
+
+def texte_du_prompt(contenu):
+    return contenu if isinstance(contenu, str) else " ".join(b.get("text", "") for b in contenu)
+
+
+class ExtraitsBudgetTests(IATestCase):
+    """Piste 47 : une page à peine trop longue est envoyée presque entière, pas réduite à quelques titres."""
+
+    def test_tuteur_page_a_peine_trop_longue_et_question_sur_un_titre(self):
+        texte = cours_chapitres()
+        self.assertTrue(demandes.MAX_CHARS_COURS < len(texte) < 1.1 * demandes.MAX_CHARS_COURS)
+        self.ecrire("Cours/Vol.md", texte)
+        self.claude()
+        c = self.login()
+        self.fake.replies.append(claude_msg(["ok"], model="claude-haiku-5-5"))
+        r = self.post_json(c, "/claude/tuteur/", {"page": "Cours/Vol", "question": "Explique-moi le chapitre 12"})
+        self.assertTrue(r.json["coupee"])
+        system = self.fake.requests[0]["system"][0]["text"]
+        self.assertIn("numéro-12-fin", system)  # le texte du chapitre 12, pas seulement son titre
+        transmis = system.split("n’en parle pas.)\n\n", 1)[1]
+        self.assertGreater(len(transmis), 0.9 * demandes.MAX_CHARS_COURS)  # le budget est rempli
+        self.assertLessEqual(len(transmis), demandes.MAX_CHARS_COURS)
+
+    def test_panneau_annonce_la_taille_vraiment_transmise(self):
+        from hangar.wiki.vault import get_vault
+
+        self.ecrire("Cours/Vol.md", cours_chapitres())
+        self.claude()
+        c = self.login()
+        self.fake.replies.append(claude_msg(["ok"]))
+        self.chat(c, "Quand survient le décrochage ?", path=get_vault().notes["cours/vol"].url)
+        prompt = texte_du_prompt(self.fake.requests[0]["messages"][-1]["content"])
+        self.assertIn("Le décrochage survient", prompt)
+        annonce = int(re.search(r"environ ([\d ]+) caractères sur", prompt).group(1).replace(" ", ""))
+        self.assertGreater(annonce, 70_000)
+        self.assertGreater(len(prompt), annonce)  # la note dit ce qui part vraiment, pas la limite
+
+    def test_long_cours_et_petit_budget(self):
+        from hangar.ai.context import extraits
+
+        texte = cours_chapitres(300)
+        out, coupe = extraits(texte, "Explique-moi le chapitre 12", 12_000)
+        self.assertTrue(coupe)
+        self.assertIn("numéro-12-fin", out)
+        self.assertTrue(0.9 * 12_000 < len(out) <= 12_000)
+        self.assertLess(out.count("## Chapitre"), 15)  # pas la liste de tous les titres « Chapitre N »
+        out, _ = extraits(texte, "Quand survient le décrochage ?", 12_000)
+        self.assertIn("incidence critique", out)
+        self.assertTrue(0.9 * 12_000 < len(out) <= 12_000)
+        out, _ = extraits("Une phrase sans fin. " * 20_000 + "Le décrochage arrive.", "décrochage", 12_000)
+        self.assertIn("décrochage", out)  # un paragraphe géant est découpé
+        self.assertGreater(len(out), 0.9 * 12_000)
+
+
+class ReservesLotsTests(IATestCase):
+    """Piste 45 : les réserves des lots ne suspendent pas l'IA, elles limitent seulement le dépôt de lots."""
+
+    def test_lots_de_pdf_ne_suspendent_pas_l_ia(self):
+        from test_ai import tiny_pdf
+
+        self.claude()
+        self.assertEqual(AISettings.get().monthly_cap, 5.0)  # plafond par défaut
+        c = self.login()
+        for n in range(6):
+            self.ecrire(f"Cours/P{n}.pdf", tiny_pdf(f"Cours {n}"))
+            c.post("/transformations/", data={"_csrf": c.token, "pdf": f"Cours/P{n}.pdf", "lot": "1"})
+            jobs.run_pending()
+        self.assertEqual([j.status for j in AIJob.query.order_by(AIJob.id)], ["batch"] * 6)
+        self.assertLess(core.reserved_cost(), 1.5)  # PDF d'une page : bien moins de 1 $ chacun
+        self.assertEqual(core.month_cost(), 0)
+        self.assertFalse(core.cap_reached())
+        self.fake.replies.append(claude_msg(["Bonjour !"]))
+        events = self.chat(c, "Bonjour")
+        self.assertNotIn("error", [e for e, _ in events])
+        self.fake.replies.append(claude_msg(["R est la résistance."], model="claude-haiku-5-5"))
+        r = self.post_json(c, "/claude/tuteur/", {"page": "Cours/Ohm", "question": "Que vaut R ?"})
+        self.assertEqual(r.status_code, 200, r.json)
+
+    def test_tarif_inconnu_sans_famille(self):
+        notes = core.price_notes(AIProvider(kind="anthropic", model="claude-inconnu-9"))
+        self.assertIn("coût estimé au tarif le plus cher de Claude (10 $ / 50 $", notes[0])
+        self.assertNotIn("le plus cher le plus cher", notes[0])
+
+
+class CleVariableTests(IATestCase):
+    """Piste 61 : la clé lue dans une variable d'environnement ne suit pas non plus une nouvelle adresse."""
+
+    def test_variable_d_openrouter_ne_suit_pas_une_nouvelle_adresse(self):
+        srv = espionner_get(self.server())
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-or-ENV-SECRETE"}):
+            p = AIProvider(name="OpenRouter", kind="openai_compatible", preset="openrouter",
+                           base_url="https://openrouter.ai/api/v1", api_key_env="OPENROUTER_API_KEY", model="llama",
+                           enabled=True)
+            db.session.add(p)
+            db.session.commit()
+            self.assertEqual(p.key(), "sk-or-ENV-SECRETE")  # vers openrouter.ai, elle part
+            c = self.login()
+            data = {"_csrf": c.token, "id": p.id, "preset": "openrouter", "name": p.name, "base_url": srv.url,
+                    "api_key": "", "api_key_env": "OPENROUTER_API_KEY", "model": "llama", "enabled": ["0", "1"]}
+            r = c.post("/ia/fournisseurs/essai", data={**data, "what": "test"})
+            self.assertFalse(r.json["ok"])
+            self.assertIn("ne part que vers openrouter.ai", r.json["message"])
+            c.post("/ia/fournisseurs/essai", data={**data, "what": "models"})
+            c.post(f"/ia/fournisseurs/{p.id}", data=data)
+            self.assertIn("ne part que vers openrouter.ai", self.flashes(c))
+            db.session.refresh(p)
+            self.assertEqual((p.base_url, p.key()), (srv.url, ""))
+            c.post(f"/ia/fournisseurs/{p.id}/tester", data={"_csrf": c.token})
+            self.assertNotIn("Authorization", P.get(p)._headers())
+            self.assertEqual([g["auth"] for g in srv.gets if g["auth"]], [])
+            self.assertIn("ne part que vers openrouter.ai", c.get("/ia/reglages/").get_data(as_text=True))
+            # De retour sur openrouter.ai, la clé repart
+            c.post(f"/ia/fournisseurs/{p.id}", data={**data, "base_url": "https://openrouter.ai/api/v1"})
+            db.session.refresh(p)
+            self.assertEqual(p.key(), "sk-or-ENV-SECRETE")
+
+    def test_variable_anthropic_reservee_a_anthropic(self):
+        srv = espionner_get(self.server())
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-ENV-SECRETE"}):
+            p = self.claude()
+            p.api_key = ""
+            db.session.commit()
+            self.assertEqual(p.key(), "sk-ant-ENV-SECRETE")  # adresse par défaut : api.anthropic.com
+            self.app.config.pop("AI_ANTHROPIC_FACTORY")
+            c = self.login()
+            data = {"_csrf": c.token, "id": p.id, "preset": "anthropic", "name": p.name,
+                    "base_url": srv.url.removesuffix("/v1"), "api_key": "", "model": p.model, "enabled": ["0", "1"],
+                    "what": "test"}
+            r = c.post("/ia/fournisseurs/essai", data=data)
+            self.assertFalse(r.json["ok"])
+            self.assertIn("ne part que vers api.anthropic.com", r.json["message"])
+            self.assertEqual(srv.gets, [])
+            # Une passerelle reste possible en tapant la clé
+            vue = mock.patch.object(P.AnthropicProvider, "test", autospec=True,
+                                    side_effect=lambda prov: (True, "clé : " + prov.row.key()))
+            with vue:
+                r = c.post("/ia/fournisseurs/essai", data={**data, "api_key": "sk-ant-passerelle"})
+            self.assertIn("sk-ant-passerelle", r.json["message"])
+
+    def test_variable_personnelle_liee_a_l_adresse_ou_elle_a_ete_indiquee(self):
+        a, b = espionner_get(self.server()), espionner_get(self.server())
+        with mock.patch.dict(os.environ, {"MON_SERVEUR_API_KEY": "cle-perso", "AUTRE_API_KEY": "cle-b"}):
+            c = self.login()
+            base = {"_csrf": c.token, "preset": "custom", "name": "Perso", "model": "m",
+                    "api_key_env": "MON_SERVEUR_API_KEY"}
+            c.post("/ia/fournisseurs/nouveau", data={**base, "base_url": a.url})
+            p = AIProvider.query.one()
+            self.assertEqual(p.key(), "cle-perso")
+            c.post("/ia/fournisseurs/essai", data={**base, "id": p.id, "base_url": b.url, "what": "models"})
+            self.assertEqual([g["auth"] for g in b.gets], [None])
+            c.post(f"/ia/fournisseurs/{p.id}", data={**base, "base_url": b.url})
+            db.session.refresh(p)
+            self.assertEqual(p.key(), "")  # nouvelle adresse : la clé de la variable ne suit pas
+            self.assertIn(f"ne part que vers 127.0.0.1:{a.server.server_address[1]}", self.flashes(c))
+            # Une variable indiquée pour la nouvelle adresse vaut pour elle
+            c.post(f"/ia/fournisseurs/{p.id}", data={**base, "base_url": b.url, "api_key_env": "AUTRE_API_KEY"})
+            db.session.refresh(p)
+            self.assertEqual(p.key(), "cle-b")
+            # Fournisseur enregistré avant cette règle (adresse liée vide) : rien ne change pour lui
+            ancien = AIProvider(name="Ancien", kind="openai_compatible", preset="custom", base_url=a.url,
+                                api_key_env="MON_SERVEUR_API_KEY", model="m")
+            self.assertIsNone(ancien.api_key_env_origin)
+            self.assertEqual(ancien.key(), "cle-perso")
+
+    def test_colonne_ajoutee_a_une_base_existante(self):
+        p = AIProvider(name="Perso", kind="openai_compatible", preset="custom", base_url="http://10.0.0.2:8080/v1",
+                       api_key_env="MON_SERVEUR_API_KEY", model="m")
+        db.session.add(p)
+        db.session.commit()
+        db.session.execute(text("ALTER TABLE ai_provider DROP COLUMN api_key_env_origin"))  # base d'avant
+        db.session.commit()
+        db.session.remove()
+        from hangar import _auto_migrate
+        _auto_migrate()
+        p = AIProvider.query.one()
+        self.assertIsNone(p.api_key_env_origin)
+        with mock.patch.dict(os.environ, {"MON_SERVEUR_API_KEY": "cle-perso"}):
+            self.assertEqual(p.key(), "cle-perso")
+
+
+class AvertissementsOllamaTests(IATestCase):
+    """Piste 48 : les demandes courtes ne dégradent plus Ollama sans prévenir."""
+
+    def test_tuteur_avec_ollama_envoie_une_part_a_sa_mesure(self):
+        srv = self.server()
+        self.ollama(srv)
+        self.ecrire("Cours/Long.md", page_longue(20))
+        self.assertGreater(len(page_longue(20)), 30_000)
+        c = self.login()
+        srv.script.append({"sse": sse_text("Réponse du tuteur.")})
+        r = self.post_json(c, "/claude/tuteur/", {"page": "Cours/Long", "question": "Que dit le théorème de Zorglub ?"})
+        self.assertEqual(r.status_code, 200, r.json)
+        self.assertTrue(r.json["coupee"])
+        self.assertIn("Page longue", r.json["html"])
+        systeme = srv.requests[0]["body"]["messages"][0]["content"]
+        self.assertIn("Zorglub affirme", systeme)
+        self.assertLess(len(systeme), 14_000)  # 12 000 caractères de page pour un modèle local, comme le panneau
+
+    def test_avertissement_ollama_affiche_par_le_tuteur_et_le_wiki(self):
+        petite_memoire = {"/api/ps": {"models": [{"name": "llama3.2:latest", "context_length": 2048}]}}
+        srv = espionner_get(self.server(), petite_memoire)
+        self.ollama(srv)
+        self.ecrire("Cours/Long.md", page_longue(20))
+        c = self.login()
+        srv.script.append({"sse": sse_text("Réponse du tuteur.")})
+        r = self.post_json(c, "/claude/tuteur/", {"page": "Cours/Long", "question": "Que dit le théorème de Zorglub ?"})
+        self.assertIn("Context length", r.json["avertissement"])
+        self.assertIn("Context length", r.json["html"])  # à l'écran, au-dessus de la réponse
+        self.assertNotIn("Context length", AITutorExchange.query.one().reponse)  # pas gardé avec la réponse
+        for n in range(4):  # « Demander au wiki » : jusqu'à 40 000 caractères d'extraits, quel que soit le modèle
+            self.ecrire(f"Cours/Portance{n}.md", "\n\n".join(
+                f"La portance dépend de la vitesse, de la densité de l’air et de l’incidence (cas {n}-{k})." * 2
+                for k in range(80)))
+        srv.script.append({"sse": sse_text("Réponse du wiki [1].")})
+        r = self.post_json(c, "/demander/", {"question": "De quoi dépend la portance ?"})
+        self.assertEqual(r.status_code, 200, r.json)
+        self.assertIn("Context length", r.json["avertissement"])
+        self.assertIn("Context length", r.json["html"])
+        # Petite demande : rien à signaler
+        srv.script.append({"sse": sse_text("Court.")})
+        r = self.post_json(c, "/claude/tuteur/", {"page": "Cours/Ohm", "question": "Que vaut R ?"})
+        self.assertEqual(r.json["avertissement"], "")

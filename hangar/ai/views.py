@@ -352,6 +352,8 @@ def _apply_provider_form(p: AIProvider, f, is_new: bool, notes: list | None = No
         return ("Variable d’environnement refusée : son nom doit désigner une clé d’API (par exemple MISTRAL_API_KEY "
                 "ou MA_CLE_API).")
     old_origin = None if is_new else P.origin(p.base_url, p.kind)
+    old_env = p.api_key_env or ""
+    old_env_origin = None if is_new else (p.api_key_env_origin or old_origin)
     p.preset = preset
     p.kind = info["kind"]
     p.name = (f.get("name") or "").strip()[:120] or info["label"]
@@ -374,6 +376,12 @@ def _apply_provider_form(p: AIProvider, f, is_new: bool, notes: list | None = No
             notes.append("Adresse changée : la clé enregistrée a été effacée par sécurité. Retape-la si ce serveur en "
                          "a besoin.")
     p.api_key_env = env
+    if is_new or env != old_env:
+        p.api_key_env_origin = P.origin(p.base_url, p.kind)  # variable indiquée maintenant : pour cette adresse
+    else:
+        p.api_key_env_origin = old_env_origin  # même variable : sa clé ne suit pas une nouvelle adresse
+    if notes is not None and (avis := P.key_withheld_message(p)):
+        notes.append(avis)
     p.model = (f.get("model") or "").strip()[:200]
     p.model_fast = (f.get("model_fast") or "").strip()[:200]
     p.model_vision = (f.get("model_vision") or "").strip()[:200]
@@ -462,10 +470,13 @@ def _transient_provider() -> AIProvider:
     """Fournisseur décrit par le formulaire (non enregistré), pour tester avant d'enregistrer."""
     f = request.form
     existing = db.session.get(AIProvider, f.get("id", type=int) or 0)
-    p = AIProvider(id=existing.id if existing else None, enabled=True, roles="chat",
-                   api_key_env=existing.api_key_env if existing else "")
+    p = AIProvider(id=existing.id if existing else None, enabled=True, roles="chat", api_key_env="")
+    if existing is not None:  # la variable d'environnement reste liée à l'adresse enregistrée
+        p.kind, p.preset, p.base_url, p.api_key_env = existing.kind, existing.preset, existing.base_url, \
+            existing.api_key_env
+        p.api_key_env_origin = existing.api_key_env_origin
     with db.session.no_autoflush:
-        _apply_provider_form(p, f, True)
+        _apply_provider_form(p, f, existing is None)
         if not (f.get("api_key") or "").strip() and existing is not None and not f.get("clear_key") \
                 and P.origin(p.base_url, p.kind) == P.origin(existing.base_url, existing.kind):
             # Clé enregistrée reprise seulement pour la même adresse (sinon elle partirait vers un autre serveur).
@@ -487,13 +498,18 @@ def provider_try():
                                        "(par exemple MISTRAL_API_KEY ou MA_CLE_API).")
     p = _transient_provider()
     what = request.form.get("what") or "test"
+    avis = P.key_withheld_message(p)  # clé d'une variable réservée à une autre adresse : dit en cas d'échec
     try:
         if what == "models":
             return jsonify(ok=True, models=P.get(p).list_models())
         ok, msg = P.get(p).test()
     except AIError as e:
-        return jsonify(ok=False, error=e.message)
-    return jsonify(ok=bool(ok), unknown=ok is None, message=msg)
+        return jsonify(ok=False, error=_avec_avis(e.message, avis))
+    return jsonify(ok=bool(ok), unknown=ok is None, message=msg if ok else _avec_avis(msg, avis))
+
+
+def _avec_avis(message: str, avis: str) -> str:
+    return f"{message} {avis}" if avis and avis not in message else message
 
 
 @bp.route("/ia/fournisseurs/<int:pid>/tester", methods=["POST"])
@@ -502,6 +518,8 @@ def provider_test(pid):
     _admin()
     p = db.session.get(AIProvider, pid) or abort(404)
     ok, msg = core.test_provider(p)
+    if not ok:
+        msg = _avec_avis(msg, P.key_withheld_message(p))
     if _fetch():
         return jsonify(ok=bool(ok), unknown=ok is None, message=msg)
     flash(msg, "success" if ok else "error")

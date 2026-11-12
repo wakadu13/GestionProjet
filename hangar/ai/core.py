@@ -22,6 +22,8 @@ import io
 import json
 import logging
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, time
 from typing import Any, Callable, Iterable, Iterator
 
@@ -64,7 +66,7 @@ def pick(role: str = "chat", provider=None) -> AIProvider:
     preferred = [p for p in rows if role in p.role_list] or [p for p in rows if "chat" in p.role_list] or rows
     capped = []
     for p in preferred:
-        if p.monthly_cap and month_cost(provider_id=p.id) + reserved_cost(p.id) >= p.monthly_cap:
+        if p.monthly_cap and month_cost(provider_id=p.id) >= p.monthly_cap:
             capped.append(p.name)
             continue
         return p
@@ -106,9 +108,31 @@ def reserved_cost(provider_id: int | None = None) -> float:
     return round(sum(float(j.options.get("reserve") or 0) for j in q), 6)
 
 
-def cap_reached() -> bool:
+def cap_reached(reserves: bool = False) -> bool:
+    """Plafond mensuel des réglages atteint par la dépense du mois. `reserves` : compter aussi les lots en cours,
+    seulement pour décider du dépôt d'un nouveau lot (voir check_batch_cap) ; les autres appels (panneau, tuteur,
+    explications…) ne sont pas bloqués par une réserve, qui n'est qu'une estimation."""
     cap = AISettings.get().monthly_cap or 0
-    return cap > 0 and month_cost() + reserved_cost() >= cap
+    return cap > 0 and month_cost() + (reserved_cost() if reserves else 0) >= cap
+
+
+def check_batch_cap(row: AIProvider | None = None) -> None:
+    """Avant de déposer un lot : lève AIError si la dépense du mois et les réserves des lots en cours atteignent le
+    plafond des réglages (ou celui du fournisseur `row`)."""
+    def refus(reserve: float):
+        if not reserve:
+            return AIError("Plafond mensuel de l’IA atteint : réessaie le mois prochain ou relève le plafond dans "
+                           "les réglages de l’IA.", "plafond", 429)
+        return AIError(f"Plafond mensuel presque atteint : des lots en cours réservent {reserve:.2f} $ jusqu’à leur "
+                       "retour (sous 24 heures). Lance ce travail sans lot, ou réessaie à leur retour.", "plafond", 429)
+
+    cap = AISettings.get().monthly_cap or 0
+    if cap > 0 and month_cost() + reserved_cost() >= cap:
+        raise refus(reserved_cost() if month_cost() < cap else 0)
+    if row is not None and row.monthly_cap:
+        spent = month_cost(provider_id=row.id)
+        if spent + reserved_cost(row.id) >= row.monthly_cap:
+            raise refus(reserved_cost(row.id) if spent < row.monthly_cap else 0)
 
 
 def _pdf_tokens(data_b64: str) -> int:
@@ -147,10 +171,20 @@ def estimate_input_tokens(req: Request) -> int:
     return tokens + chars // 3
 
 
+RESERVE_MIN_OUTPUT = 16_000  # jetons de sortie réservés au moins pour un lot (réflexion comprise)
+
+
 def estimate_request_cost(row: AIProvider, req: Request, batch: bool = False) -> float:
-    """Coût au plus d'une requête : entrée estimée d'après sa taille, sortie comptée au plafond max_tokens."""
-    out = req.max_tokens or (CLAUDE_MAX_TOKENS if row.kind == "anthropic" else 0)
-    res = Result(model=req.model, kind=row.kind, usage=P.Usage(input_tokens=estimate_input_tokens(req), output_tokens=out))
+    """Coût prévu, plutôt large, d'une requête : entrée estimée d'après sa taille (déjà comptée large), sortie de
+    l'ordre de l'entrée (une page de cours réécrite, un QCM tiré d'un cours), au moins RESERVE_MIN_OUTPUT jetons et
+    au plus le plafond max_tokens. Compter tout le plafond (128 000 jetons pour un PDF) réserverait plus d'un dollar
+    pour un PDF d'une page : quatre lots suffiraient à atteindre le plafond par défaut."""
+    inp = estimate_input_tokens(req)
+    limit = req.max_tokens or (CLAUDE_MAX_TOKENS if row.kind == "anthropic" else 0)
+    out = max(RESERVE_MIN_OUTPUT, inp)
+    if limit:
+        out = min(limit, out)
+    res = Result(model=req.model, kind=row.kind, usage=P.Usage(input_tokens=inp, output_tokens=out))
     return estimate_cost(row, res, batch)
 
 
@@ -162,7 +196,7 @@ def price_notes(row: AIProvider) -> list[str]:
             if not P.claude_price_known(m):
                 pin, pout, _ = P.claude_price(m)
                 famille = P.claude_family(m).capitalize()
-                base = f"des modèles {famille}" if famille else "le plus cher de Claude"
+                base = f"des modèles {famille}" if famille else "de Claude"
                 notes.append(f"Tarif inconnu pour « {m} » : coût estimé au tarif le plus cher {base} "
                              f"({pin:g} $ / {pout:g} $ par million de jetons), pour que le plafond mensuel le compte.")
         return notes
@@ -478,9 +512,32 @@ def generate(messages, *, system: str | None = None, role: str = "chat", model: 
             result = _last(_run(prov, row, req, user=user, feature=feature))
         if isinstance(result, AIError):
             raise result
+    _retenir_avertissements(result.warnings)
     if result.refusal and not allow_refusal:
         raise AIError("Le modèle a refusé cette demande.", "refus", 422)
     return result
+
+
+_AVERTISSEMENTS: ContextVar[list | None] = ContextVar("ai_avertissements", default=None)
+
+
+@contextmanager
+def avertissements():
+    """Recueille les avertissements des appels faits dans le bloc (ex. demande plus grosse que la mémoire d'Ollama,
+    qui en a oublié le début) : les demandes courtes (tuteur, « Explique-moi »…) ne renvoient que le texte.
+    ``with core.avertissements() as av: …`` ; ``av`` : liste des messages, sans doublon."""
+    av: list[str] = []
+    jeton = _AVERTISSEMENTS.set(av)
+    try:
+        yield av
+    finally:
+        _AVERTISSEMENTS.reset(jeton)
+
+
+def _retenir_avertissements(warnings) -> None:
+    av = _AVERTISSEMENTS.get()
+    if av is not None:
+        av.extend(w for w in warnings if w not in av)
 
 
 def _last(events: Iterator[dict]):

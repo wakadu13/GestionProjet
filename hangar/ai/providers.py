@@ -72,6 +72,10 @@ PRESETS = [
      "help": "N’importe quelle adresse qui comprend /v1/chat/completions (ex. http://192.168.1.20:11434/v1)."},
 ]
 PRESET_BY_KEY = {p["key"]: p for p in PRESETS}
+# Clés d'API connues : la variable d'environnement ne part que vers le service qui l'a émise (voir
+# AIProvider.env_origin), même si l'adresse du fournisseur change (préréglage OpenRouter pointé vers un autre PC…).
+ENV_KEY_URLS = {**{p["key_env"]: p["base_url"] or "https://api.anthropic.com" for p in PRESETS if p.get("key_env")},
+                "OPENAI_API_KEY": "https://api.openai.com/v1"}
 
 # ---------------------------------------------------------------------------
 # Claude : modèles, tarifs, fonctions prises en charge
@@ -148,6 +152,20 @@ def claude_can_disable_thinking(model: str, effort: str | None) -> bool:
     """Seul Claude Haiku 5.5 accepte thinking {"type": "disabled"}, et seulement jusqu'à l'effort « high » (400 au-delà).
     Opus 5.5, Sonnet 5.5 et Fable le refusent : leur réflexion ne se coupe pas."""
     return (model or "").split("/")[-1].startswith("claude-haiku-5-5") and (effort or "medium") in ("low", "medium", "high")
+
+
+def env_home_origin(name: str) -> str:
+    """Origine du service d'une variable de clé connue (« ANTHROPIC_API_KEY » → https://api.anthropic.com:443),
+    ou "" pour une autre variable."""
+    url = ENV_KEY_URLS.get((name or "").strip().upper())
+    return origin(url) if url else ""
+
+
+def key_withheld_message(row) -> str:
+    """Message quand la clé de la variable d'environnement est réservée à une autre adresse, ou ""."""
+    hote = row.env_key_withheld()
+    return (f"La clé de la variable {row.env_name()} ne part que vers {hote}, pas vers cette adresse : tape la clé "
+            "dans le champ « Clé d’API » si ce serveur en a besoin.") if hote else ""
 
 
 def origin(url: str, kind: str = "openai_compatible") -> str:
@@ -423,7 +441,8 @@ class AnthropicProvider(Provider):
 
         key = self.row.key()
         if not key:
-            raise AIError("Aucune clé d’API Anthropic : ajoute-la dans les réglages de l’IA.", "cle", 401)
+            raise AIError(key_withheld_message(self.row) or "Aucune clé d’API Anthropic : ajoute-la dans les réglages "
+                          "de l’IA.", "cle", 401)
         kw: dict = {"api_key": key, "max_retries": 2}
         if self.row.base_url:
             kw["base_url"] = self.row.base_url
@@ -659,7 +678,8 @@ class AnthropicProvider(Provider):
         import anthropic
 
         if not self.row.key() and not _flask_config("AI_ANTHROPIC_FACTORY"):
-            return False, "Aucune clé d’API : colle ta clé (sk-ant-…) ou indique la variable d’environnement qui la contient."
+            return False, key_withheld_message(self.row) or ("Aucune clé d’API : colle ta clé (sk-ant-…) ou indique la "
+                                                             "variable d’environnement qui la contient.")
         model = self.row.model or CLAUDE_DEFAULT_MODEL
         try:
             self.client(timeout=20).models.retrieve(model)  # gratuit : aucun texte généré
@@ -814,6 +834,7 @@ _FINISH = {"stop": "end_turn", "length": "max_tokens", "tool_calls": "tool_use",
            "content_filter": "refusal"}
 
 OLLAMA_DEFAULT_CONTEXT = 4096   # mémoire de contexte d'Ollama par défaut (PC sans grosse carte graphique)
+OLLAMA_MIN_CONTEXT = 2048       # mémoire par défaut des anciennes versions : au-delà, on lit la vraie taille
 _OLLAMA_CONTEXT: dict[tuple, tuple[float, int | None]] = {}  # (fournisseur, adresse, modèle) -> (instant, taille)
 _OLLAMA_CONTEXT_TTL = 300
 
@@ -1041,10 +1062,10 @@ class OpenAICompatProvider(Provider):
     def _context_warning(self, model: str, sent: int) -> str | None:
         """Ollama garde par défaut 4 096 jetons de contexte et coupe le début de ce qui dépasse, sans erreur
         (consigne, outils, début de la page) : on le signale quand la demande est plus grosse que sa mémoire."""
-        if not self.is_ollama() or sent <= OLLAMA_DEFAULT_CONTEXT:
+        if not self.is_ollama() or sent <= OLLAMA_MIN_CONTEXT:
             return None
         ctx = self._ollama_context(model)
-        if ctx and sent <= ctx:
+        if sent <= (ctx or OLLAMA_DEFAULT_CONTEXT):
             return None
         n = f"{sent:,}".replace(",", " ")
         memoire = (f"de {ctx:,} jetons".replace(",", " ") if ctx
@@ -1205,7 +1226,8 @@ class OpenAICompatProvider(Provider):
 
     def test(self) -> tuple[bool | None, str]:
         if self.row.needs_key and not self.row.key():
-            return False, "Aucune clé d’API : colle ta clé ou indique la variable d’environnement qui la contient."
+            return False, key_withheld_message(self.row) or ("Aucune clé d’API : colle ta clé ou indique la variable "
+                                                             "d’environnement qui la contient.")
         try:
             models = self.list_models()
         except AIError as e:

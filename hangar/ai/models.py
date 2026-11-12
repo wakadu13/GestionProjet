@@ -42,6 +42,10 @@ class AIProvider(db.Model):
     base_url = db.Column(db.String(500), default="")
     api_key = db.Column(db.Text, default="")              # jamais renvoyée aux pages
     api_key_env = db.Column(db.String(120), default="")   # variable d'environnement de repli
+    # Adresse (origine) où la clé de cette variable peut partir : celle où la variable a été indiquée. Vide pour un
+    # fournisseur enregistré avant cette règle (son adresse actuelle). Ignorée pour une variable connue
+    # (ANTHROPIC_API_KEY, OPENROUTER_API_KEY…), qui ne part que vers son service. Voir env_origin().
+    api_key_env_origin = db.Column(db.String(300))
     model = db.Column(db.String(200), default="")         # rôle « chat »
     model_fast = db.Column(db.String(200), default="")    # rôle « rapide » (vide = modèle principal)
     model_vision = db.Column(db.String(200), default="")  # rôle « vision » (vide = modèle principal)
@@ -75,19 +79,43 @@ class AIProvider(db.Model):
             return self.api_key_env
         return "ANTHROPIC_API_KEY" if self.kind == "anthropic" else ""
 
+    def env_origin(self) -> str:
+        """Seule adresse (origine) où peut partir la clé lue dans la variable d'environnement : le service d'une
+        variable connue (ANTHROPIC_API_KEY → api.anthropic.com, OPENROUTER_API_KEY → openrouter.ai…), sinon
+        l'adresse où la variable a été indiquée. Changer l'adresse n'emporte donc pas la clé vers un autre serveur."""
+        from .providers import env_home_origin, origin
+        return env_home_origin(self.env_name()) or self.api_key_env_origin or origin(self.base_url, self.kind)
+
+    def env_key_withheld(self) -> str:
+        """Hôte auquel la clé de la variable d'environnement est réservée, quand elle existe mais ne part pas vers
+        l'adresse actuelle (sans clé enregistrée) ; sinon ""."""
+        from urllib.parse import urlsplit
+
+        from .providers import origin
+        env = self.env_name()
+        if self.api_key or not env or not (os.environ.get(env) or "").strip():
+            return ""
+        bound = self.env_origin()
+        if bound == origin(self.base_url, self.kind):
+            return ""
+        parts = urlsplit(bound)
+        port = "" if parts.port in (None, {"http": 80, "https": 443}.get(parts.scheme)) else f":{parts.port}"
+        return f"{parts.hostname}{port}" if parts.hostname else bound
+
     def key(self) -> str:
-        """Clé effective : celle enregistrée, sinon la variable d'environnement."""
+        """Clé effective : celle enregistrée, sinon la variable d'environnement (seulement vers son adresse)."""
         if self.api_key:
             return self.api_key.strip()
         env = self.env_name()
-        return (os.environ.get(env) or "").strip() if env else ""
+        if not env or self.env_key_withheld():
+            return ""
+        return (os.environ.get(env) or "").strip()
 
     @property
     def key_source(self) -> str:
         if self.api_key:
             return "base"
-        env = self.env_name()
-        return "env" if env and os.environ.get(env) else ""
+        return "env" if self.key() else ""
 
     @property
     def masked_key(self) -> str:

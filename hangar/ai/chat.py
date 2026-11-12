@@ -45,11 +45,11 @@ def cut_page(page: dict, question: str, limit: int) -> dict:
     """Page trop longue pour le modèle : extraits utiles (ou aperçu de toute la page) et mention pour le modèle.
     La clé suit les extraits : une autre question sur la même page renvoie d'autres passages."""
     taille = page.get("size") or len(page.get("text") or "")
-    note = C.note_extraits(taille, limit)
-    texte, coupe = C.extraits(page.get("text") or "", question, max(1000, limit - len(note) - 2))
+    place_note = len(C.note_extraits(taille, limit)) + 2
+    texte, coupe = C.extraits(page.get("text") or "", question, max(1000, limit - place_note))
     if not coupe:
         return page
-    texte = f"{texte}\n\n{note}"
+    texte = f"{texte}\n\n{C.note_extraits(taille, len(texte))}"  # taille réellement transmise
     return {**page, "text": texte, "key": C.page_key(page.get("url") or "", texte), "coupee": True, "taille": taille}
 
 # Consigne stable (mise en cache chez Claude) : la date, la page et l'utilisateur vont dans le message.

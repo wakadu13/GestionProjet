@@ -21,7 +21,8 @@ from flask import url_for
 from ..extensions import db
 from ..models import now
 from . import jobs
-from .demandes import NOTE_EXTRAITS, QUESTION_SCHEMA, extraits_cours, question_en_json, sans_cadre
+from .demandes import (NOTE_EXTRAITS, QUESTION_SCHEMA, budget_cours, extraits_cours, question_en_json,
+                       sans_cadre)
 from .models import AIJob
 from .providers import AIError
 
@@ -227,11 +228,13 @@ def _json(ai_call, trop_long: str):
 # ---------------------------------------------------------------------------
 
 def _enqueue(kind, payload, user, title, lot=False, url=None):
-    from .core import cap_reached
+    from .core import cap_reached, check_batch_cap
 
-    if cap_reached():  # lots en cours compris : sinon N travaux en lot partiraient tous avant le premier retour
-        raise Echec("Plafond mensuel de l’IA atteint (travaux en lot compris) : réessaie le mois prochain ou relève "
-                    "le plafond dans les réglages de l’IA.", "plafond", 429)
+    if lot:  # lots en cours compris : sinon N travaux en lot partiraient tous avant le premier retour
+        check_batch_cap()
+    elif cap_reached():
+        raise Echec("Plafond mensuel de l’IA atteint : réessaie le mois prochain ou relève le plafond dans les "
+                    "réglages de l’IA.", "plafond", 429)
     job = jobs.enqueue(kind, payload, user=user, feature={"page": "transformation"}.get(kind, kind), title=title,
                        batch=lot, start=False)
     if url:
@@ -461,7 +464,8 @@ def _travail_variantes(job, ai):
         note = vault.notes.get(qset.source_page.lower())
         if note is not None:
             sujet = " ".join(str(x) for q in questions for x in (q.enonce, *(q.choix or []), *(q.reponses_texte or [])) if x)
-            cours, coupe = extraits_cours((vault.root / note.path).read_text(encoding="utf-8"), sujet)
+            cours, coupe = extraits_cours((vault.root / note.path).read_text(encoding="utf-8"), sujet,
+                                          budget_cours("chat"))
             textes.append(f"Cours « {note.title} »" + (f" {NOTE_EXTRAITS}" if coupe else " :") + f"\n\n{cours}")
     n = len(questions)
     texte = "Questions ratées :\n" + json.dumps([question_en_json(q) for q in questions], ensure_ascii=False, indent=1)

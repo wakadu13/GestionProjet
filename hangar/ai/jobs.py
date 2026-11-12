@@ -103,7 +103,10 @@ def _bound_ai(job: AIJob):
             gen_kw = {k: v for k, v in kw.items() if k not in ("user", "feature", "allow_refusal")}
             row, prov, req = core.prepare(messages, **gen_kw)
             if prov.supports_batch:
-                # Coût au plus du lot, réservé jusqu'à son retour : le plafond mensuel le compte dès maintenant.
+                # Coût prévu du lot, réservé jusqu'à son retour : un nouveau lot ne part que si la dépense du mois et
+                # les réserves des lots en cours restent sous le plafond (les autres appels ne comptent pas les
+                # réserves).
+                core.check_batch_cap(row)
                 reserve = core.estimate_request_cost(row, req, batch=True)
                 batch_id, files = prov.batch_submit([(f"job{job.id}-{i}", req)])
                 opts = job.options

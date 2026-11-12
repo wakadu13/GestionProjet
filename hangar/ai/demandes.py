@@ -53,6 +53,18 @@ def extraits_cours(texte: str, question: str, budget: int = MAX_CHARS_COURS) -> 
     return extraits(texte or "", question, budget)
 
 
+def budget_cours(role: str, budget: int = MAX_CHARS_COURS) -> int:
+    """Caractères de cours envoyés au modèle de ce rôle : moins pour un modèle compatible OpenAI (souvent local, à
+    petite mémoire : Ollama garde 4 096 jetons par défaut et oublie le reste sans prévenir), comme pour la page
+    ouverte dans le panneau."""
+    from .chat import page_limit
+    from .core import pick
+    try:
+        return min(budget, page_limit(pick(role)))
+    except AIError:  # aucun fournisseur, plafond : l'appel lui-même le dira
+        return budget
+
+
 NOTE_EXTRAITS = ("(Seuls des extraits de ce cours, choisis d’après la question, sont fournis : il est trop long pour "
                  "être envoyé en entier. Si la réponse n’y est pas, dis-le sans affirmer que le cours n’en parle pas.)")
 
@@ -75,9 +87,10 @@ def sans_cadre(texte: str) -> str:
     return (texte or "").strip()
 
 
-def cours_du_set(qset, question=None):
-    """(note, texte du cours) de la page dont le set a été généré, ou (None, ""). Un cours trop long est réduit aux
-    passages qui parlent de la question (énoncé, choix, réponses), avec une mention pour le modèle."""
+def cours_du_set(qset, question=None, role="rapide"):
+    """(note, texte du cours) de la page dont le set a été généré, ou (None, ""). Un cours trop long pour le modèle
+    du rôle est réduit aux passages qui parlent de la question (énoncé, choix, réponses), avec une mention pour le
+    modèle."""
     if not getattr(qset, "source_page", ""):
         return None, ""
     try:
@@ -93,7 +106,7 @@ def cours_du_set(qset, question=None):
     if question is not None:
         sujet = " ".join(str(x) for x in [question.enonce, question.consigne, *(question.choix or []),
                                           *(question.reponses_texte or []), question.verso] if x)
-    texte, coupe = extraits_cours(texte, sujet)
+    texte, coupe = extraits_cours(texte, sujet, budget_cours(role))
     return note, (f"{NOTE_EXTRAITS}\n\n{texte}" if coupe else texte)
 
 
@@ -200,7 +213,7 @@ def corriger_question(qset, question, commentaires, user=None):
     à l'import d'un set (lève Echec sinon). Appelée par la page des signalements des QCM."""
     from ..qcm import quiz
 
-    note, contexte = cours_du_set(qset, question)
+    note, contexte = cours_du_set(qset, question, role="chat")
     contenu = []
     if contexte:
         contenu.append({"type": "text", "text": f"Cours « {note.title} » :\n\n{contexte}"})
@@ -272,10 +285,11 @@ pas. Tutoie l'étudiant ; pas de formule de politesse."""
 
 def tuteur(note, page_texte, question, historique=(), user=None):
     """Réponse du tuteur (rôle « rapide ») à une question sur une page : (texte Markdown, usage, modèle).
-    La page va dans la consigne système (stable, mise en cache pendant les échanges). Une page trop longue est
-    réduite aux passages liés à la question (et aux questions précédentes), en le disant au modèle."""
+    La page va dans la consigne système (stable, mise en cache pendant les échanges). Une page trop longue pour le
+    modèle est réduite à des extraits choisis d'après la question (et les questions précédentes), qui remplissent
+    sa part de la page, en le disant au modèle."""
     sujet = " ".join([question, *(q for q, _ in list(historique)[-2:])])
-    texte, coupe = extraits_cours(page_texte, sujet)
+    texte, coupe = extraits_cours(page_texte, sujet, budget_cours("rapide"))
     if coupe:
         systeme = f"{CONSIGNE_TUTEUR}\n\nExtraits de la page « {note.title} » {NOTE_EXTRAITS}\n\n{texte}"
     else:
@@ -334,7 +348,7 @@ def corriger_copie(images, enonce="", cours="", titre_cours="", user=None):
     Renvoie (texte Markdown, usage, modèle)."""
     systeme = CONSIGNE_COPIE
     if cours:
-        texte, coupe = extraits_cours(cours, enonce, MAX_CHARS_COURS // 2)
+        texte, coupe = extraits_cours(cours, enonce, budget_cours("vision", MAX_CHARS_COURS // 2))
         systeme += f"\n\nCours de référence « {titre_cours} »" + (f" {NOTE_EXTRAITS}" if coupe else " :") + f"\n\n{texte}"
     texte = (f"Énoncé de l'exercice :\n{enonce[:MAX_CHARS_QUESTION * 2]}" if enonce.strip()
              else "Pas d'énoncé fourni : déduis-le de la copie si possible.")
