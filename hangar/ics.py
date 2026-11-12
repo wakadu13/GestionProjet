@@ -90,6 +90,7 @@ class ParsedCalendar:
     name: str = ""
     timezone: str = DEFAULT_TZ
     warnings: list[str] = field(default_factory=list)
+    method: str = ""  # METHOD du calendrier : PUBLISH (calendrier publié), REQUEST (invitation)…
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +284,8 @@ def parse(raw: bytes | str) -> ParsedCalendar:
             cal.timezone = p[2].strip()
         elif p and p[0] == "X-WR-CALNAME":
             cal.name = unescape(p[2]).strip()
+        elif p and p[0] == "METHOD" and not cal.method:
+            cal.method = p[2].strip().upper()
     depth: list[str] = []
     props: list[tuple[str, dict, str]] = []
     recurring = 0

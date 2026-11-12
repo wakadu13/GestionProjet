@@ -1624,7 +1624,7 @@
   }
   document.addEventListener('click', (e) => {
     const nt = e.target.closest('[data-new-task]');
-    if (nt) { e.preventDefault(); openTask({ date: nt.dataset.date || '', start: nt.dataset.start || '', event: nt.dataset.event || '' }); return; }
+    if (nt) { e.preventDefault(); openTask({ date: nt.dataset.date || '', start: nt.dataset.start || '', event: nt.dataset.event || '', title: nt.dataset.title || '', notes: nt.dataset.notes || '' }); return; }
     const et = e.target.closest('[data-edit-task]');
     if (et) {
       e.preventDefault();
@@ -1672,7 +1672,7 @@
     const rf = $('[data-em-reminder-form]', emModal);
     rf.action = ev.urls.reminder; rf.next.value = location.pathname + location.search;
     if (H.agenda) rf.channel.value = H.agenda.channel || 'email';
-    $('[data-em-reminders]', emModal).innerHTML = ev.reminders.map((r) => `<div class="em-rem">${ICON.bell}<span class="grow">${esc(r.label)}${r.auto ? ' <span class="muted">(automatique)</span>' : ''} <span class="muted">· ${esc(r.when)} · ${r.channel === 'email' ? 'e-mail' : 'appli'}</span></span><span class="badge ${r.status === 'pending' ? 'badge-accent' : ''}">${esc(r.statusLabel)}</span><button type="button" class="btn btn-ghost btn-icon btn-xs" data-rem-del="${r.id}" title="Supprimer">${ICON.x}</button></div>`).join('');
+    $('[data-em-reminders]', emModal).innerHTML = ev.reminders.map((r) => `<div class="em-rem">${ICON.bell}<span class="grow">${esc(r.label)}${r.auto ? ' <span class="muted">(automatique)</span>' : ''} <span class="muted">· ${esc(r.when)} · ${r.channel === 'email' ? 'e-mail' : (r.channel === 'push' ? 'notification' : 'appli')}</span></span><span class="badge ${r.status === 'pending' ? 'badge-accent' : ''}">${esc(r.statusLabel)}</span><button type="button" class="btn btn-ghost btn-icon btn-xs" data-rem-del="${r.id}" title="Supprimer">${ICON.x}</button></div>`).join('');
     $('[data-em-tasks]', emModal).innerHTML = ev.tasks.map((t) => `<button type="button" class="em-rem" data-edit-task="${t.id}" style="border:0;font:inherit;color:inherit;cursor:pointer;text-align:left">${t.done ? ICON.check : ICON.calendar}<span class="grow ${t.done ? 'muted' : ''}" style="${t.done ? 'text-decoration:line-through' : ''}">${esc(t.title)}</span><span class="muted small">${esc(t.date)}</span></button>`).join('');
     $('[data-em-add-task]', emModal).onclick = () => { emModal.close(); openTask({ date: ev.date, event: ev.id, start: '', title: '' }); };
     renderEventLinks(ev);

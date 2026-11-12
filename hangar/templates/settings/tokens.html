@@ -32,16 +32,16 @@
     <h2>Exemples</h2>
     <div class="panel panel-b md">
 <pre><code># Lister les projets
-curl -H "Authorization: Bearer hgr_…" {{ request.host_url }}api/v1/projects
+curl -H "X-API-Key: hgr_…" {{ request.host_url }}api/v1/projects
 
 # Créer un ticket
-curl -X POST -H "Authorization: Bearer hgr_…" -H "Content-Type: application/json" \
+curl -X POST -H "X-API-Key: hgr_…" -H "Content-Type: application/json" \
      -d '{"title": "Relancer le DPO", "priority": "high", "target_date": "2026-11-15"}' \
      {{ request.host_url }}api/v1/projects/1/issues
 
 # Python
 import requests
-h = {"Authorization": "Bearer hgr_…"}
+h = {"X-API-Key": "hgr_…"}
 tickets = requests.get("{{ request.host_url }}api/v1/projects/1/issues", headers=h).json()["issues"]</code></pre>
       <p>Points d’accès : <code>GET /api/v1/me</code>, <code>GET /api/v1/projects</code>, <code>GET|POST /api/v1/projects/&lt;id&gt;/issues</code> (filtres <code>state_group</code>, <code>assignee</code>, <code>limit</code>), <code>GET|PATCH|DELETE /api/v1/issues/&lt;id&gt;</code>, <code>GET|POST /api/v1/issues/&lt;id&gt;/comments</code>.</p>
     </div>

@@ -74,7 +74,8 @@ def envoyer_rappels_dus(now=None, journal=None) -> dict:
     jour = now.date()
     compte = {"envoyes": 0, "rien": 0, "expires": 0, "erreurs": 0}
     abonnements = AbonnementPush.query.filter(
-        (AbonnementPush.dernier_envoi.is_(None)) | (AbonnementPush.dernier_envoi < jour)).all()
+        (AbonnementPush.dernier_envoi.is_(None)) | (AbonnementPush.dernier_envoi < jour),
+        AbonnementPush.quotidien.isnot(False)).all()  # appareil abonné aux seuls rappels de l'agenda : rien
     etats: dict = {}
     for a in abonnements:
         if (a.heure, a.minute) > (now.hour, now.minute) or a.user is None or not a.user.active:
@@ -136,7 +137,9 @@ def api_rappel():
 def push_cle():
     from . import push
 
-    abonnements = {a.endpoint: {"heure": a.heure, "minute": a.minute}
+    # quotidien / agenda : ce que reçoit chaque appareil (rappel des QCM, rappels de l'agenda)
+    abonnements = {a.endpoint: {"heure": a.heure, "minute": a.minute, "quotidien": a.quotidien is not False,
+                                "agenda": bool(a.agenda)}
                    for a in AbonnementPush.query.filter_by(user_id=current_user.id)}
     return jsonify(cle=push.cle_publique(), abonnements=abonnements)
 
@@ -149,9 +152,14 @@ def _json_post():
 @bp.route("/api/push/abonner/", methods=["POST"])
 @login_required
 def push_abonner():
+    """Abonne l'appareil. `quoi` : « qcm » (par défaut, rappel quotidien à l'heure choisie) ou
+    « agenda » (rappels de l'agenda envoyés en notification push, depuis « Rappels et e-mails »)."""
     from . import push
 
     data = _json_post()
+    quoi = (data or {}).get("quoi") or "qcm"
+    if quoi not in ("qcm", "agenda"):
+        return jsonify(error="abonnement invalide"), 400
     try:
         sub = data["subscription"]
         endpoint, p256dh, auth = str(sub["endpoint"]), str(sub["keys"]["p256dh"]), str(sub["keys"]["auth"])
@@ -166,13 +174,22 @@ def push_abonner():
     # Heure déjà passée aujourd'hui : premier rappel demain (pas tout de suite).
     deja = (heure, minute) <= (maintenant.hour, maintenant.minute)
     a = AbonnementPush.query.filter_by(endpoint=endpoint).first()
+    if a is not None and a.user_id != current_user.id:  # appareil passé à un autre compte : on repart de zéro
+        db.session.delete(a)
+        db.session.flush()
+        a = None
     if a is None:
-        a = AbonnementPush(endpoint=endpoint)
+        a = AbonnementPush(endpoint=endpoint, quotidien=quoi == "qcm", agenda=quoi == "agenda")
         db.session.add(a)
-    a.user_id, a.p256dh, a.auth, a.heure, a.minute = current_user.id, p256dh[:200], auth[:100], heure, minute
+    a.user_id, a.p256dh, a.auth = current_user.id, p256dh[:200], auth[:100]
     a.agent = request.headers.get("User-Agent", "")[:300]
-    a.dernier_envoi = maintenant.date() if deja else None
     a.dernier_echec, a.refus = None, 0
+    if quoi == "agenda":
+        a.agenda = True
+        db.session.commit()
+        return jsonify(ok=True, agenda=True, quotidien=a.quotidien is not False)
+    a.quotidien, a.heure, a.minute = True, heure, minute
+    a.dernier_envoi = maintenant.date() if deja else None
     db.session.commit()
     return jsonify(ok=True, heure=heure, minute=minute)
 
@@ -180,10 +197,23 @@ def push_abonner():
 @bp.route("/api/push/desabonner/", methods=["POST"])
 @login_required
 def push_desabonner():
+    """Coupe le rappel des QCM (`quoi` « qcm », par défaut) ou les rappels de l'agenda (« agenda ») sur
+    cet appareil. L'abonnement n'est supprimé que si l'appareil ne reçoit plus rien : `garde` dit alors
+    au navigateur de ne pas se désabonner du service de notifications."""
     data = _json_post() or {}
-    AbonnementPush.query.filter_by(user_id=current_user.id, endpoint=str(data.get("endpoint", ""))).delete()
+    quoi = data.get("quoi") or "qcm"
+    a = AbonnementPush.query.filter_by(user_id=current_user.id, endpoint=str(data.get("endpoint", ""))).first()
+    garde = False
+    if a is not None:
+        if quoi == "agenda":
+            a.agenda = False
+        else:
+            a.quotidien = False
+        garde = a.quotidien is not False or bool(a.agenda)
+        if not garde:
+            db.session.delete(a)
     db.session.commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, garde=True) if garde else jsonify(ok=True)
 
 
 @bp.route("/api/push/tester/", methods=["POST"])

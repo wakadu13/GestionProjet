@@ -428,6 +428,11 @@ class AbonnementPush(db.Model):
     # abonnement supprimé après plusieurs refus (403) d'affilée.
     dernier_echec = db.Column(db.DateTime)
     refus = db.Column(db.Integer, default=0)
+    # Ce que reçoit l'appareil : le rappel quotidien des QCM (heure, minute) et/ou les rappels de
+    # l'agenda dont le moyen est « notification push » (activés depuis « Rappels et e-mails »). Un appareil
+    # peut ne vouloir que l'un des deux ; couper l'un ne coupe pas l'autre.
+    quotidien = db.Column(db.Boolean, default=True)
+    agenda = db.Column(db.Boolean, default=False)
 
     user = db.relationship("User")
 

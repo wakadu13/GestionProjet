@@ -149,7 +149,9 @@ self.addEventListener("sync", (event) => {
   if (event.tag === "qcm-envoi") event.waitUntil(QcmAttente.envoyer());
 });
 
-// Notifications web (rappel quotidien) : un clic ouvre (ou ramène au premier plan) la page indiquée.
+// Notifications web (rappel quotidien des QCM, rappels de l'agenda) : un clic ouvre (ou ramène au
+// premier plan) la page indiquée. Chaque rappel a son étiquette (tag) : un rappel de l'agenda ne
+// remplace pas le rappel des QCM, ni un autre rappel de l'agenda.
 self.addEventListener("push", (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = { texte: event.data ? event.data.text() : "" }; }
@@ -157,7 +159,7 @@ self.addEventListener("push", (event) => {
     body: d.texte || "C'est l'heure de réviser un peu.",
     icon: ICONE,
     badge: ICONE,
-    tag: "rappel-quotidien",
+    tag: d.tag || "rappel-quotidien",
     data: { url: d.url || "{{ url_for('qcm.aujourdhui') }}" },
   }));
 });

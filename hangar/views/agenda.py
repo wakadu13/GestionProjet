@@ -1,6 +1,7 @@
 """Agenda personnel : tableau de bord, calendrier, tâches, rappels, imports d'emploi du temps."""
 from __future__ import annotations
 
+import os
 import re
 from datetime import date, datetime, time, timedelta
 
@@ -21,6 +22,8 @@ bp = Blueprint("agenda", __name__)
 # Rappels proposés en cases à cocher dans la fenêtre de tâche
 QUICK_OFFSETS = [(0, "À l’heure"), (15, "15 min avant"), (60, "1 h avant"), (1440, "La veille"),
                  (2880, "2 jours avant"), (10080, "1 semaine avant")]
+PUSH_HINT = (" Aucun appareil ne reçoit encore les notifications : active-les dans « Rappels et e-mails » "
+             "(sinon le rappel n’apparaît que dans l’application).")
 
 
 def _fetch() -> bool:
@@ -100,6 +103,8 @@ def _payloads(events=(), tasks=()):
 def _week_objects(w):
     events, tasks = [], []
     for b in w["bars"]:
+        if b["type"] == "ticket":  # tickets et fins de sprint : pas de fenêtre de détail de l'agenda
+            continue
         (events if b["type"] == "event" else tasks).append(b["obj"] if b["type"] == "event" else b["obj"].task)
     for c in w["days"]:
         for b in c["blocks"]:
@@ -199,9 +204,85 @@ def api_day():
 @login_required
 def export():
     what = request.args.get("what", "all")
-    text = A.export_ics(current_user, include_events=what in ("all", "events"), include_tasks=what in ("all", "tasks"))
+    text = A.export_ics(current_user, include_events=what in ("all", "events"), include_tasks=what in ("all", "tasks"),
+                        include_team=what == "all")
     return Response(text, mimetype="text/calendar; charset=utf-8",
                     headers={"Content-Disposition": f"attachment; filename=agenda-{date.today():%Y%m%d}.ics"})
+
+
+# ---------------------------------------------------------------------------
+# Abonnement depuis le téléphone (adresse secrète, lecture seule)
+# ---------------------------------------------------------------------------
+
+@bp.route("/agenda/flux/<token>.ics")
+def feed(token):
+    """Agenda complet (cours, tâches, tickets) pour une appli de calendrier, qui n'envoie ni cookie ni en-tête :
+    le jeton de l'adresse suffit, et ne donne que la lecture. 404 si le jeton est inconnu ou coupé."""
+    user = A.feed_user(token)
+    if user is None:
+        abort(404)
+    text = A.export_ics(user)
+    return Response(text, mimetype="text/calendar; charset=utf-8",
+                    headers={"Content-Disposition": "inline; filename=agenda.ics",
+                             "Cache-Control": "private, max-age=300", "X-Robots-Tag": "noindex"})
+
+
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1", "[::1]")
+
+
+def feed_address(token: str) -> dict:
+    """Adresse à coller dans le téléphone, et l'éventuel obstacle : l'adresse publique de Hangar si elle est
+    réglée (e-mails automatiques), sinon celle de ce PC sur le réseau local (127.0.0.1 ne marche que sur le PC)."""
+    from urllib.parse import urlsplit
+
+    from flask import current_app
+
+    from ..cli import _lan_ip
+    from ..models import MailConfig
+
+    def hostname(url):
+        try:
+            return urlsplit(url).hostname or ""
+        except ValueError:
+            return ""
+
+    path = url_for("agenda.feed", token=token)
+    base = (MailConfig.get().base_url or "").strip().rstrip("/")
+    if base and hostname(base) and hostname(base) not in LOCAL_HOSTS:
+        return {"url": base + path, "warning": "", "local": False}
+    if hostname(request.host_url) not in LOCAL_HOSTS:  # page ouverte par l'adresse du réseau : la même convient
+        return {"url": request.host_url.rstrip("/") + path, "warning": "", "local": False}
+    try:
+        port = urlsplit(request.host_url).port
+    except ValueError:
+        port = None
+    ip = _lan_ip()
+    url = f"http://{ip}{f':{port}' if port else ''}{path}" if ip else request.host_url.rstrip("/") + path
+    listen = current_app.config.get("HANGAR_HOST")
+    warning = ""
+    if listen is None or listen in LOCAL_HOSTS:
+        warning = ("Pour l’instant, Hangar n’accepte que les connexions de cet ordinateur : le téléphone ne pourra pas "
+                   "lire cette adresse. Relance Hangar avec « uv run hangar run --host 0.0.0.0 » (même Wi-Fi que le "
+                   "téléphone, ordinateur allumé).")
+    return {"url": url, "warning": warning, "local": True}
+
+
+@bp.route("/agenda/flux/regenerer", methods=["POST"])
+@login_required
+def feed_regenerate():
+    had = bool(A.settings_of(current_user).feed_token)
+    A.regenerate_feed_token(current_user)
+    flash("Nouvelle adresse créée : l’ancienne ne marche plus. Recopie-la dans ton téléphone." if had
+          else "Adresse d’abonnement créée : colle-la dans l’agenda de ton téléphone.", "success")
+    return redirect(url_for("agenda.imports") + "#abonnement")
+
+
+@bp.route("/agenda/flux/couper", methods=["POST"])
+@login_required
+def feed_disable():
+    A.disable_feed(current_user)
+    flash("Abonnement coupé : l’adresse ne donne plus accès à ton agenda.", "success")
+    return redirect(url_for("agenda.imports") + "#abonnement")
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +406,8 @@ def task_create():
     msg = "Tâche ajoutée" + (f" pour {A.due_label(t.due_date)}" if t.due_date else "") + "."
     if t.reminders and t.reminders[0].channel == "email" and not A._mail().valid_email(current_user.contact_email):
         msg += " Ajoute ton adresse e-mail dans les paramètres de l’agenda pour recevoir les rappels."
+    elif t.reminders and t.reminders[0].channel == "push" and not A.push_devices(current_user):
+        msg += PUSH_HINT
     if _fetch():
         return jsonify(ok=True, id=t.id, message=msg)
     flash(msg, "success")
@@ -479,6 +562,8 @@ def event_reminder(eid):
         msg = "Ce moment est déjà passé : le rappel ne sera pas envoyé."
     elif r.channel == "email" and not A._mail().valid_email(current_user.contact_email):
         msg += " Renseigne ton adresse e-mail dans les paramètres de l’agenda pour le recevoir par e-mail."
+    elif r.channel == "push" and not A.push_devices(current_user):
+        msg += PUSH_HINT
     flash(msg, "success" if r.status == "pending" else "info")
     return redirect(back_url(url_for("agenda.dashboard")))
 
@@ -557,7 +642,10 @@ def imports():
         "last": db.session.query(db.func.max(AgendaEvent.start)).filter(AgendaEvent.user_id == current_user.id,
                                                                         AgendaEvent.status == "active").scalar(),
     }
-    return render_template("agenda/imports.html", rows=rows, latest=latest, modes=A.IMPORT_MODES, stats=stats)
+    s = A.settings_of(current_user)
+    feed_info = feed_address(s.feed_token) if s.feed_token else None
+    return render_template("agenda/imports.html", rows=rows, latest=latest, modes=A.IMPORT_MODES, stats=stats,
+                           feed=feed_info, s=s, source=A.source_status(s, now()))
 
 
 @bp.route("/agenda/import", methods=["POST"])
@@ -594,6 +682,65 @@ def import_upload():
     if imp.exam_notes:
         flash("Révisions de QCM : " + " ".join(imp.exam_notes.splitlines()), "info")
     return redirect(url_for("agenda.import_detail", iid=imp.id))
+
+
+@bp.route("/agenda/source", methods=["POST"])
+@login_required
+def source_save():
+    """Emploi du temps récupéré tout seul : dossier surveillé ou adresse .ics. Réservé aux administrateurs (une
+    adresse ou un chemin choisis par n'importe quel compte feraient lire au serveur le réseau local ou le PC)."""
+    if not current_user.is_admin:
+        abort(403, description="Seul un administrateur peut régler la récupération automatique du planning.")
+    s = A.settings_of(current_user)
+    kind = request.form.get("source_kind") or ""
+    where = (request.form.get("source_path") or "").strip()[:500]
+    back = url_for("agenda.imports") + "#auto"
+    if kind not in A.SOURCE_KINDS or not where:
+        s.source_kind, s.source_path, s.source_error = "", "", ""
+        s.source_fingerprint, s.source_seen = "", ""
+        db.session.commit()
+        flash("Récupération automatique coupée : importe le planning à la main.", "success")
+        return redirect(back)
+    if kind == "url":
+        try:
+            where = A.source_url(where)
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(back)
+    else:
+        where = os.path.expanduser(where)
+        if not os.path.isdir(where):
+            flash("Ce dossier est introuvable sur cet ordinateur : vérifie son chemin (ex. C:\\Users\\moi\\Downloads).",
+                  "error")
+            return redirect(back)
+    if (kind, where) != (s.source_kind, s.source_path):
+        s.source_fingerprint, s.source_seen, s.source_error = "", "", ""
+        s.source_checked_at = s.source_changed_at = s.source_tried_at = None
+    s.source_kind, s.source_path = kind, where
+    db.session.commit()
+    _flash_source(A.check_source(current_user, force=True), A.settings_of(current_user))
+    return redirect(back)
+
+
+@bp.route("/agenda/source/check", methods=["POST"])
+@login_required
+def source_check():
+    if not current_user.is_admin:
+        abort(403, description="Seul un administrateur peut régler la récupération automatique du planning.")
+    _flash_source(A.check_source(current_user, force=True), A.settings_of(current_user))
+    return redirect(url_for("agenda.imports") + "#auto")
+
+
+def _flash_source(result: str, s) -> None:
+    if result == "imported":
+        flash("Nouveau planning trouvé et importé : vois le détail dans l’historique ci-dessous.", "success")
+    elif result == "same":
+        flash("Source lue : rien de nouveau depuis le dernier import.", "success")
+    elif result == "ignored":
+        flash("Fichier trouvé mais laissé de côté : il ne ressemble pas à ton emploi du temps (voir tes notifications).",
+              "info")
+    elif result == "error":
+        flash(f"Lecture impossible : {s.source_error}", "error")
 
 
 @bp.route("/agenda/imports/<int:iid>")
@@ -679,7 +826,7 @@ def settings():
         s.allday_hour = hour("allday_hour", 8)
         dr = to_int(f.get("default_reminder"))
         s.default_reminder = dr if dr is not None and dr >= 0 else -1
-        s.reminder_channel = f.get("reminder_channel") if f.get("reminder_channel") in ("email", "app") else "email"
+        s.reminder_channel = A.valid_channel(f.get("reminder_channel"))
         mode = f.get("daily_mode") if f.get("daily_mode") in ("off", "morning", "evening") else "off"
         new_hour = hour("daily_hour", 7)
         A.set_daily_schedule(s, mode, new_hour, now())  # pas d'envoi immédiat si l'heure est déjà passée
@@ -700,6 +847,30 @@ def settings():
                .order_by(AgendaReminder.remind_at.desc()).limit(15).all())
     return render_template("agenda/settings.html", s=s, mail=A.mail_status(current_user), pending=pending,
                            history=history)
+
+
+@bp.route("/agenda/push/test", methods=["POST"])
+@login_required
+def push_test():
+    """Notification de test des rappels de l'agenda sur cet appareil (bloc « Notifications sur cet appareil »)."""
+    from ..qcm import push
+    from ..qcm.models import AbonnementPush
+    data = request.get_json(silent=True) or {}
+    a = AbonnementPush.query.filter_by(user_id=current_user.id, endpoint=str(data.get("endpoint", ""))).first()
+    if a is None or not a.agenda:
+        return jsonify(ok=False, error="cet appareil ne reçoit pas les rappels"), 404
+    try:
+        push.envoyer(a, "⏰ Rappel de test", "Tes rappels de l’agenda arriveront comme ceci.", url_for("agenda.dashboard"),
+                     ttl=600, tag="agenda-test")
+    except (push.AbonnementExpire, push.AdresseNonAutorisee):
+        db.session.delete(a)
+        db.session.commit()
+        return jsonify(ok=False, error="abonnement expiré : active de nouveau les notifications"), 410
+    except Exception as exc:  # noqa: BLE001 - détail gardé dans le journal
+        from flask import current_app
+        current_app.logger.warning("Notification de test de l’agenda impossible : %s", exc)
+        return jsonify(ok=False, error="envoi impossible pour l’instant : réessaie plus tard"), 502
+    return jsonify(ok=True)
 
 
 @bp.route("/agenda/mail/retry", methods=["POST"])

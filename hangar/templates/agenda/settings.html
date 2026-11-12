@@ -61,8 +61,7 @@
         </div>
         <div class="field"><label for="st-ch">Moyen par défaut</label>
           <select class="input" id="st-ch" name="reminder_channel">
-            <option value="email" {% if s.reminder_channel != 'app' %}selected{% endif %}>E-mail + notification dans l’application</option>
-            <option value="app" {% if s.reminder_channel == 'app' %}selected{% endif %}>Notification dans l’application seulement</option>
+            {% for v, lab in A.REMINDER_CHANNELS.items() %}<option value="{{ v }}" {% if A.valid_channel(s.reminder_channel) == v %}selected{% endif %}>{{ lab }}</option>{% endfor %}
           </select>
         </div>
       </div>
@@ -78,6 +77,19 @@
           <select class="input" id="st-ah" name="allday_hour">{% for h in range(5, 23) %}<option value="{{ h }}" {% if s.allday_hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select>
           <span class="help">« La veille » d’une tâche sans heure = la veille à cette heure-ci.</span>
         </div>
+      </div>
+      <div class="ag-push" id="rappel-agenda"{% if appli_android() %} hidden{% endif %}
+           data-sw-url="{{ url_for('qcm.service_worker') }}" data-scope="{{ url_for('qcm.index') }}"
+           data-cle-url="{{ url_for('qcm.push_cle') }}" data-abonner-url="{{ url_for('qcm.push_abonner') }}"
+           data-desabonner-url="{{ url_for('qcm.push_desabonner') }}" data-tester-url="{{ url_for('agenda.push_test') }}">
+        <div class="field" style="margin-bottom:6px"><label>{{ icon('bell', 13) }} Notifications sur cet appareil</label></div>
+        <p class="muted small" style="margin:0 0 8px" data-push-etat>Les rappels dont le moyen est « notification sur mes appareils » s’affichent comme une notification de l’ordinateur ou du téléphone, même si Hangar est en arrière-plan.</p>
+        <div class="flex wrap gap" data-push-controles hidden>
+          <button type="button" class="btn btn-sm btn-primary" data-push-activer>Recevoir les rappels sur cet appareil</button>
+          <button type="button" class="btn btn-sm" data-push-tester hidden>Tester</button>
+          <button type="button" class="btn btn-sm btn-ghost" data-push-desactiver hidden>Ne plus les recevoir ici</button>
+        </div>
+        <p class="help">Sur l’ordinateur où tourne Hangar, ça marche tout de suite. Sur un téléphone, il faut une adresse sécurisée (HTTPS). {% set n = A.push_devices(current_user)|length %}{% if n %}{{ n }} appareil{{ 's' if n > 1 }} reçoi{{ 'vent' if n > 1 else 't' }} déjà tes rappels.{% else %}Aucun appareil ne les reçoit pour l’instant.{% endif %}</p>
       </div>
     </div>
 
@@ -118,7 +130,7 @@
     <div class="rem-row">
       <span class="rem-when"><b>{{ A.due_label(r.remind_at.date())|capitalize }}</b> {{ A.hm(r.remind_at) }}</span>
       <span class="grow ellipsis">{% if r.task %}{{ icon('list-check', 13) }} {{ r.task.title }}{% elif r.event %}{{ icon('graduation', 13) }} {{ r.event.title }} <span class="muted small">({{ A.day_short(r.event.start.date()) }} {{ A.hm(r.event.start) }})</span>{% endif %}</span>
-      <span class="muted small nowrap">{{ r.label }}{% if r.auto %} · auto{% endif %} · {{ 'e-mail' if r.channel == 'email' else 'appli' }}</span>
+      <span class="muted small nowrap">{{ r.label }}{% if r.auto %} · auto{% endif %} · {{ A.channel_short(r.channel) }}</span>
       <form method="post" action="{{ url_for('agenda.reminder_delete', rid=r.id) }}">{{ ui.csrf() }}<button class="btn btn-ghost btn-icon btn-xs" title="Supprimer ce rappel">{{ icon('x', 13) }}</button></form>
     </div>
     {% else %}
@@ -139,3 +151,4 @@
   {% endif %}
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='qcm/rappel_agenda.js') }}" defer></script>{% endblock %}

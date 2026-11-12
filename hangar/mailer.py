@@ -738,6 +738,11 @@ def _agenda_jobs():
     return agenda.run_jobs()
 
 
+def _agenda_source():
+    from . import agenda  # emploi du temps récupéré tout seul (réglé par un administrateur)
+    return agenda.check_sources()
+
+
 def _qcm_rappels(app):
     from .qcm.rappels import envoyer_rappels_dus  # rappels de révision par notification web
     return envoyer_rappels_dus(journal=app.logger.warning)
@@ -750,6 +755,7 @@ def tick(app) -> None:
     with app.test_request_context("/"):
         try:
             _etape(app, "envois planifiés (rappels d’échéance, récapitulatifs, bilans)", lambda: run_scheduled())
+            _etape(app, "emploi du temps automatique (dossier, adresse .ics)", _agenda_source)
             _etape(app, "rappels de l’agenda et résumé quotidien", _agenda_jobs)
             _etape(app, "rappels de révision (QCM)", lambda: _qcm_rappels(app))
             _etape(app, "envoi de la file d’e-mails", lambda: send_pending())

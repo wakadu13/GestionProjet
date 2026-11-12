@@ -17,6 +17,7 @@
     {% if issue.archived_at %}<span class="badge badge-warning">{{ icon('archive', 12) }} Archivé</span>{% endif %}
     {% if issue.intake_status and issue.intake_status != 'accepted' %}<a class="badge badge-accent" href="{{ url_for('intake.index', pid=project.id, issue=issue.id) }}">{{ icon('inbox', 12) }} Intake : {{ M.INTAKE_STATUSES[issue.intake_status] }}</a>{% endif %}
     <button class="btn btn-sm {% if issue.is_subscribed(current_user) %}active{% endif %}" type="button" data-subscribe="{{ url_for('issues.subscribe', pid=project.id, seq=issue.sequence_id) }}">{{ icon('bell', 14) }} <span>{{ 'Suivi' if issue.is_subscribed(current_user) else 'Suivre' }}</span></button>
+    {% if not issue.is_closed %}<button class="btn btn-sm btn-ghost" type="button" data-new-task data-date="{{ (issue.target_date if issue.target_date and not issue.is_overdue else today).isoformat() }}" data-title="{{ issue.key }} · {{ issue.title }}" data-notes="Ticket [{{ issue.key }}]({{ url_for('issues.detail', pid=project.id, seq=issue.sequence_id) }}) : {{ issue.title }}" title="Ajouter à mon agenda une tâche pour travailler sur ce ticket">{{ icon('calendar', 14) }} Bloquer un créneau</button>{% endif %}
     <button class="btn btn-sm btn-ghost btn-icon" type="button" data-copy="{{ request.host_url.rstrip('/') }}{{ url_for('issues.by_key', key=issue.key) }}" title="Copier le lien">{{ icon('link', 15) }}</button>
     {% if e %}
     <div class="dd">

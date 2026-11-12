@@ -18,6 +18,15 @@
 <button type="button" class="tk-check {% if small %}sm{% endif %} {% if t.is_done %}on{% endif %}" {% if ghost %}disabled title="Occurrence à venir"{% else %}data-task-toggle="{{ url_for('agenda.task_toggle', tid=t.id) }}" title="{{ 'Rouvrir la tâche' if t.is_done else 'Marquer comme terminée' }}"{% endif %} style="--tc: {{ t.color or M.PRIORITY_COLORS.get(t.priority, '#8a919c') if (t.color or t.priority in ('urgent', 'high')) else 'var(--text-3)' }}">{{ icon('check', 11 if small else 12, stroke=3) }}</button>
 {%- endmacro %}
 
+{# Ticket à rendre ou fin de sprint (projet d'équipe) : lien vers la fiche, et « Bloquer un créneau » (tâche
+   de l'agenda préremplie avec le lien du ticket) #}
+{% macro ticket_item(it, cls='ag-chip', style='') -%}
+<div class="{{ cls }} ticket {{ it.kind }} {% if it.overdue %}overdue{% endif %}" style="--tc: {{ it.color }};{{ style }}">
+  <a class="ellipsis ticket-link" href="{{ it.url }}" title="{{ it.label }} · {{ it.title }}{% if it.overdue %} (en retard){% endif %}">{{ icon('flag' if it.kind == 'sprint' else 'layers', 11) }} {% if it.kind == 'ticket' %}<b>{{ it.label }}</b> {% endif %}{{ it.title }}</a>
+  {% if it.kind == 'ticket' %}<button type="button" class="ticket-slot" data-new-task data-date="{{ (A.date.today() if it.overdue else it.date).isoformat() }}" data-title="{{ it.label }} · {{ it.title }}" data-notes="{{ it.notes }}" title="Bloquer un créneau pour ce ticket">{{ icon('plus', 11) }}<span class="sr-only">Bloquer un créneau</span></button>{% endif %}
+</div>
+{%- endmacro %}
+
 {# ------------------------------------------------------------------ Semaine #}
 {% macro week_grid(w, recent, compact=False) %}
 <div class="wk {% if compact %}compact{% endif %} {% if w.narrow_we %}narrow-we{% endif %}" style="--ndays: {{ w.ndays }}; --hours: {{ w.h1 - w.h0 }}" data-week data-h0="{{ w.h0 }}" data-h1="{{ w.h1 }}">
@@ -43,6 +52,8 @@
         {% if badge %}<span class="chg {{ badge[1] }}" title="{{ badge[0] }}"></span>{% endif %}
         {% if b.cont_right %}{{ icon('chevron-right', 12) }}{% endif %}
       </button>
+      {% elif b.type == 'ticket' %}
+      {{ ticket_item(b.obj, 'wk-bar', ' grid-column: %d / %d; grid-row: %d' % (b.c0 + 1, b.c1 + 2, b.lane + 1)) }}
       {% else %}{% set o = b.obj %}{% set t = o.task %}
       <div class="wk-bar task {% if t.is_done %}done{% endif %} {% if o.ghost %}ghost{% endif %}" style="grid-column: {{ b.c0 + 1 }} / {{ b.c1 + 2 }}; grid-row: {{ b.lane + 1 }}; --tc: {{ t.color or 'var(--accent)' }}">
         {{ task_check(t, o.ghost, True) }}
@@ -83,7 +94,8 @@
 
 {# ------------------------------------------------------------------ Éléments de listes / mois #}
 {% macro item_chip(x, recent, show_time=True) %}
-{% if x.type == 'event' %}{% set ev = x.obj %}{% set badge = A.change_badge(ev, recent) %}
+{% if x.type == 'ticket' %}{{ ticket_item(x.obj) }}
+{% elif x.type == 'event' %}{% set ev = x.obj %}{% set badge = A.change_badge(ev, recent) %}
 <button type="button" class="ag-chip ev {{ ev_classes(ev) }} {% if x.multi %}multi{% endif %}" style="--ec: {{ A.event_color(ev) }}" data-ev="{{ ev.id }}" title="{{ ev_title(ev) }}">
   {% if show_time and x.time %}<span class="tm">{{ x.time }}</span>{% endif %}<span class="ellipsis">{{ ev.title }}</span>{% if badge %}<span class="chg {{ badge[1] }}"></span>{% endif %}
 </button>

@@ -40,6 +40,54 @@
     </div>
   </div>
 
+  <div class="section-title" id="auto"><h2>{{ icon('refresh', 16) }} Récupérer le planning tout seul</h2></div>
+  <div class="panel panel-b mb-lg">
+    <p class="help" style="margin-top:0">Hangar peut surveiller un dossier (par exemple <b>Téléchargements</b>) ou lire l’adresse d’abonnement .ics de l’école : chaque nouveau fichier est importé comme si tu l’avais déposé (le dernier fait foi). Si rien n’a changé, rien n’est importé. Une invitation à une réunion ou un fichier qui ne ressemble pas à ton emploi du temps est laissé de côté.</p>
+    {% if source.kind %}
+    <div class="mail-state {% if source.error %}ko{% else %}ok{% endif %}" style="margin-bottom:10px">
+      {{ icon('alert' if source.error else 'check-circle', 16) }}
+      <span class="grow">{{ source.label }} : <code>{{ source.path }}</code><br>
+        {% if source.error %}{{ source.error|capitalize }}{% elif source.checked_at %}Dernière lecture {{ source.checked_at|ago }}{% if source.changed_at %} · dernier nouveau fichier {{ source.changed_at|ago }}{% endif %}.{% else %}Pas encore lue.{% endif %}</span>
+      {% if current_user.is_admin %}<form method="post" action="{{ url_for('agenda.source_check') }}">{{ ui.csrf() }}<button class="btn btn-xs">{{ icon('refresh', 12) }} Vérifier maintenant</button></form>{% endif %}
+    </div>
+    {% endif %}
+    {% if current_user.is_admin %}
+    <form method="post" action="{{ url_for('agenda.source_save') }}" class="flex wrap gap" style="align-items:flex-end">
+      {{ ui.csrf() }}
+      <div class="field" style="margin:0"><label for="src-kind">Source</label>
+        <select class="input input-sm" id="src-kind" name="source_kind">
+          <option value="" {% if not source.kind %}selected{% endif %}>Aucune (import à la main)</option>
+          {% for k, lab in source.kinds.items() %}<option value="{{ k }}" {% if source.kind == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
+        </select></div>
+      <div class="field grow" style="margin:0;min-width:240px"><label for="src-path">Dossier ou adresse</label>
+        <input class="input input-sm" id="src-path" name="source_path" value="{{ source.path }}" placeholder="C:\Users\moi\Downloads  ou  https://…/planning.ics" maxlength="500"></div>
+      <button class="btn btn-sm btn-primary">Enregistrer</button>
+    </form>
+    <p class="help">Le dossier est regardé toutes les 30 secondes (le fichier .ics le plus récent compte) ; l’adresse est relue toutes les 3 heures, tant que Hangar est lancé.</p>
+    {% else %}
+    <p class="muted small" style="margin:0">Seul un administrateur peut régler la récupération automatique.</p>
+    {% endif %}
+  </div>
+
+  <div class="section-title" id="abonnement"><h2>{{ icon('calendar', 16) }} S’abonner depuis mon téléphone</h2></div>
+  <div class="panel panel-b mb-lg">
+    <p class="help" style="margin-top:0">Une adresse secrète à coller une seule fois dans l’agenda de ton téléphone ou dans Outlook : cours, contrôles, tâches et tickets s’y mettent à jour tout seuls après chaque import. L’adresse permet seulement de <b>lire</b> ton agenda ; garde-la pour toi, et crée-en une nouvelle si elle a fuité.</p>
+    {% if feed %}
+    <div class="flex gap" style="align-items:center">
+      <input class="input input-sm grow mono" value="{{ feed.url }}" readonly aria-label="Adresse d’abonnement">
+      <button class="btn btn-sm" type="button" data-copy="{{ feed.url }}">{{ icon('copy', 13) }} Copier</button>
+    </div>
+    {% if feed.warning %}<div class="ag-warn" style="margin-top:8px">{{ icon('alert', 15) }}<span>{{ feed.warning }}</span></div>{% endif %}
+    {% if feed.local %}<p class="help">Le téléphone doit être sur le même Wi-Fi que cet ordinateur, allumé avec Hangar lancé. Sur iPhone : Réglages › Calendrier › Comptes › Ajouter un calendrier avec abonnement. Sur Android : l’appli gratuite ICSx⁵ (Google Agenda ne lit pas une adresse du réseau local).</p>{% endif %}
+    <div class="flex gap mt">
+      <form method="post" action="{{ url_for('agenda.feed_regenerate') }}" data-confirm="Créer une nouvelle adresse ? L’ancienne ne marchera plus.">{{ ui.csrf() }}<button class="btn btn-sm">{{ icon('refresh', 13) }} Nouvelle adresse</button></form>
+      <form method="post" action="{{ url_for('agenda.feed_disable') }}" data-confirm="Couper l’abonnement ? L’adresse ne marchera plus.">{{ ui.csrf() }}<button class="btn btn-sm btn-ghost">Couper l’abonnement</button></form>
+    </div>
+    {% else %}
+    <form method="post" action="{{ url_for('agenda.feed_regenerate') }}">{{ ui.csrf() }}<button class="btn btn-sm btn-primary">{{ icon('link', 13) }} Créer mon adresse d’abonnement</button></form>
+    {% endif %}
+  </div>
+
   <div class="section-title"><h2>Historique des imports</h2><span class="count">{{ rows|length }}</span></div>
   {% if rows %}
   <div class="panel" style="overflow-x:auto">

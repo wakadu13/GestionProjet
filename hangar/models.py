@@ -1213,7 +1213,7 @@ class AgendaReminder(db.Model):
     event_id = db.Column(db.Integer, db.ForeignKey("agenda_event.id", ondelete="CASCADE"), index=True)
     offset_minutes = db.Column(db.Integer)            # minutes avant le début ; vide = date fixe
     remind_at = db.Column(db.DateTime, index=True)
-    channel = db.Column(db.String(10), default="email")  # email | app
+    channel = db.Column(db.String(10), default="email")  # email | app | push (voir agenda.REMINDER_CHANNELS)
     auto = db.Column(db.Boolean, default=False)          # créé automatiquement (contrôles)
     status = db.Column(db.String(10), default="pending", index=True)  # pending | sent | missed | skipped | error
     sent_at = db.Column(db.DateTime)
@@ -1256,6 +1256,17 @@ class AgendaSettings(db.Model):
     import_email = db.Column(db.Boolean, default=False)   # e-mail récapitulatif des changements après un import
     exam_reminder = db.Column(db.Integer, default=0)      # rappel automatique des contrôles (minutes, 0 = non)
     weekly_import_nudge = db.Column(db.Boolean, default=True)
+    # Abonnement en lecture seule (/agenda/flux/<jeton>.ics) : jeton dédié, régénérable ; vide = coupé
+    feed_token = db.Column(db.String(64), index=True)
+    # Emploi du temps récupéré tout seul (réglé par un administrateur) : dossier surveillé ou adresse .ics
+    source_kind = db.Column(db.String(10), default="")      # "" | folder | url
+    source_path = db.Column(db.String(500), default="")     # dossier (folder) ou adresse (url)
+    source_fingerprint = db.Column(db.String(64), default="")  # empreinte des séances du dernier fichier lu
+    source_seen = db.Column(db.String(300), default="")     # fichier vu (nom, date, taille) : relu seulement s'il change
+    source_checked_at = db.Column(db.DateTime)              # dernière lecture réussie de la source
+    source_changed_at = db.Column(db.DateTime)              # dernier fichier nouveau (importé ou écarté)
+    source_tried_at = db.Column(db.DateTime)                # dernier essai (réussi ou non)
+    source_error = db.Column(db.String(500), default="")    # dernier problème, en clair (vide = tout va bien)
 
     user = db.relationship("User")
 
