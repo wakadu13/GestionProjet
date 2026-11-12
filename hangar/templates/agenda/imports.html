@@ -60,12 +60,15 @@
           {% for k, lab in source.kinds.items() %}<option value="{{ k }}" {% if source.kind == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}
         </select></div>
       <div class="field grow" style="margin:0;min-width:240px"><label for="src-path">Dossier ou adresse</label>
-        <input class="input input-sm" id="src-path" name="source_path" value="{{ source.path }}" placeholder="C:\Users\moi\Downloads  ou  https://…/planning.ics" maxlength="500"></div>
+        <input class="input input-sm" id="src-path" name="source_path" value="{{ source.path }}" placeholder="C:\Users\moi\Downloads  ou  https://…/planning.ics" maxlength="510"></div>
       <button class="btn btn-sm btn-primary">Enregistrer</button>
     </form>
-    <p class="help">Le dossier est regardé toutes les 30 secondes (le fichier .ics le plus récent compte) ; l’adresse est relue toutes les 3 heures, tant que Hangar est lancé.</p>
+    <p class="help">Le dossier est regardé toutes les 30 secondes (le fichier .ics le plus récent compte) ; l’adresse est relue toutes les 3 heures, tant que Hangar est lancé. Un chemin copié depuis l’Explorateur (entre guillemets) ou écrit avec <code>%USERPROFILE%</code> ou <code>~</code> est accepté.</p>
     {% else %}
-    <p class="muted small" style="margin:0">Seul un administrateur peut régler la récupération automatique.</p>
+    <p class="muted small" style="margin:0">Seul un administrateur peut régler la récupération automatique.{% if source.kind %} Elle est suspendue pour ton compte.{% endif %}</p>
+    {% if source.kind %}
+    <form method="post" action="{{ url_for('agenda.source_save') }}" style="margin-top:8px">{{ ui.csrf() }}<input type="hidden" name="source_kind" value=""><button class="btn btn-xs">Couper la récupération automatique</button></form>
+    {% endif %}
     {% endif %}
   </div>
 

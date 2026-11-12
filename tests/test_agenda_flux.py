@@ -524,6 +524,7 @@ class SourceTests(Base):
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
             url = f"http://127.0.0.1:{srv.server_address[1]}/planning.ics"
+            self.user.role = "admin"  # le fil ne lit que la source d'un administrateur
             self.configure("url", url)
             self.assertEqual(A.check_source(self.user, self.at), "imported")
             self.assertEqual(self.active(), 4)

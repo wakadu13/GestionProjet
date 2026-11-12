@@ -17,6 +17,7 @@ from ..models import (PRIORITY_LABELS, RECURRENCES, REMINDER_OFFSETS, TASK_COLOR
                       AgendaReminder, AgendaTask, now)
 from ..services import to_int
 from ..utils import back_url, parse_date, plier
+from ..wiki.coffre import _normaliser as normaliser_chemin  # même règle que le coffre du wiki
 
 bp = Blueprint("agenda", __name__)
 
@@ -691,14 +692,17 @@ def import_upload():
 @login_required
 def source_save():
     """Emploi du temps récupéré tout seul : dossier surveillé ou adresse .ics. Réservé aux administrateurs (une
-    adresse ou un chemin choisis par n'importe quel compte feraient lire au serveur le réseau local ou le PC)."""
-    if not current_user.is_admin:
+    adresse ou un chemin choisis par n'importe quel compte feraient lire au serveur le réseau local ou le PC).
+    Couper sa propre source reste permis à tout compte (administrateur rétrogradé)."""
+    kind = request.form.get("source_kind") or ""
+    # Chemin collé depuis l'Explorateur (« Copier en tant que chemin d'accès ») : entre guillemets
+    where = (request.form.get("source_path") or "").strip().strip('"').strip()
+    cut = kind not in A.SOURCE_KINDS or not where
+    if not cut and not current_user.is_admin:
         abort(403, description="Seul un administrateur peut régler la récupération automatique du planning.")
     s = A.settings_of(current_user)
-    kind = request.form.get("source_kind") or ""
-    where = (request.form.get("source_path") or "").strip()[:500]
     back = url_for("agenda.imports") + "#auto"
-    if kind not in A.SOURCE_KINDS or not where:
+    if cut:
         s.source_kind, s.source_path, s.source_error = "", "", ""
         s.source_fingerprint, s.source_seen = "", ""
         db.session.commit()
@@ -711,11 +715,14 @@ def source_save():
             flash(str(exc), "error")
             return redirect(back)
     else:
-        where = os.path.expanduser(where)
+        where = str(normaliser_chemin(where))  # %USERPROFILE%, ~ : comme le coffre du wiki
         if not os.path.isdir(where):
             flash("Ce dossier est introuvable sur cet ordinateur : vérifie son chemin (ex. C:\\Users\\moi\\Downloads).",
                   "error")
             return redirect(back)
+    if len(where) > 500:
+        flash("Ce chemin est trop long (500 caractères au plus).", "error")
+        return redirect(back)
     if (kind, where) != (s.source_kind, s.source_path):
         s.source_fingerprint, s.source_seen, s.source_error = "", "", ""
         s.source_checked_at = s.source_changed_at = s.source_tried_at = None
