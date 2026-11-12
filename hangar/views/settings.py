@@ -9,6 +9,7 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..models import PALETTE, APIToken, User, Workspace, now
+from ..securite import clean_color
 from ..services import to_int
 from ..utils import human_size, require_admin
 
@@ -34,7 +35,7 @@ def profile():
         u.last_name = request.form.get("last_name", "").strip()
         u.job_title = request.form.get("job_title", "").strip()
         u.bio = request.form.get("bio", "")
-        u.avatar_color = request.form.get("avatar_color") or u.avatar_color
+        u.avatar_color = clean_color(request.form.get("avatar_color"), u.avatar_color)
         u.theme = request.form.get("theme") if request.form.get("theme") in ("system", "light", "dark") else "system"
         u.capacity_hours = to_int(request.form.get("capacity_hours")) or u.capacity_hours
         if request.form.get("email_section"):
@@ -177,17 +178,21 @@ def backup():
     return render_template("settings/backup.html", files=files)
 
 
-@bp.route("/backup/download")
+@bp.route("/backup/download", methods=["GET", "POST"])
 @login_required
 def backup_download():
+    """Une sauvegarde existante (GET ?name=…) ou une copie de la base actuelle (POST : elle crée un fichier,
+    donc jamais sur un simple lien ou une image glissée dans une page)."""
     require_admin()
     name = request.args.get("name")
-    if name:
+    if request.method == "POST":
+        path = make_backup()
+    elif name:
         path = os.path.join(current_app.config["BACKUP_DIR"], os.path.basename(name))
         if not os.path.exists(path):
             abort(404)
     else:
-        path = make_backup()
+        return redirect(url_for("settings.backup"))
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
 

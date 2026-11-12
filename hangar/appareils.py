@@ -21,7 +21,8 @@ formats JSON et les mêmes en-têtes.
   jeton : pour l'appli (User-Agent « ProjetPluriApp/ »), les renvois vers `/login` passent par
   `/connexion/`. « Se déconnecter » de Hangar ouvre les réglages de l'appli (qui révoque le jeton).
 - Alias des adresses de Revision : `/aujourdhui/`, `/connexion/`, `/deconnexion/`, `/compte/`,
-  `/compte/mot-de-passe/`, `/inscription/`, `/utilisateurs/`.
+  `/compte/mot-de-passe/`, `/inscription/`, `/utilisateurs/`. Comme dans Revision, la déconnexion se fait
+  en POST (`/logout` ou `/deconnexion/`) ; `/deconnexion/` en GET affiche un bouton de confirmation.
 
 Le blueprint est enregistré par celui des QCM (`qcm/views.py`) ; ses tables sont créées avec celles
 des QCM (`qcm/models.py`).
@@ -33,7 +34,7 @@ import secrets
 from datetime import datetime
 from urllib.parse import urlencode, urlsplit
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, request, session, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user, user_logged_in
 from sqlalchemy import delete, event
 from sqlalchemy import inspect as sa_inspect
@@ -147,7 +148,8 @@ def _avant():
         if JetonAppareil.query.filter_by(id=jeton_id, user_id=current_user.id).first() is None:
             logout_user()
             session.pop(SESSION_JETON, None)
-    if request.endpoint == "auth.logout" and dans_appli() and current_user.is_authenticated:
+    if (request.endpoint in ("auth.logout", "appareils.alias_deconnexion") and request.method == "POST"
+            and dans_appli() and current_user.is_authenticated):
         # Dans l'appli, se déconnecter = révoquer le jeton, depuis les réglages de l'appli.
         return redirect(APPLI_LOCAL + "connexion.html")
     return None
@@ -323,7 +325,14 @@ def alias_connexion():
 
 @bp.route("/deconnexion/", methods=["GET", "POST"])
 def alias_deconnexion():
-    return redirect(url_for("auth.logout"))
+    """« Se déconnecter » de Revision : en POST (jeton CSRF vérifié), déconnecte comme `/logout` ; en GET,
+    un simple bouton de confirmation (un lien ou une image vers cette adresse ne déconnecte personne)."""
+    if not current_user.is_authenticated:
+        return redirect(url_for("auth.login"))
+    if request.method == "POST":
+        from .views.auth import logout
+        return logout()
+    return render_template("auth/deconnexion.html")
 
 
 @bp.route("/compte/")

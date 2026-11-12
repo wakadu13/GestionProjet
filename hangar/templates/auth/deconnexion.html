@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Se déconnecter{% endblock %}
+{% block content %}
+<div class="panel panel-b" style="max-width:440px;margin:48px auto">
+  <h2>Se déconnecter ?</h2>
+  <p class="muted mb">Ta session Hangar sera fermée sur cet appareil.</p>
+  <form method="post" action="{{ url_for('auth.logout') }}" class="flex gap">
+    {{ ui.csrf() }}
+    <button class="btn btn-primary">{{ icon('logout', 14) }} Se déconnecter</button>
+    <a class="btn" href="{{ url_for('agenda.dashboard') }}">Annuler</a>
+  </form>
+</div>
+{% endblock %}

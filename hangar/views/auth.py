@@ -108,9 +108,12 @@ def signup():
     return render_template("auth/signup.html", ws=ws, form={})
 
 
-@bp.route("/logout", methods=["POST", "GET"])
+@bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
+    """POST seulement (avec le jeton CSRF, comme le bouton du menu) : une image « /logout » glissée dans un
+    commentaire ou une page déconnecterait sinon chaque lecteur. /deconnexion/ (adresse de Revision) affiche
+    un bouton de confirmation."""
     logout_user()
     flash("Tu es déconnecté.", "info")
     return redirect(url_for("auth.login"))

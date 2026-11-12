@@ -9,7 +9,7 @@
     <h2>Sauvegardes</h2><p class="help">Copies complètes de la base (projets, tickets, pages, comptes). Les pièces jointes sont dans le dossier <code>data/uploads</code>.</p>
     <div class="flex wrap gap mb">
       <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="create"><button class="btn btn-primary">{{ icon('database', 14) }} Créer une sauvegarde</button></form>
-      <a class="btn" href="{{ url_for('settings.backup_download') }}">{{ icon('download', 14) }} Télécharger la base actuelle</a>
+      <form method="post" action="{{ url_for('settings.backup_download') }}" class="inline-form">{{ ui.csrf() }}<button class="btn">{{ icon('download', 14) }} Télécharger la base actuelle</button></form>
       <a class="btn" href="{{ url_for('settings.export_json') }}">{{ icon('code', 14) }} Export JSON lisible</a>
     </div>
     <div class="panel">

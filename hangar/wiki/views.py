@@ -22,6 +22,7 @@ from flask_login import current_user
 from .. import ai
 from ..extensions import db
 from ..icons import ICONS
+from ..securite import protect_file
 from . import commun, erreurs, historique, installation, texte_pdf, uploads
 from . import latex as latex_converter
 from .commun import can_edit, deny, render, wants_json
@@ -696,11 +697,8 @@ def file(path):
         abort(404, description="Fichier introuvable")
     inline = attachment.suffix in INLINE_TYPES
     response = send_file(full, as_attachment=not inline, download_name=attachment.name, conditional=True, max_age=0)
-    if attachment.suffix != ".pdf":
-        # Même ouvert directement, le fichier ne peut rien exécuter.
-        response.headers["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; media-src 'self'; sandbox"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    return response
+    # Même ouvert directement, le fichier ne peut rien exécuter (même règle que les pièces jointes des tickets).
+    return protect_file(response, pdf=attachment.suffix == ".pdf")
 
 
 @bp.route("/pdf-annotation/", methods=["POST"])

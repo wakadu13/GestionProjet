@@ -8,6 +8,7 @@ from ..extensions import db
 from ..models import (
     ESTIMATE_TYPES, PALETTE, ROLES, STATE_GROUP_LABELS, Issue, Label, Project, ProjectMember, State, User, now,
 )
+from ..securite import clean_color
 from ..services import create_project, ensure_member, log_activity, to_int
 from ..utils import back_url, get_project, parse_date, project_role, visible_projects
 
@@ -76,7 +77,7 @@ def new():
             member_ids.append(lead.id)
         p = create_project(
             name, ident, current_user, description=request.form.get("description", ""),
-            emoji=request.form.get("emoji") or "🚀", color=request.form.get("color") or "#3f76ff",
+            emoji=request.form.get("emoji") or "🚀", color=clean_color(request.form.get("color"), "#3f76ff"),
             network=request.form.get("network", "public"), lead=lead, member_ids=member_ids,
             start_date=parse_date(request.form.get("start_date")),
             target_date=parse_date(request.form.get("target_date")),
@@ -176,7 +177,7 @@ def _save_general(p):
     p.identifier = ident
     p.description = request.form.get("description", "")
     p.emoji = request.form.get("emoji") or p.emoji
-    p.color = request.form.get("color") or p.color
+    p.color = clean_color(request.form.get("color"), p.color)
     p.network = request.form.get("network", "public")
     p.lead_id = to_int(request.form.get("lead_id"))
     p.default_assignee_id = to_int(request.form.get("default_assignee_id"))
@@ -248,7 +249,7 @@ def _save_states(p):
             from ..models import STATE_GROUP_ORDER
             base = (STATE_GROUP_ORDER[group] + 1) * 10000
             db.session.add(State(project=p, name=name[:80], group=group,
-                                 color=request.form.get("color") or "#a3a3a3",
+                                 color=clean_color(request.form.get("color"), "#a3a3a3"),
                                  description=request.form.get("description", "")[:255],
                                  sequence=(max(seqs) + 100) if seqs else base))
             flash(f"État « {name} » ajouté.", "success")
@@ -256,7 +257,7 @@ def _save_states(p):
         s = db.session.get(State, to_int(request.form.get("state_id")) or 0)
         if s and s.project_id == p.id:
             s.name = (request.form.get("name") or s.name).strip()[:80]
-            s.color = request.form.get("color") or s.color
+            s.color = clean_color(request.form.get("color"), s.color)
             s.description = request.form.get("description", "")[:255]
             flash("État modifié.", "success")
     elif action == "default":
@@ -294,7 +295,7 @@ def _save_labels(p):
             if any(l.name.lower() == name.lower() for l in p.labels):
                 flash("Cette étiquette existe déjà.", "error")
             else:
-                db.session.add(Label(project=p, name=name[:80], color=request.form.get("color") or "#3f76ff",
+                db.session.add(Label(project=p, name=name[:80], color=clean_color(request.form.get("color"), "#3f76ff"),
                                      parent_id=to_int(request.form.get("parent_id")),
                                      description=request.form.get("description", "")[:255]))
                 flash(f"Étiquette « {name} » créée.", "success")
@@ -302,7 +303,7 @@ def _save_labels(p):
         l = db.session.get(Label, to_int(request.form.get("label_id")) or 0)
         if l and l.project_id == p.id:
             l.name = (request.form.get("name") or l.name).strip()[:80]
-            l.color = request.form.get("color") or l.color
+            l.color = clean_color(request.form.get("color"), l.color)
             parent = to_int(request.form.get("parent_id"))
             l.parent_id = parent if parent != l.id else None
             flash("Étiquette modifiée.", "success")

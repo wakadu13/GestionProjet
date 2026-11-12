@@ -56,7 +56,7 @@
   };
   const GROUP_COLORS = { backlog: '#a3a3a3', unstarted: '#3f76ff', started: '#f59e0b', completed: '#16a34a', cancelled: '#dc2626' };
   function stateIcon(group, color, size = 14) {
-    color = color || GROUP_COLORS[group] || '#a3a3a3';
+    color = esc(color || GROUP_COLORS[group] || '#a3a3a3'); // couleur saisie (état d'un projet) : échappée
     let inner;
     if (group === 'backlog') inner = `<circle cx="12" cy="12" r="9" stroke="${color}" stroke-dasharray="3.2 3"/>`;
     else if (group === 'unstarted') inner = `<circle cx="12" cy="12" r="9" stroke="${color}"/>`;
@@ -1407,7 +1407,7 @@
     $('[data-em-color]', emModal).style.background = ev.color;
     set('[data-em-title]', ev.title);
     const badges = [];
-    if (ev.kind) badges.push(`<span class="badge" style="background:color-mix(in srgb, ${ev.color} 16%, transparent);color:var(--text)">${esc(ev.kind)}${ev.session ? ` · séance ${esc(ev.session)}` : ''}</span>`);
+    if (ev.kind) badges.push(`<span class="badge" style="background:color-mix(in srgb, ${esc(ev.color)} 16%, transparent);color:var(--text)">${esc(ev.kind)}${ev.session ? ` · séance ${esc(ev.session)}` : ''}</span>`);
     if (ev.exam) badges.push('<span class="badge badge-danger">Contrôle</span>');
     if (ev.tentative) badges.push('<span class="badge badge-warning">Prévisionnel</span>');
     if (ev.cancelled) badges.push('<span class="badge badge-danger">Annulé</span>');

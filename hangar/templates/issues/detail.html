@@ -152,7 +152,7 @@
         {% for a in issue.attachments %}
         <div class="att">
           <div class="thumb">{% if a.is_image %}<img src="{{ url_for('issues.attachment_get', aid=a.id, inline=1) }}" alt="">{% else %}{{ icon('paperclip', 16) }}{% endif %}</div>
-          <div class="meta"><a href="{{ url_for('issues.attachment_get', aid=a.id, inline=1 if a.is_image or a.mimetype == 'application/pdf' else 0) }}" target="_blank" title="{{ a.filename }}">{{ a.filename }}</a><span class="muted tiny">{{ a.size|filesize }} · {{ a.uploaded_by.display_name if a.uploaded_by else '' }} · {{ a.created_at|ago }}</span></div>
+          <div class="meta"><a href="{{ url_for('issues.attachment_get', aid=a.id, inline=1 if a.viewable else 0) }}" target="_blank" title="{{ a.filename }}">{{ a.filename }}</a><span class="muted tiny">{{ a.size|filesize }} · {{ a.uploaded_by.display_name if a.uploaded_by else '' }} · {{ a.created_at|ago }}</span></div>
           <a class="btn btn-ghost btn-icon btn-xs" href="{{ url_for('issues.attachment_get', aid=a.id) }}" title="Télécharger">{{ icon('download', 13) }}</a>
           {% if can_comment %}<form method="post" action="{{ url_for('issues.attachment_delete', aid=a.id) }}" class="inline-form" data-confirm="Supprimer {{ a.filename }} ?">{{ ui.csrf() }}<button class="btn btn-ghost btn-icon btn-xs" title="Supprimer">{{ icon('trash', 13) }}</button></form>{% endif %}
         </div>

@@ -75,6 +75,8 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
     _register_blueprints(app)
     _register_template_helpers(app)
     _register_hooks(app)
+    from . import securite
+    securite.init_app(app)
     return app
 
 
@@ -149,7 +151,8 @@ def _register_hooks(app: Flask) -> None:
             if not token or not sent or not secrets.compare_digest(token, sent):
                 abort(400, description="Jeton de sécurité expiré : recharge la page et réessaie.")
         if (current_user.is_authenticated and current_user.must_change_password
-                and request.endpoint not in ("settings.profile", "settings.password", "auth.logout")
+                and request.endpoint not in ("settings.profile", "settings.password", "auth.logout",
+                                             "appareils.alias_deconnexion")
                 and not request.path.startswith("/api/")):
             return redirect(url_for("settings.profile", must_change=1))
         return None

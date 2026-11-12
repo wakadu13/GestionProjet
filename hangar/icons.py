@@ -118,7 +118,8 @@ def icon(name: str, size: int = 16, cls: str = "", stroke: float = 1.75, title: 
 
 
 def state_icon(group: str, color: str | None = None, size: int = 14) -> Markup:
-    color = color or STATE_GROUP_COLORS.get(group, "#a3a3a3")
+    # Couleur saisie par un utilisateur (état d'un projet) : échappée, elle ne peut pas sortir de l'attribut.
+    color = escape(color or STATE_GROUP_COLORS.get(group, "#a3a3a3"))
     if group == "backlog":
         inner = f'<circle cx="12" cy="12" r="9" stroke="{color}" stroke-dasharray="3.2 3"/>'
     elif group == "unstarted":
@@ -139,7 +140,7 @@ def state_icon(group: str, color: str | None = None, size: int = 14) -> Markup:
 
 
 def priority_icon(priority: str, size: int = 14) -> Markup:
-    color = PRIORITY_COLORS.get(priority, "#a3a3a3")
+    color = escape(PRIORITY_COLORS.get(priority, "#a3a3a3"))
     if priority == "urgent":
         inner = (f'<rect x="2" y="2" width="20" height="20" rx="5" fill="{color}"/>'
                  '<path d="M12 6.5v7" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>'

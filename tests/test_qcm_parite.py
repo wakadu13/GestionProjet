@@ -394,9 +394,11 @@ class AppliAndroidTests(PariteTestCase):
         self.assertIn("QCM de révision", page.get_data(as_text=True))
         # Le profil liste l'appareil
         self.assertIn("Google Pixel 8", web.get("/settings/profile").get_data(as_text=True))
-        # « Se déconnecter » de Hangar, dans l'appli : ses réglages (qui révoquent le jeton)
-        r = web.get("/logout", headers={"User-Agent": APPLI})
+        # « Se déconnecter » de Hangar (bouton du menu, en POST), dans l'appli : ses réglages (qui révoquent le jeton)
+        jeton_csrf = re.search(r'csrf: "([^"]+)"', page.get_data(as_text=True)).group(1)
+        r = web.post("/logout", data={"_csrf": jeton_csrf}, headers={"User-Agent": APPLI})
         self.assertEqual(r.headers["Location"], "https://appassets.androidplatform.net/connexion.html")
+        self.assertEqual(web.get("/logout", headers={"User-Agent": APPLI}).status_code, 405)  # jamais en GET
 
         # Déconnexion de l'appli : jeton révoqué, session de la WebView fermée
         self.assertEqual(app.post("/api/appareil/deconnexion/", headers=bearer).get_json(), {"ok": True})
@@ -579,7 +581,6 @@ class AliasTests(PariteTestCase):
         attendus = {
             "/aujourdhui/": "/qcm/aujourdhui/",
             "/connexion/?next=/qcm/": "/login?next=%2Fqcm%2F",
-            "/deconnexion/": "/logout",
             "/compte/": "/settings/profile",
             "/compte/mot-de-passe/": "/settings/profile#password",
             "/inscription/": "/signup",
@@ -590,6 +591,10 @@ class AliasTests(PariteTestCase):
             self.assertIn(r.status_code, (301, 302), ancien)
             self.assertEqual(r.headers["Location"], nouveau, ancien)
         self.assertEqual(c.get("/aujourdhui/", follow_redirects=True).status_code, 200)
+        # /deconnexion/ : comme dans Revision, on ne se déconnecte qu'en POST ; en GET, un bouton de confirmation
+        r = c.get("/deconnexion/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('<form method="post" action="/logout"', r.get_data(as_text=True))
 
 
 if __name__ == "__main__":
