@@ -8,6 +8,8 @@
   const DECAY = -0.5, FACTOR = 19 / 81, RETENTION = 0.9, S_MIN = 0.01;
   const A_REVOIR = 1, DIFFICILE = 2, BIEN = 3, FACILE = 4;
   const JOUR_MS = 86400000;
+  // Avant un examen (date d'examen du set), révisions plus serrées : comme planning.retention_cible.
+  const RETENTION_EXAMEN = 0.95, JOURS_EXAMEN_PROCHE = 30;
   // Progression antérieure à FSRS (boîtes de Leitner, quiz.py) : intervalle de chaque
   // boîte, et stabilité estimée quand une telle question est revue pour la première fois.
   const INTERVALLES_LEITNER = { 0: 0, 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
@@ -43,9 +45,19 @@
   const etatSuivant = (st, note, now) => (st && st.stabilite != null && st.difficulte != null)
     ? suivante({ stabilite: st.stabilite, difficulte: st.difficulte }, joursDepuis(st, now), note)
     : premiere(note);
-  function delaiMs(etat, note) {
+  // Rétention visée pour une réponse donnée à l'instant `now` (ms) : 95 % de 1 à 30 jours avant la
+  // date d'examen (« AAAA-MM-JJ », jour local), sinon 90 %. Calculée à chaque réponse : l'appareil
+  // peut entrer dans les 30 derniers jours pendant qu'il est hors ligne.
+  function retentionCible(dateObjectif, now) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateObjectif || "");
+    if (!m) return RETENTION;
+    const d = new Date(now);
+    const dispo = Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / JOUR_MS);
+    return dispo > 0 && dispo <= JOURS_EXAMEN_PROCHE ? RETENTION_EXAMEN : RETENTION;
+  }
+  function delaiMs(etat, note, retention) {
     if (note === A_REVOIR) return 10 * 60000;
-    const jours = Math.floor(intervalleJours(etat.stabilite) + 0.5);
+    const jours = Math.floor(intervalleJours(etat.stabilite, retention) + 0.5);
     return Math.min(36500, Math.max(1, jours)) * JOUR_MS;
   }
   function texteDelai(ms) {
@@ -80,8 +92,8 @@
   }
 
   global.FSRS = {
-    W, RETENTION, JOUR_MS, A_REVOIR, DIFFICILE, BIEN, FACILE, STABILITE_LEITNER, INTERVALLES_LEITNER,
+    W, RETENTION, RETENTION_EXAMEN, JOURS_EXAMEN_PROCHE, JOUR_MS, A_REVOIR, DIFFICILE, BIEN, FACILE, STABILITE_LEITNER, INTERVALLES_LEITNER,
     retrievabilite, premiere, suivante, intervalleJours, joursDepuis, estNouveau, estDu, retention, etatSuivant,
-    delaiMs, texteDelai, etatSuivantQcm, estDuQcm, urgence, echeanceQcm,
+    retentionCible, delaiMs, texteDelai, etatSuivantQcm, estDuQcm, urgence, echeanceQcm,
   };
 })(window);

@@ -166,6 +166,9 @@ def hl_sets():
                 for qid, p in progress.items()
             },
             "quotas": {"nouvelles_jour": quota_n, "revisions_jour": quota_r},
+            # Date d'examen : l'appareil resserre les révisions dans les 30 jours qui précèdent,
+            # comme le serveur (planning.retention_cible, fsrs.js retentionCible).
+            "date_objectif": deck.date_objectif.isoformat() if deck is not None and deck.date_objectif else None,
         })
     extra = {k: v for k, v in (("renommes", renommes), ("indisponibles", indisponibles)) if v}
     return _sans_cache(jsonify(joueur=current_user.username, sets=sets, manquants=manquants, **extra))

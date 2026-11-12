@@ -19,6 +19,12 @@
   const F = window.FSRS;
   if (!F) return;
   const estLangue = (s) => s.type === "langue";
+  // Page gardée par le navigateur pour s'ouvrir sans réseau ? Il faut une adresse sécurisée (HTTPS, ou
+  // cet ordinateur) pour le service worker et le cache. Sur http://192.168…, les sets se téléchargent
+  // bien (IndexedDB), mais la page elle-même ne s'ouvrira pas sans réseau. L'application Android a sa
+  // propre page embarquée (pas de service worker dans sa WebView : on ne teste pas serviceWorker).
+  const pageGardee = !!window.QcmReseau || window.isSecureContext !== false;
+  const SANS_RESEAU = pageGardee ? "disponibles sans réseau" : "gardés sur l'appareil";
 
   // --- Révision espacée : mêmes règles que models.py / quiz.py ---
   const BOITE_MAX = 5;
@@ -56,7 +62,8 @@
     if (!st.premiere_revue) st.premiere_revue = rep.date;
     st.stabilite = Math.round(etat.stabilite * 1000) / 1000;
     st.difficulte = Math.round(etat.difficulte * 1000) / 1000;
-    st.echeance = new Date(now + F.delaiMs(etat, noteFsrs)).toISOString();
+    // Rétention visée comme sur le serveur : plus haute dans les 30 jours avant l'examen du set.
+    st.echeance = new Date(now + F.delaiMs(etat, noteFsrs, F.retentionCible(set.date_objectif, now))).toISOString();
     if (!st.decouverte && !dejaAppris) st.decouverte = rep.date;
     if (dejaAppris && note === "a_revoir") st.oublis = (st.oublis || 0) + 1;
     set.progression[rep.question_id] = st;
@@ -183,7 +190,7 @@
     if (!etat.sets.size) {
       const vide = el("div", "empty hl-vide");
       vide.append(el("h3", "", "Aucun set sur cet appareil"),
-        el("p", "", "Ouvre « Télécharger des sets » ci-dessous (connexion nécessaire) : les sets choisis restent disponibles sans réseau."));
+        el("p", "", "Ouvre « Télécharger des sets » ci-dessous (connexion nécessaire) : les sets choisis restent " + SANS_RESEAU + "."));
       zone.append(vide);
       return;
     }
@@ -560,7 +567,9 @@
     } finally {
       bouton.disabled = false;
     }
-    afficherAccueil(ok ? pluriel(ids.length, "set") + " sur l'appareil, disponible" + (ids.length > 1 ? "s" : "") + " sans réseau." : undefined);
+    afficherAccueil(ok ? pluriel(ids.length, "set") + " sur l'appareil"
+      + (pageGardee ? ", disponible" + (ids.length > 1 ? "s" : "") + " sans réseau." : " (garde cette page ouverte pour réviser sans réseau).")
+      : undefined);
     return ok;
   }
 
@@ -608,6 +617,12 @@
     if (document.visibilityState === "visible" && navigator.onLine && etat.attente) synchroniser();
   });
 
+  if (!pageGardee) {
+    // Avertissement permanent (la zone d'alerte, elle, est effacée à chaque synchronisation).
+    $("hl-non-securise").hidden = false;
+    $("hl-sous-titre").textContent = "Les sets téléchargés restent sur cet appareil et tes réponses rejoignent ta progression "
+      + "dès que la connexion revient. À cette adresse, la page elle-même ne s'ouvre pas sans réseau.";
+  }
   if ("serviceWorker" in navigator && app.dataset.swUrl) {
     navigator.serviceWorker.register(app.dataset.swUrl, { scope: app.dataset.scope }).catch(() => {
       alerte("Mode hors ligne indisponible : ce navigateur refuse le service worker (HTTPS requis, sauf sur cet ordinateur).");

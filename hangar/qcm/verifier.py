@@ -85,7 +85,10 @@ def verifier_fichier(chemin: Path, racine: Path):
     """(valide ?, résumé ou message d'erreur, avertissements)."""
     try:
         rel, data = quiz.lire_json(chemin, racine)
-        resume, avert = verifier_donnees(data, rel)
     except (ValueError, OSError) as e:
         return False, str(e), []
+    try:
+        resume, avert = verifier_donnees(data, rel)
+    except Exception as e:  # noqa: BLE001 — valeur de type imprévu : on le dit et on passe au suivant
+        return False, quiz.erreur_chargement(rel, e), []
     return True, resume, avert

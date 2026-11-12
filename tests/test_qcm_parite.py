@@ -221,7 +221,7 @@ class HorsLigneTests(PariteTestCase):
 # ---------------------------------------------------------------------------
 # Rappels par notification web
 # ---------------------------------------------------------------------------
-SUB = {"endpoint": "https://push.exemple.org/abc", "keys": {"p256dh": "BPcle", "auth": "secret"}}
+SUB = {"endpoint": "https://fcm.googleapis.com/fcm/send/abc", "keys": {"p256dh": "BPcle", "auth": "secret"}}
 
 
 class PushTests(PariteTestCase):
@@ -257,7 +257,9 @@ class PushTests(PariteTestCase):
             kwargs = wp.call_args.kwargs
             self.assertEqual(kwargs["subscription_info"]["endpoint"], SUB["endpoint"])
             charge = json.loads(kwargs["data"])
-            self.assertEqual(charge["texte"], "3 éléments à réviser")  # les 3 questions nouvelles
+            # Les 3 questions jamais vues d'un set sans quota ne sont pas « à revoir » (piste 53 : compté
+            # comme le tableau de bord) ; rien n'a encore été fait aujourd'hui, d'où ce rappel.
+            self.assertEqual(charge["texte"], "Rien d'urgent : quelques nouveaux mots ?")
             self.assertEqual(charge["url"], "/qcm/aujourdhui/")
             self.assertTrue(kwargs["vapid_claims"]["sub"].startswith(("mailto:", "https://")))
             self.assertTrue(Path(kwargs["vapid_private_key"]).is_file())
@@ -274,7 +276,7 @@ class PushTests(PariteTestCase):
         from hangar.qcm import rappels
         self.assertIsNone(rappels.texte_rappel({"a_revoir": 0, "serie": 3, "aujourdhui": 12}))
         self.assertEqual(rappels.texte_rappel({"a_revoir": 2, "serie": 3, "aujourdhui": 0}),
-                         "2 éléments à réviser · série de 3 jours à prolonger")
+                         "2 à revoir · série de 3 jours à prolonger")
         self.assertEqual(rappels.texte_rappel({"a_revoir": 0, "serie": 0, "aujourdhui": 0}),
                          "Rien d'urgent : quelques nouveaux mots ?")
         db.session.add(AbonnementPush(user_id=self.user.id, endpoint=SUB["endpoint"], p256dh="k", auth="a", heure=0, minute=0))
@@ -366,8 +368,9 @@ class AppliAndroidTests(PariteTestCase):
         r = app.get("/api/rappel/", headers=bearer)
         self.assertEqual(r.status_code, 200)
         etat = r.get_json()
-        self.assertEqual(set(etat), {"a_revoir", "qcm", "langues", "serie", "aujourdhui", "admin"})
-        self.assertEqual((etat["a_revoir"], etat["qcm"], etat["langues"], etat["admin"]), (3, 3, 0, True))
+        self.assertEqual(set(etat), {"a_revoir", "qcm", "langues", "nouvelles", "serie", "aujourdhui", "admin"})
+        # 3 questions jamais vues, sans quota de nouvelles : rien de dû (piste 53, comme le tableau de bord).
+        self.assertEqual((etat["a_revoir"], etat["qcm"], etat["langues"], etat["admin"]), (0, 0, 0, True))
         self.assertNotIn("Set-Cookie", r.headers)
         # QCM hors ligne embarqué : catalogue, sets, synchro (sans CSRF), images des questions
         cat = app.get("/qcm/hors-ligne/catalogue/", headers=bearer).get_json()

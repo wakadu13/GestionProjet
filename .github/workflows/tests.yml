@@ -38,6 +38,12 @@ jobs:
       - name: Dépendances
         run: uv sync --locked
 
+      # Syntaxe des scripts de l'interface (hors bibliothèques tierces) : Node est déjà installé sur
+      # les machines de GitHub. tests/test_qcm_v2c.py compare aussi fsrs.js à fsrs.py avec Node.
+      - name: Syntaxe du JavaScript
+        if: runner.os == 'Linux'
+        run: find hangar/static -name '*.js' -not -path '*/vendor/*' -print0 | xargs -0 -n1 node --check
+
       - name: Tests unitaires
         run: uv run python -m unittest discover -s tests -v
 

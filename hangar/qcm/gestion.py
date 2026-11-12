@@ -62,8 +62,8 @@ def _importer_fichier(fichier, categorie, remplacer, racine=None, prefixe=DOSSIE
         essai.write_text(texte, encoding="utf-8")
         try:
             qset = quiz.charger(essai, tmp)
-        except ValueError as e:
-            return False, str(e)
+        except Exception as e:  # noqa: BLE001 — fichier mal formé : message, pas d'erreur 500
+            return False, quiz.erreur_chargement(rel, e)
 
     destination = Path(racine or coffre.racine(), rel)
     if destination.exists() and not remplacer:
