@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
-{% set FEATURES = {'chat': 'Assistant (panneau)', 'cli': 'Ligne de commande', 'tuteur': 'Tuteur', 'expliquer': 'Explications de QCM', 'qrc': 'Correction de réponses', 'qcm': 'QCM générés', 'copie': 'Copies corrigées', 'wiki': 'Demander au wiki', 'transformation': 'Transformations de cours', 'ameliorer': 'Améliorer la rédaction'} %}
+{% set FEATURES = {'chat': 'Assistant (panneau)', 'cli': 'Ligne de commande', 'tuteur': 'Tuteur', 'expliquer': 'Explications de QCM', 'qrc': 'Correction de réponses', 'qcm': 'QCM générés', 'copie': 'Copies corrigées', 'wiki': 'Demander au wiki', 'transformation': 'Transformations de cours', 'ameliorer': 'Améliorer la rédaction', 'fiche': 'Fiches de révision', 'variantes': 'Variantes de QCM', 'vocabulaire': 'Vocabulaire', 'evaluation': 'Évaluation (ia-evaluer)'} %}
 {% block title %}Réglages de l’IA{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}">{% endblock %}
 {% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('ai.index') }}">{{ icon('sparkle', 15) }} Assistant IA</a><span class="sep">/</span><span class="current">Fournisseurs et usage</span></div></div>{% endblock %}
@@ -130,6 +130,31 @@
         </tbody></table>
       </div>
       {% endif %}
+    </div>
+  </section>
+
+  <section class="mb-lg" id="avis">
+    <div class="ai-sec-h"><h2>{{ icon('thumb-down', 17) }} Qualité des réponses</h2><span class="help">Tes 👎 et leur commentaire, pour repérer ce qui ne va pas après un changement de modèle ou de consignes.</span></div>
+    <div class="ai-usage-grid">
+      <div class="panel ai-avis">
+        <div class="panel-h"><h3>Tes réponses notées 👎</h3></div>
+        {% if avis.negatifs %}<table class="table"><thead><tr><th>Réponse</th><th>Modèle</th><th>Quand</th></tr></thead><tbody>
+          {% for a in avis.negatifs %}<tr><td><a href="{{ a.url }}">{{ a.question or a.conversation }}</a><div class="help">{{ a.reponse }}</div>{% if a.note %}<div class="small">{{ icon('message', 12) }} {{ a.note }}</div>{% endif %}</td><td class="mono help">{{ a.modele }}</td><td class="help nowrap">{{ a.quand|ago }}</td></tr>{% endfor %}
+        </tbody></table>{% else %}<div class="empty sm">Aucune réponse notée 👎. Clique sur 👎 sous une réponse de l’assistant pour la retrouver ici.</div>{% endif %}
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h3>Avis par modèle</h3></div>
+        {% if avis.par_modele %}<table class="table"><thead><tr><th>Modèle</th><th class="num">Réponses</th><th class="num">👍</th><th class="num">👎</th></tr></thead><tbody>
+          {% for x in avis.par_modele %}<tr><td class="mono">{{ x.modele }}</td><td class="num">{{ x.reponses }}</td><td class="num">{{ x.bons }}</td><td class="num">{{ x.mauvais }}</td></tr>{% endfor %}
+        </tbody></table>{% else %}<div class="empty sm">Aucune réponse pour l’instant.</div>{% endif %}
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h3>QCM générés : questions écartées</h3></div>
+        {% if avis.ecartees %}<table class="table"><thead><tr><th>Modèle</th><th class="num">Sets</th><th class="num">Écartées</th><th class="num">Taux</th></tr></thead><tbody>
+          {% for x in avis.ecartees %}<tr><td class="mono">{{ x.modele }}</td><td class="num">{{ x.sets }}</td><td class="num">{{ x.ecartees }} sur {{ x.gardees + x.ecartees }}</td><td class="num">{{ x.taux }} %</td></tr>{% endfor %}
+        </tbody></table>{% else %}<div class="empty sm">Aucun QCM généré pour l’instant.</div>{% endif %}
+        <p class="help panel-b">Une question mal formée (choix manquants, bonne réponse hors liste…) est écartée du set. Pour comparer les modèles sur des cas fixes : <code>hangar ia-evaluer</code>.</p>
+      </div>
     </div>
   </section>
 

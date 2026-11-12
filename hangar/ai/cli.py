@@ -6,6 +6,7 @@
     hangar ia-demander "Question…" [--role rapide] pose une question (réponse en flux)
     hangar ia-usage                                dépense et jetons du mois
     hangar ia-travaux                              fait les travaux en attente et récupère les lots terminés
+    hangar ia-evaluer [ID] [--oui]                 rejoue des cas fixes et donne le taux de réussite par modèle
 """
 from __future__ import annotations
 
@@ -127,6 +128,66 @@ def cmd_jobs(args):
         print(f"{n} travail(aux) fait(s), {n_batches} lot(s) récupéré(s).")
 
 
+def cmd_eval(args):
+    from . import core, kit, qualite
+    from .providers import AIError
+    app = _app(args)
+    with app.test_request_context("/"):
+        rows = qualite.fournisseurs(args.id)
+        if not rows:
+            print("✗ Aucun fournisseur d’IA à évaluer." if args.id is None else f"✗ Fournisseur [{args.id}] introuvable.")
+            sys.exit(1)
+        cas = [c for c in qualite.CAS if not args.cas or c.id in args.cas]
+        if not cas:
+            print("✗ Aucun cas ne porte ce nom. Cas : " + ", ".join(c.id for c in qualite.CAS))
+            sys.exit(1)
+        echec = False
+        for row in rows:
+            print(f"\n[{row.id}] {row.name} — {len(cas)} cas")
+            prevu = qualite.estimation(row, cas) if qualite.payant(row) else 0.0
+            if prevu:
+                # Même calcul que le kit : réserves des lots en cours déduites, plafond du fournisseur compris.
+                reste = kit.reste_plafond(row)
+                print(f"  Passage payant : environ {prevu:.2f} $"
+                      + (f" (il reste {reste:.2f} $ sous le plafond du mois)." if reste is not None else "."))
+                if reste is not None and prevu > reste:
+                    print("  ✗ Plus que ce qui reste sous le plafond : passage annulé. Relève le plafond ou choisis "
+                          "moins de cas (--cas).")
+                    echec = True
+                    continue
+                if not args.oui:
+                    try:
+                        ok = input("  Lancer ce passage ? [o/N] ").strip().lower() in ("o", "oui", "y", "yes")
+                    except EOFError:
+                        ok = False
+                    if not ok:
+                        print("  Passage annulé.")
+                        continue
+
+            def montrer(x):
+                signe = {"ok": "✓", "echec": "✗"}.get(x["statut"], "–")
+                print(f"  {signe} {x['titre']} : {x['detail']}")
+
+            try:
+                rapport = qualite.evaluer(row, cas, progres=montrer)
+            except AIError as e:
+                print(f"  ✗ {e.message}")
+                echec = True
+                continue
+            par_modele: dict[str, list] = {}
+            for x in rapport["resultats"]:
+                if x["statut"] != "sans_objet":
+                    par_modele.setdefault(x["modele"], []).append(x["statut"] == "ok")
+            for modele, oks in par_modele.items():
+                print(f"  → {core.model_label(modele)} : {sum(oks)}/{len(oks)} réussis ({round(100 * sum(oks) / len(oks))} %)")
+            if rapport["sans_objet"]:
+                print(f"  ({rapport['sans_objet']} cas sans objet : outils désactivés)")
+            print(f"  Coût du passage : {rapport['cout']:.4f} $")
+            echec = echec or rapport["reussis"] < rapport["total"]
+        if echec:
+            sys.exit(1)
+
+
 def register(sub) -> dict:
     sub.add_parser("ia-fournisseurs", help="lister les fournisseurs d’IA")
     a = sub.add_parser("ia-ajouter", help="ajouter un fournisseur d’IA (anthropic, ollama, lmstudio, vllm, llamacpp, "
@@ -144,5 +205,9 @@ def register(sub) -> dict:
     q.add_argument("--role", default="chat", choices=["chat", "rapide", "vision"])
     sub.add_parser("ia-usage", help="dépense et jetons de l’IA ce mois-ci")
     sub.add_parser("ia-travaux", help="faire les travaux d’IA en attente et récupérer les lots terminés")
+    e = sub.add_parser("ia-evaluer", help="évaluer les modèles configurés sur des cas fixes (taux de réussite)")
+    e.add_argument("id", nargs="?", type=int, help="fournisseur à évaluer (par défaut : tous les fournisseurs activés)")
+    e.add_argument("--oui", action="store_true", help="ne pas demander confirmation avant un passage payant")
+    e.add_argument("--cas", nargs="*", help="seulement ces cas (ex. tache-vendredi qcm-json)")
     return {"ia-fournisseurs": cmd_list, "ia-ajouter": cmd_add, "ia-tester": cmd_test, "ia-demander": cmd_ask,
-            "ia-usage": cmd_usage, "ia-travaux": cmd_jobs}
+            "ia-usage": cmd_usage, "ia-travaux": cmd_jobs, "ia-evaluer": cmd_eval}

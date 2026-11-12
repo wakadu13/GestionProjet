@@ -252,8 +252,8 @@ SCHEMA_QRC = {
 }
 
 
-def corriger_qrc(qset, question, reponse, user=None):
-    """Verdict (rôle « rapide ») sur une réponse rédigée : (verdict, retour, usage, modèle)."""
+def messages_qrc(question, reponse) -> list[dict]:
+    """Messages envoyés pour juger une réponse rédigée (partagés avec l'évaluation, ``hangar ia-evaluer``)."""
     lignes = [f"Question : {question.enonce}"]
     if question.consigne:
         lignes.append(f"Consigne : {question.consigne}")
@@ -261,9 +261,14 @@ def corriger_qrc(qset, question, reponse, user=None):
     if question.explication:
         lignes.append(f"Explication du corrigé : {question.explication}")
     lignes.append(f"Réponse de l'étudiant : {reponse[:MAX_CHARS_REPONSE]}")
+    return _messages([{"type": "text", "text": "\n".join(lignes)}])
+
+
+def corriger_qrc(qset, question, reponse, user=None):
+    """Verdict (rôle « rapide ») sur une réponse rédigée : (verdict, retour, usage, modèle)."""
     for plafond in (MAX_TOKENS_QRC, 2 * MAX_TOKENS_QRC):
         try:
-            r = generate(_messages([{"type": "text", "text": "\n".join(lignes)}]), system=CONSIGNE_QRC, role="rapide",
+            r = generate(messages_qrc(question, reponse), system=CONSIGNE_QRC, role="rapide",
                          json_schema=SCHEMA_QRC, max_tokens=plafond, effort="low", user=user, feature="qrc")
             break
         except AIError as e:

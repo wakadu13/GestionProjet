@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% block title %}Kit de révision{% if dossier %} · {{ dossier.rsplit('/', 1)[-1] }}{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}">{% endblock %}
+{% block header %}
+<div class="page-header">
+  {{ ui.mobile_toggle() }}
+  <div class="crumbs"><a href="{{ url_for('ai.transformations') }}">{{ icon('timer', 15) }} Travaux</a><span class="sep">/</span><span class="current">Kit de révision{% if dossier %} · {{ dossier }}{% endif %}</span></div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="inner ai-settings ai-kit">
+  {% if not dossier %}
+  <form method="get" class="panel panel-b">
+    <h3>{{ icon('graduation', 15) }} Kit de révision d’une collection</h3>
+    <p class="help mb">Choisis le dossier du wiki d’une matière : l’IA prépare la fiche et le QCM de chaque page qui n’en a pas encore.</p>
+    <div class="field"><label for="kit-dossier">Dossier du wiki</label><input class="input" id="kit-dossier" name="dossier" list="kit-dossiers" placeholder="Cours/Matière" required autocomplete="off"></div>
+    <datalist id="kit-dossiers">{% for d in collections %}<option value="{{ d }}">{% endfor %}</datalist>
+    <button class="btn btn-primary btn-sm">{{ icon('arrow-right', 14) }} Voir les pages</button>
+  </form>
+  {% else %}
+  <form method="get" class="panel panel-b mb grid-2" data-kit-reglages>
+    <input type="hidden" name="dossier" value="{{ dossier }}">
+    <div class="field"><label for="kit-ctrl">Contrôle</label>
+      <select class="input" id="kit-ctrl" name="evenement">
+        <option value="0"{% if not eid %} selected{% endif %}>Aucun (pas de date d’examen)</option>
+        {% for c in controles %}<option value="{{ c.id }}"{% if c.id == eid %} selected{% endif %}>{{ c.titre }} — {{ c.date.strftime('%d/%m/%Y') }}</option>{% endfor %}
+      </select>
+      <span class="help">{% if date_examen %}Les QCM publiés prendront le {{ date_examen.strftime('%d/%m/%Y') }} comme date d’examen : tes révisions s’organisent pour être prêt à temps.{% elif not controles %}Aucun contrôle à venir n’est relié à cette collection (lien de matière dans l’agenda).{% endif %}</span>
+    </div>
+    <div class="field"><label for="kit-nombre">Questions par QCM</label>
+      <select class="input" id="kit-nombre" name="nombre">{% for n in nombres %}<option value="{{ n }}"{% if n == nombre %} selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+      <span class="help">Les QCM iront dans {% if categorie %}la catégorie « {{ categorie }} »{% else %}le dossier de chaque page{% endif %}.</span>
+    </div>
+    <noscript><button class="btn btn-sm">Mettre à jour</button></noscript>
+  </form>
+
+  <form method="post" data-kit data-reste="{{ plan.reste if plan.reste is not none else '' }}">
+    {{ ui.csrf() }}
+    <input type="hidden" name="dossier" value="{{ dossier }}">
+    <input type="hidden" name="evenement" value="{{ eid or 0 }}">
+    <input type="hidden" name="nombre" value="{{ nombre }}">
+    <div class="panel mb">
+      <table class="table">
+        <thead><tr><th>Page</th><th>Fiche</th><th>QCM</th></tr></thead>
+        <tbody>
+        {% for l in plan.lignes %}
+        <tr>
+          <td><a href="{{ l.url }}">{{ l.titre }}</a></td>
+          <td>{% if l.fiche.existe %}<span class="help">{{ icon('check', 12) }} déjà faite</span>{% elif l.fiche.en_cours %}<span class="help">en préparation</span>{% else %}<label class="checkbox"><input type="checkbox" name="fiche" value="{{ l.cle }}" data-cout="{{ l.fiche.cout }}" data-cout-lot="{{ l.fiche.cout_lot }}"{% if l.fiche.coche %} checked{% endif %}> À faire</label>{% endif %}</td>
+          <td>{% if l.qcm.existants %}<span class="help">{{ icon('check', 12) }} {{ l.qcm.existants|join(', ') }}</span>{% elif l.qcm.en_cours %}<span class="help">en préparation</span>{% else %}<label class="checkbox"><input type="checkbox" name="qcm" value="{{ l.cle }}" data-cout="{{ l.qcm.cout }}" data-cout-lot="{{ l.qcm.cout_lot }}"{% if l.qcm.coche %} checked{% endif %}> À faire</label>{% if l.qcm.proche %}<div class="help small warning-text">Le set « {{ l.qcm.proche }} » semble déjà couvrir cette page : coche seulement si ce n’est pas le cas.</div>{% endif %}{% endif %}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel panel-b">
+      {% if ai_lots() %}<label class="checkbox help mb"><input type="checkbox" name="lot" value="1" data-kit-lot> Sans urgence (lots à moitié prix, résultat sous 24 h — Claude)</label>{% endif %}
+      <p class="mb" data-kit-total>{% if plan.payant %}Coût estimé : <b data-kit-cout>—</b>{% if plan.reste is not none %} · il reste <b>{{ '%.2f'|format(plan.reste) }} $</b> sous le plafond du mois{% endif %}.{% else %}Modèle gratuit : aucun coût.{% endif %}</p>
+      <p class="help warning-text mb" data-kit-trop hidden>C’est plus que ce qui reste sous le plafond : décoche des pages ou relève le plafond dans les réglages de l’IA.</p>
+      <button class="btn btn-primary btn-sm" data-kit-go>{{ icon('sparkle', 14) }} Générer ce qui manque</button>
+      <ul class="help mt">
+        <li>Les fiches sont écrites directement dans le wiki, à côté de chaque page (« Page (Fiche) »), sans relecture ; une fiche modifiée à la main n’est jamais écrasée.</li>
+        <li>Les QCM arrivent en brouillon dans les travaux : relis-les avant de les publier.</li>
+        <li>L’estimation est un ordre de grandeur, plutôt large ; une seule notification te prévient à la fin du kit.</li>
+      </ul>
+    </div>
+  </form>
+  <script nonce="{{ csp_nonce() }}">
+  (function () {
+    var r = document.querySelector('[data-kit-reglages]');
+    if (r) r.addEventListener('change', function () { r.submit(); });
+    var f = document.querySelector('[data-kit]');
+    if (!f) return;
+    var reste = f.dataset.reste === '' ? null : parseFloat(f.dataset.reste);
+    var lot = f.querySelector('[data-kit-lot]');
+    function maj() {
+      var total = 0, n = 0;
+      f.querySelectorAll('input[data-cout]').forEach(function (c) {
+        if (c.checked) { n += 1; total += parseFloat((lot && lot.checked) ? c.dataset.coutLot : c.dataset.cout) || 0; }
+      });
+      var out = f.querySelector('[data-kit-cout]');
+      if (out) out.textContent = total.toFixed(2) + ' $ pour ' + n + ' génération' + (n > 1 ? 's' : '');
+      var trop = reste !== null && total > reste;
+      f.querySelector('[data-kit-trop]').hidden = !trop;
+      f.querySelector('[data-kit-go]').disabled = trop || n === 0;
+    }
+    f.addEventListener('change', maj);
+    maj();
+  })();
+  </script>
+  {% endif %}
+</div>
+{% endblock %}

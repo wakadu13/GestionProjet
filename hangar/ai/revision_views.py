@@ -731,6 +731,72 @@ def relire(jid):
                            avertissement=(job.message or "").replace("À relire avant publication.", "").strip())
 
 
+@bp.route("/ia/kit/", methods=["GET", "POST"])
+@login_required
+def kit_revision():
+    """Kit de révision d'une collection du wiki (avant un contrôle) : fiche et QCM des pages qui n'en ont pas,
+    cases à décocher, coût estimé face au plafond restant, puis travaux de fond (en lot si demandé)."""
+    from . import kit
+
+    if not _editeur():
+        abort(403)
+    if not _dispo():
+        flash("Ajoute d’abord un fournisseur d’IA dans les réglages.", "error")
+        return redirect(url_for("ai.reglages"))
+    vault = _vault()
+    v = request.values
+    dossier = v.get("dossier", "").strip().strip("/")
+    pages = kit.pages_de(vault, dossier) if dossier else []
+    if not pages:
+        if dossier:
+            flash(f"Aucune page à réviser dans « {dossier} ».", "info")
+        collections = sorted({n.folder for n in vault.notes.values() if n.folder}, key=cle_tri)
+        return render_template("ai/kit.html", dossier="", collections=collections)
+    controles = kit.controles(current_user, dossier)
+    if "evenement" in v:
+        eid = v.get("evenement", type=int)
+    else:  # par défaut, le prochain contrôle d'une matière reliée à cette collection
+        eid = controles[0]["id"] if controles else None
+    date_examen, categorie = kit.date_controle(current_user, eid)
+    if date_examen is None:
+        eid = None
+    if eid and not any(c["id"] == eid for c in controles):  # contrôle d'une matière reliée à une autre collection
+        controles.insert(0, {"id": eid, "titre": "Contrôle choisi", "date": date_examen, "categorie": categorie})
+    categorie = categorie or kit.categorie_liee(current_user, dossier)
+    nombre = v.get("nombre", type=int)
+    nombre = nombre if nombre in travaux.NOMBRES_QUESTIONS else kit.NOMBRE_DEFAUT
+    retour = url_for("ai.kit_revision", dossier=dossier, evenement=eid or 0, nombre=nombre)
+
+    if request.method == "POST":
+        from . import lots_possibles
+        lot = v.get("lot") == "1" and lots_possibles()
+        try:
+            faits = kit.lancer(current_user, vault, dossier, request.form.getlist("fiche"),
+                               request.form.getlist("qcm"), nombre=nombre, lot=lot, categorie=categorie,
+                               date_examen=date_examen)
+        except AIError as e:
+            faits = getattr(e, "faits", None)
+            if faits and (faits["fiches"] or faits["qcm"]):
+                flash(f"{e.message} Déjà lancés : {faits['fiches']} fiche(s) et {faits['qcm']} QCM.", "error")
+                return redirect(url_for("ai.transformations"))
+            flash(e.message, "error")
+            return redirect(retour)
+        parts = []
+        if faits["fiches"]:
+            parts.append(f"{faits['fiches']} fiche{'s' if faits['fiches'] > 1 else ''}")
+        if faits["qcm"]:
+            parts.append(f"{faits['qcm']} QCM")
+        flash(f"Kit de révision lancé : {' et '.join(parts)} (environ {faits['cout']:.2f} $"
+              + (", dans des lots à moitié prix, sous 24 h" if lot else "") + "). Les QCM arriveront en brouillon à "
+              "relire ; une notification te préviendra à la fin.", "success")
+        return redirect(url_for("ai.transformations"))
+
+    p = kit.plan(current_user, vault, dossier, nombre, categorie)
+    return render_template("ai/kit.html", dossier=dossier, plan=p, controles=controles, eid=eid,
+                           date_examen=date_examen, categorie=categorie, nombre=nombre,
+                           nombres=travaux.NOMBRES_QUESTIONS)
+
+
 def _question_relue(f, i, q):
     """Question du brouillon après correction dans le formulaire de relecture."""
     nouvelle = {k: v for k, v in q.items() if k not in ("choix", "reponses", "reponses_texte", "verso", "explication",

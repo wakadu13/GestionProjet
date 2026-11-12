@@ -151,10 +151,12 @@ def feedback(mid):
     except (TypeError, ValueError):
         value = 0
     m.feedback = value if value in (-1, 0, 1) else 0
-    if "note" in data:
-        m.feedback_note = str(data.get("note") or "")[:500]
+    if m.feedback != -1:
+        m.feedback_note = ""  # le commentaire accompagne un 👎 : retiré avec lui
+    elif "note" in data:
+        m.feedback_note = " ".join(str(data.get("note") or "").split())[:500]
     db.session.commit()
-    return jsonify(ok=True, feedback=m.feedback)
+    return jsonify(ok=True, feedback=m.feedback, note=m.feedback_note or "")
 
 
 # ---------------------------------------------------------------------------
@@ -310,13 +312,16 @@ def reglages():
         "by_model": core.usage_rows(start, user_id=None if admin else me, group="model"),
         "by_month": core.usage_by_month(6, user_id=None if admin else me),
     }
+    from . import qualite
+    avis = {"negatifs": qualite.avis_negatifs(me), "par_modele": qualite.avis_par_modele(None if admin else me),
+            "ecartees": qualite.ecartees_par_modele()}
     if admin:
         rows = core.usage_rows(start, group="user")
         users = {u.id: u for u in User.query.filter(User.id.in_([r[0] for r in rows if r[0]]))} if rows else {}
         usage["by_user"] = [(users.get(r[0]).display_name if users.get(r[0]) else "—", *r[1:]) for r in rows]
     providers = AIProvider.query.order_by(AIProvider.priority, AIProvider.id).all()
     return render_template(
-        "ai/reglages.html", s=s, providers=providers, presets=P.PRESETS, roles=ROLES, usage=usage,
+        "ai/reglages.html", s=s, providers=providers, presets=P.PRESETS, roles=ROLES, usage=usage, avis=avis,
         claude_models=P.CLAUDE_MODELS, model_label=core.model_label,
         errors=AIErrorLog.query.order_by(AIErrorLog.id.desc()).limit(30).all() if admin else [],
         jobs=AIJob.query.order_by(AIJob.id.desc()).limit(15).all() if admin else [],

@@ -101,6 +101,8 @@ html.ai-fullpage .ai-panel { display: none !important; }
 .ai-msg-f { display: flex; align-items: center; gap: 2px; margin-top: 6px; color: var(--text-3); }
 .ai-msg-f[hidden] { display: none; }
 .ai-fb { border: 0; background: none; color: var(--text-3); width: 26px; height: 24px; border-radius: 6px; display: grid; place-items: center; cursor: pointer; }
+.ai-fb-note { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+.ai-fb-note .input { flex: 1 1 220px; min-width: 0; height: 28px; font-size: 12.5px; }
 .ai-fb:hover { background: var(--hover); color: var(--text); }
 .ai-fb.on { color: var(--accent-text); background: var(--accent-bg); }
 .ai-msg-model { margin-left: auto; font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -28,6 +28,7 @@
   <div class="header-actions">
     <button class="btn btn-sm btn-ghost" type="button" data-fold="open">Tout déplier</button>
     <button class="btn btn-sm btn-ghost" type="button" data-fold="close">Tout replier</button>
+    {% if kit_url %}<a class="btn btn-sm" href="{{ kit_url }}" title="Fiche et QCM, par l’IA, des pages qui n’en ont pas encore">{{ icon('graduation', 14) }} Kit de révision</a>{% endif %}
     {% if can_edit %}<a class="btn btn-sm btn-primary" href="{{ url_for('wiki.new', folder=dossier) }}">{{ icon('plus', 14) }} Nouvelle page</a>{% endif %}
   </div>
 </div>
