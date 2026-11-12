@@ -2,7 +2,7 @@
 import random
 import re
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from flask_login import current_user, login_user, logout_user
 
 from .. import blocage_connexion as blocage
@@ -33,15 +33,29 @@ def _depuis_cet_ordinateur() -> bool:
     return blocage._bouclage(blocage.ip_client()) and not any(h in request.headers for h in ENTETES_PROXY)
 
 
+def _port_local() -> int:
+    """Port sur lequel Hangar écoute vraiment (--port, ou port libre choisi au démarrage si 5000 était pris)."""
+    from ..en_ligne import ENTETES_PROXY
+    port = (current_app.config.get("PARTAGE") or {}).get("port")
+    if port:
+        return port
+    if not any(h in request.headers for h in ENTETES_PROXY):  # en direct : le port de l'adresse demandée
+        hote = request.host.rsplit("]", 1)[-1]
+        if ":" in hote and hote.rsplit(":", 1)[1].isdigit():
+            return int(hote.rsplit(":", 1)[1])
+    return 5000
+
+
 @bp.route("/setup", methods=["GET", "POST"])
 def setup():
     if db.session.query(User.id).first() is not None:
         return redirect(url_for("agenda.dashboard"))
     if not _depuis_cet_ordinateur():
         # Sinon, le premier venu sur le réseau (ou sur Internet) deviendrait administrateur d'un Hangar neuf.
+        g.sans_bouton_connexion = True  # /login renverrait ici, vers le même refus
         abort(403, description="Hangar n’est pas encore installé. La première installation se fait sur "
-                               "l’ordinateur où il tourne : ouvre http://127.0.0.1:5000 sur cet ordinateur "
-                               "(ou crée le compte avec « uv run hangar create-admin »).")
+                               f"l’ordinateur où il tourne : ouvre http://127.0.0.1:{_port_local()} sur cet "
+                               "ordinateur (ou crée le compte avec « uv run hangar create-admin »).")
     ws = Workspace.get()
     if request.method == "POST":
         errors, username, password = _validate_user_fields(request.form)
@@ -111,11 +125,23 @@ def login():
 
 def _montrer_comptes(ws) -> bool:
     """« Qui es-tu ? » (liste des comptes) : sur cet ordinateur, et sur le réseau local si le réglage de l'espace
-    le permet ; jamais derrière un proxy ou un tunnel (même mal réglé), où la page est vue depuis Internet."""
+    le permet ; jamais derrière un proxy ou un tunnel (même mal réglé), où la page est vue depuis Internet.
+
+    Exception : le Caddy de --lan-https ne sert que le réseau local. Ce PC (http://127.0.0.1, sans en-têtes de
+    transfert) voit donc la liste ; un appareil du Wi-Fi passé par Caddy la voit si le réglage le permet."""
     import ipaddress
 
-    from ..en_ligne import via_proxy
-    if via_proxy(current_app, request):
+    from ..en_ligne import ENTETES_PROXY, via_proxy
+    if current_app.config.get("HANGAR_PROXY_LAN"):
+        if any(h in request.headers for h in ENTETES_PROXY):
+            if "CF-Connecting-IP" in request.headers:  # un tunnel vers Internet, pas Caddy
+                return False
+            try:
+                ip = ipaddress.ip_address(blocage.ip_client())
+            except ValueError:
+                return False
+            return ip.is_loopback or (bool(ws.login_accounts) and ip.is_private)
+    elif via_proxy(current_app, request):
         return False
     try:
         local = ipaddress.ip_address(request.remote_addr or "").is_loopback

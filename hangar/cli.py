@@ -83,6 +83,10 @@ def appliquer_options_reseau(args) -> None:
     if getattr(args, "https", False):
         os.environ["HANGAR_HTTPS"] = "1"
     if getattr(args, "lan_https", False):
+        from .en_ligne import actif
+        if not (actif("HANGAR_BEHIND_PROXY") or actif("HANGAR_CLOUDFLARE")):
+            # Seul proxy : celui du réseau local (liste des comptes de la page de connexion, auth.py)
+            os.environ["HANGAR_LAN_HTTPS"] = "1"
         # Caddy, sur cet ordinateur, est seul à parler à Hangar (127.0.0.1) : ses en-têtes sont crus. Pas de
         # HANGAR_HTTPS : le navigateur de ce PC continue d'ouvrir http://127.0.0.1 (cookies non « Secure »).
         os.environ["HANGAR_BEHIND_PROXY"] = "1"

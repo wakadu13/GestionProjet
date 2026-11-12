@@ -417,6 +417,96 @@ class SetupReserveACetOrdinateur(unittest.TestCase):
         self.assertEqual(self.comptes(), 1)
 
 
+class SetupMessageEtBouton(SetupReserveACetOrdinateur):
+    """Le refus de /setup donne le vrai port, et pas de bouton « Se connecter » (/login renverrait ici)."""
+
+    def page(self, **kw):
+        r = self.app.test_client().get("/setup", environ_base={"REMOTE_ADDR": "192.168.1.30"}, **kw)
+        self.assertEqual(r.status_code, 403)
+        return r.get_data(as_text=True)
+
+    def test_port_du_lancement(self):
+        self.app.config["PARTAGE"] = {"host": "0.0.0.0", "port": 5003, "https_port": None}
+        page = self.page(base_url=f"http://{IP}:5003")
+        self.assertIn("http://127.0.0.1:5003", page)
+        self.assertNotIn("127.0.0.1:5000", page)
+
+    def test_port_de_l_adresse_demandee(self):
+        page = self.page(base_url=f"http://{IP}:8080")
+        self.assertIn("http://127.0.0.1:8080", page)
+
+    def test_pas_de_bouton_se_connecter(self):
+        page = self.page()
+        self.assertNotIn('href="/login"', page)
+        # les autres pages d'erreur gardent le bouton
+        with self.app.app_context():
+            u = User(username="eleve", email="eleve@hangar.local", role="admin")
+            u.set_password("secret-eleve")
+            db.session.add(u)
+            db.session.commit()
+        self.app.config["_HAS_USERS"] = True
+        r = self.app.test_client().get("/existe-pas", environ_base={"REMOTE_ADDR": "192.168.1.30"})
+        self.assertIn('href="/login"', r.get_data(as_text=True))
+
+
+class ComptesAvecLanHttps(unittest.TestCase):
+    """--lan-https pose HANGAR_BEHIND_PROXY pour toute l'appli : la liste « Qui es-tu ? » doit rester sur ce PC."""
+
+    def setUp(self):
+        from hangar import cli
+        self.tmp = tempfile.mkdtemp(prefix="hangar-lan-comptes-")
+        with mock.patch.dict(os.environ, {"HANGAR_BEHIND_PROXY": "", "HANGAR_CLOUDFLARE": "", "HANGAR_LAN_HTTPS": ""}):
+            cli.appliquer_options_reseau(Namespace(lan_https=True, cloudflare=False, behind_proxy=False, https=False))
+            self.app = create_app(self.tmp, testing=True)
+        with self.app.app_context():
+            u = User(username="eleve", email="eleve@hangar.local", role="admin", first_name="Marie")
+            u.set_password("secret-eleve")
+            db.session.add(u)
+            db.session.commit()
+
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.engine.dispose()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def liste(self, **kw):
+        return "eleve" in self.app.test_client().get("/login", **kw).get_data(as_text=True)
+
+    def reglage(self, valeur):
+        from hangar.models import Workspace
+        with self.app.app_context():
+            Workspace.get().login_accounts = valeur
+            db.session.commit()
+
+    def test_liste_visible_sur_ce_pc(self):
+        self.assertTrue(self.app.config["HANGAR_PROXY"])
+        self.assertTrue(self.liste())  # http://127.0.0.1, sans Caddy
+
+    def test_appareil_du_wifi_par_caddy_suit_le_reglage(self):
+        caddy = {"headers": {"X-Forwarded-For": "192.168.1.30", "X-Forwarded-Proto": "https",
+                             "X-Forwarded-Host": f"{IP}:5443"}}
+        self.reglage(False)
+        self.assertFalse(self.liste(**caddy))
+        self.reglage(True)
+        self.assertTrue(self.liste(**caddy))
+        # adresse publique (port ouvert sur la box) ou tunnel : jamais
+        self.assertFalse(self.liste(headers={"X-Forwarded-For": "93.184.216.34"}))
+        self.assertFalse(self.liste(headers={"X-Forwarded-For": "192.168.1.30", "CF-Connecting-IP": "93.184.216.34"}))
+
+    def test_vrai_proxy_internet_inchange(self):
+        from hangar import cli
+        with mock.patch.dict(os.environ, {"HANGAR_BEHIND_PROXY": "", "HANGAR_CLOUDFLARE": "", "HANGAR_LAN_HTTPS": ""}):
+            cli.appliquer_options_reseau(Namespace(lan_https=True, cloudflare=False, behind_proxy=True, https=False))
+            app = create_app(os.path.join(self.tmp, "internet"), testing=True)
+        try:
+            self.assertFalse(app.config["HANGAR_PROXY_LAN"])
+        finally:
+            with app.app_context():
+                db.session.remove()
+                db.engine.dispose()
+
+
 class ScriptsWindows(unittest.TestCase):
     def test_script_partager_en_https(self):
         racine = Path(__file__).resolve().parent.parent / "scripts"
