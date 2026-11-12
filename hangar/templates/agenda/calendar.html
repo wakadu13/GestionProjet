@@ -16,9 +16,10 @@
     <div class="dd">
       <button class="btn btn-sm" data-menu type="button">{{ icon('download', 14) }} Exporter</button>
       <div class="menu">
-        <a class="menu-item" href="{{ url_for('agenda.export', what='all') }}">{{ icon('calendar', 14) }} Cours + tâches (.ics)</a>
+        <a class="menu-item" href="{{ url_for('agenda.export', what='all') }}">{{ icon('calendar', 14) }} Cours, tâches et tickets (.ics)</a>
         <a class="menu-item" href="{{ url_for('agenda.export', what='events') }}">{{ icon('graduation', 14) }} Cours seulement (.ics)</a>
         <a class="menu-item" href="{{ url_for('agenda.export', what='tasks') }}">{{ icon('list-check', 14) }} Tâches seulement (.ics)</a>
+        <a class="menu-item" href="{{ url_for('agenda.imports') }}#abonnement">{{ icon('link', 14) }} S’abonner depuis mon téléphone</a>
         <div class="menu-sep"></div>
         <button class="menu-item" type="button" data-imprimer>{{ icon('printer', 14) }} Imprimer / PDF</button>
       </div>
@@ -76,7 +77,8 @@
       </div>
       <div class="ag-list-items">
         {% for x in day['items'] %}
-        {% if x.type == 'event' %}{{ ag.event_line(x.obj, recent) }}
+        {% if x.type == 'ticket' %}{{ ag.ticket_item(x.obj, 'ag-line') }}
+        {% elif x.type == 'event' %}{{ ag.event_line(x.obj, recent) }}
         {% else %}{% set t = x.obj.task %}
         <div class="ag-line task {% if t.is_done %}done{% endif %} {% if x.obj.ghost %}ghost{% endif %}" style="--tc: {{ t.color or 'var(--accent)' }}">
           <span class="ag-time">{% if t.start_time %}{{ A.hm(t.start_time) }}{% if t.end_time %}<small>{{ A.hm(t.end_time) }}</small>{% endif %}{% else %}<span class="small">Journée</span>{% endif %}</span>

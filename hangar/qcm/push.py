@@ -120,9 +120,18 @@ def _session_sans_redirection():
     return session
 
 
-def envoyer(abonnement, titre: str, texte: str, url: str = "/qcm/aujourdhui/") -> None:
+TTL_DEFAUT = 12 * 3600  # rappel quotidien : encore utile dans la soirée
+TAG_DEFAUT = "rappel-quotidien"
+
+
+def envoyer(abonnement, titre: str, texte: str, url: str = "/qcm/aujourdhui/", ttl: int = TTL_DEFAUT,
+            tag: str = TAG_DEFAUT) -> None:
     """Envoie une notification à un appareil ; AbonnementExpire si l'abonnement est mort,
-    AdresseNonAutorisee si son adresse n'est pas celle d'un service connu, EnvoiRefuse sur un 403."""
+    AdresseNonAutorisee si son adresse n'est pas celle d'un service connu, EnvoiRefuse sur un 403.
+
+    `ttl` : durée (en secondes) pendant laquelle le service garde la notification d'un appareil hors
+    ligne (au-delà, elle ne sert plus : « cours dans 15 min » reçu le soir) ; `tag` : une notification
+    remplace à l'écran la précédente du même tag (chaque rappel de l'agenda a le sien)."""
     from pywebpush import WebPushException, webpush
 
     if not adresse_autorisee(abonnement.endpoint):
@@ -131,10 +140,10 @@ def envoyer(abonnement, titre: str, texte: str, url: str = "/qcm/aujourdhui/") -
     try:
         webpush(
             subscription_info={"endpoint": abonnement.endpoint, "keys": {"p256dh": abonnement.p256dh, "auth": abonnement.auth}},
-            data=json.dumps({"titre": titre, "texte": texte, "url": url}, ensure_ascii=False),
+            data=json.dumps({"titre": titre, "texte": texte, "url": url, "tag": tag or TAG_DEFAUT}, ensure_ascii=False),
             vapid_private_key=str(_chemin_cle()) if _chemin_cle().is_file() else _vapid(),
             vapid_claims={"sub": contact()},
-            ttl=12 * 3600,
+            ttl=max(60, min(int(ttl), 28 * 24 * 3600)),
             timeout=15,
             requests_session=session,
         )

@@ -44,9 +44,17 @@
 
   let enregistrement = null, abonnement = null, cle = null, connus = {};
 
+  // S'abonner demande un service worker actif : à la première visite, on attend la fin de son installation.
+  function pret(reg) {
+    const w = reg.installing || reg.waiting;
+    if (reg.active || !w) return Promise.resolve(reg);
+    return new Promise((ok) => w.addEventListener("statechange", () => { if (w.state === "activated") ok(reg); }));
+  }
+
   function afficher(message) {
     controles.hidden = false;
-    const actif = !!(abonnement && connus[abonnement.endpoint]);
+    // Un appareil abonné aux seuls rappels de l'agenda n'a pas le rappel des QCM
+    const actif = !!(abonnement && connus[abonnement.endpoint] && connus[abonnement.endpoint].quotidien !== false);
     activer.textContent = actif ? "Changer l'heure" : "Activer";
     tester.hidden = !actif;
     desactiver.hidden = !actif;
@@ -64,8 +72,10 @@
 
   async function demarrer() {
     try {
-      await navigator.serviceWorker.register(bloc.dataset.swUrl, { scope: bloc.dataset.scope });
-      enregistrement = await navigator.serviceWorker.ready;
+      // L'enregistrement renvoyé par register() : c'est le service worker des QCM qui affiche les
+      // notifications (navigator.serviceWorker.ready pourrait donner un autre service worker).
+      enregistrement = await navigator.serviceWorker.register(bloc.dataset.swUrl, { scope: bloc.dataset.scope });
+      await pret(enregistrement);
       abonnement = await enregistrement.pushManager.getSubscription();
       const r = await fetch(bloc.dataset.cleUrl, { credentials: "same-origin" });
       const d = await r.json();
@@ -89,7 +99,7 @@
       }
       const [h, m] = (heure.value || "19:00").split(":").map(Number);
       await post(bloc.dataset.abonnerUrl, { subscription: abonnement.toJSON(), heure: h, minute: m });
-      connus[abonnement.endpoint] = { heure: h, minute: m };
+      connus[abonnement.endpoint] = Object.assign(connus[abonnement.endpoint] || { agenda: false }, { heure: h, minute: m, quotidien: true });
       afficher();
     } catch (e) {
       afficher("Activation impossible : " + e.message);
@@ -112,10 +122,15 @@
 
   desactiver.addEventListener("click", async () => {
     try {
-      await post(bloc.dataset.desabonnerUrl, { endpoint: abonnement.endpoint });
-      delete connus[abonnement.endpoint];
-      await abonnement.unsubscribe();
-      abonnement = null;
+      const r = await post(bloc.dataset.desabonnerUrl, { endpoint: abonnement.endpoint, quoi: "qcm" });
+      if (r.garde) {
+        // L'appareil reçoit encore les rappels de l'agenda : on garde l'abonnement du navigateur
+        connus[abonnement.endpoint].quotidien = false;
+      } else {
+        delete connus[abonnement.endpoint];
+        await abonnement.unsubscribe();
+        abonnement = null;
+      }
       afficher("Rappel désactivé sur cet appareil.");
     } catch (e) {
       afficher("Désactivation impossible : " + e.message);

@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import re
+import time as _clock
 import unicodedata
 from calendar import monthrange
 from dataclasses import dataclass
@@ -58,6 +59,20 @@ STATUS_LABELS = {"pending": "Programmé", "sent": "Envoyé", "missed": "Manqué 
                  "skipped": "Ignoré (déjà passé)", "error": "Pas envoyé (erreur)"}
 # Garde-fou de l'import : une semaine où le fichier n'apporte que si peu de séances n'en perd pas la majorité
 GUARD_MAX_SESSIONS = 2
+# Moyens d'un rappel : la notification dans l'application part toujours ; en plus, un e-mail, ou une
+# notification du système (« push ») sur chaque appareil abonné.
+REMINDER_CHANNELS = {"email": "E-mail + notification dans l’application",
+                     "app": "Notification dans l’application seulement",
+                     "push": "Notification sur mes appareils (ordinateur, téléphone)"}
+CHANNEL_SHORT = {"email": "e-mail", "app": "appli", "push": "notification"}
+
+
+def valid_channel(channel, default: str = "email") -> str:
+    return channel if channel in REMINDER_CHANNELS else default
+
+
+def channel_short(channel) -> str:
+    return CHANNEL_SHORT.get(channel, "e-mail")
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +231,20 @@ def _revive_reminders(ev: AgendaEvent, since: datetime | None, at: datetime) -> 
             r.status, r.sent_at = "pending", None
 
 
+def is_invitation(cal) -> bool:
+    """Message d'agenda (invitation, réponse, annulation : METHOD:REQUEST, REPLY, CANCEL…) plutôt qu'un
+    calendrier publié (METHOD:PUBLISH, ou rien).
+
+    METHOD seul ne suffit pas : certains logiciels de planning exportent tout l'emploi du temps en
+    METHOD:REQUEST. Un tel fichier n'est traité comme une invitation que s'il en a l'allure : au plus
+    GUARD_MAX_SESSIONS séances, ou aucune séance d'un type de cours de l'école (CM, TD_TP…)."""
+    if not cal.method or cal.method == "PUBLISH":
+        return False
+    if len(cal.events) <= GUARD_MAX_SESSIONS:
+        return True
+    return not any(e.kind in ics.KINDS for e in cal.events)
+
+
 def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics", mode: str = "weeks",
                     at: datetime | None = None) -> AgendaImport:
     """Importe un fichier .ics : le contenu du fichier fait foi pour les semaines qu'il couvre vraiment."""
@@ -226,6 +255,12 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
     if not cal.events:
         raise ics.ICSError("Aucune séance trouvée dans ce fichier.")
     mode = mode if mode in IMPORT_MODES else "weeks"
+    if is_invitation(cal) and mode != "merge":
+        # Invitation à une réunion (METHOD:REQUEST…) : elle ne décrit pas toute la semaine, elle ne doit rien
+        # retirer (sinon les autres cours de la semaine disparaîtraient).
+        mode = "merge"
+        cal.warnings.append("Ce fichier est une invitation (réunion, rendez-vous…), pas un emploi du temps complet : "
+                            "ses séances ont été ajoutées sans rien retirer du planning.")
     s = settings_of(user)  # créé (et validé) avant de toucher aux séances
     parsed = {e.uid: e for e in cal.events}
     weeks = covered_weeks(cal.events)
@@ -688,7 +723,7 @@ def sync_event_reminders(ev: AgendaEvent, at: datetime | None = None) -> None:
 def set_task_reminders(task: AgendaTask, offsets: list[int], channel: str, at: datetime | None = None) -> None:
     """Remplace les rappels « relatifs » d'une tâche par ceux demandés (les rappels à date fixe sont gardés)."""
     at = at or now()
-    channel = channel if channel in ("email", "app") else "email"
+    channel = valid_channel(channel)
     wanted = sorted({int(o) for o in offsets if o is not None and int(o) >= 0})
     for r in list(task.reminders):
         if r.offset_minutes is not None and r.offset_minutes not in wanted:
@@ -712,7 +747,7 @@ def add_fixed_reminder(user_id: int, when: datetime, channel: str = "email", tas
                        event: AgendaEvent | None = None, at: datetime | None = None) -> AgendaReminder:
     at = at or now()
     r = AgendaReminder(user_id=user_id, offset_minutes=None, remind_at=when,
-                       channel=channel if channel in ("email", "app") else "email", created_at=at,
+                       channel=valid_channel(channel), created_at=at,
                        status="pending" if when >= at - timedelta(minutes=5) else "skipped")
     if task is not None:
         task.reminders.append(r)
@@ -725,7 +760,8 @@ def add_fixed_reminder(user_id: int, when: datetime, channel: str = "email", tas
 def add_event_reminder(ev: AgendaEvent, offset: int, channel: str = "email", auto: bool = False,
                        at: datetime | None = None) -> AgendaReminder:
     at = at or now()
-    r = AgendaReminder(user_id=ev.user_id, offset_minutes=offset, channel=channel, auto=auto, created_at=at)
+    r = AgendaReminder(user_id=ev.user_id, offset_minutes=offset, channel=valid_channel(channel), auto=auto,
+                       created_at=at)
     ev.reminders.append(r)
     db.session.add(r)
     _resync(r, ev.start, at, reset=True)
@@ -927,7 +963,8 @@ def _md(text: str) -> str:
 
 
 def send_reminder(r: AgendaReminder, user: User, at: datetime):
-    """Notification dans l'application et, selon le moyen choisi, e-mail mis en file (retourné, sinon None)."""
+    """Notification dans l'application et, selon le moyen choisi, e-mail mis en file (retourné, sinon None)
+    ou notification push sur les appareils abonnés."""
     m = _mail()
     cfg = m._cfg()
     if r.task is not None:
@@ -957,12 +994,56 @@ def send_reminder(r: AgendaReminder, user: User, at: datetime):
     short = when.split(" · ")[-1] if " · " in when else when
     db.session.add(Notification(user_id=user.id, kind="reminder", message=f"⏰ Rappel : {title} — {when}"[:500],
                                 url=path, created_at=at))
+    if r.channel == "push":
+        detail = when
+        if r.event is not None and r.event.location:
+            detail += f" · {r.event.location}"
+        send_push(user, f"⏰ {title}", detail, path, tag=f"agenda-rappel-{r.id}",
+                  ttl=_push_ttl(reminder_deadline(r), at))
+        return None
     if r.channel == "email" and m.accepte_emails(user):  # « Aucun e-mail » : la notification dans l'appli suffit
         html = m.layout(f"⏰ {title}", f"<p>Petit rappel ({escape(r.label.lower())}) :</p>{body}",
                         button=("Ouvrir mon agenda", m.absolute(path, cfg)), cfg=cfg)
         return m.queue_email(user.contact_email, f"⏰ Rappel : {title} — {short}"[:300], html, kind="reminder",
                              to_user=user, expires_at=reminder_deadline(r))
     return None
+
+
+PUSH_TTL_MAX = 24 * 3600
+
+
+def _push_ttl(deadline: datetime | None, at: datetime) -> int:
+    """Durée de validité d'une notification push : jusqu'à la fin de la séance ou de la tâche (au-delà, un
+    téléphone resté hors ligne la recevrait pour rien), entre 1 min et 24 h."""
+    if deadline is None:
+        return 3600
+    return int(max(60, min((deadline - at).total_seconds(), PUSH_TTL_MAX)))
+
+
+def push_devices(user: User) -> list:
+    """Appareils de `user` abonnés aux rappels de l'agenda (vide si le module QCM est indisponible)."""
+    try:
+        from .qcm.models import AbonnementPush
+    except Exception:  # noqa: BLE001
+        return []
+    return AbonnementPush.query.filter(AbonnementPush.user_id == user.id, AbonnementPush.agenda.is_(True)).all()
+
+
+def send_push(user: User, title: str, text: str, path: str, tag: str, ttl: int = 3600) -> int:
+    """Envoie une notification du système à chaque appareil abonné (service des notifications web des QCM,
+    qui n'accepte que les adresses des services connus). Un appareil inconnu du service est oublié ; une panne
+    passagère est notée au journal sans bloquer les autres. Retourne le nombre d'appareils atteints."""
+    from .qcm import push
+    sent = 0
+    for a in push_devices(user):
+        try:
+            push.envoyer(a, title[:120], text[:300], path, ttl=ttl, tag=tag)
+            sent += 1
+        except (push.AbonnementExpire, push.AdresseNonAutorisee):
+            db.session.delete(a)
+        except Exception as exc:  # noqa: BLE001 - réseau, service de notifications : la notification interne reste
+            current_app.logger.warning("Notification push d’un rappel impossible : %s", exc)
+    return sent
 
 
 def _event_line(ev: AgendaEvent) -> str:
@@ -1227,9 +1308,245 @@ def queue_import_email(user: User, imp: AgendaImport, at: datetime) -> None:
                   f"{imp.added} ajouté(s)", html, kind="agenda", to_user=user)
 
 
+# ---------------------------------------------------------------------------
+# Emploi du temps récupéré tout seul : dossier surveillé ou adresse .ics
+# ---------------------------------------------------------------------------
+# Chaque nouveau fichier passe par `import_calendar` (le dernier fait foi, garde-fous compris). Une empreinte
+# des séances évite de créer un import quand rien n'a changé (un même planning re-téléchargé change souvent
+# d'horodatage, pas de séances). Réglage réservé aux administrateurs : une adresse ou un dossier choisis par
+# n'importe quel compte feraient lire au serveur des adresses du réseau local ou des fichiers du PC.
+
+SOURCE_KINDS = {"folder": "Dossier surveillé (ex. Téléchargements)", "url": "Adresse d’abonnement .ics"}
+SOURCE_URL_EVERY = timedelta(hours=3)        # une adresse est relue toutes les 3 h (le dossier : à chaque passage)
+SOURCE_RECHECK_NOTE = timedelta(hours=1)     # dossier inchangé : « dernière lecture » notée au plus une fois par heure
+SOURCE_MAX_BYTES = 5 * 1024 * 1024
+SOURCE_TIMEOUT = 20
+SOURCE_SILENT_DAYS = 6                       # source muette depuis une semaine : le rappel d'import revient
+SOURCE_SETTLE_SECONDS = 5                    # fichier modifié il y a moins que ça : sans doute en cours d'écriture
+
+
+def calendar_fingerprint(cal) -> str:
+    """Empreinte des séances d'un fichier (pas de ses octets : l'horodatage d'export change à chaque fois)."""
+    rows = sorted([e.uid, {k: _norm(k, v) for k, v in e.values().items()}] for e in cal.events)
+    return hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+def foreign_reason(cal, user: User) -> str | None:
+    """Pourquoi un fichier trouvé tout seul n'est sans doute pas l'emploi du temps (None : il peut l'être).
+
+    Écartés : les invitations (METHOD:REQUEST…), et, quand un planning est déjà là, un fichier qui n'a ni
+    séance déjà connue ni type de cours de l'école (CM, TD_TP, CO_ECRIT…). Sinon, en mode « semaines »,
+    l'invitation à une réunion tombée dans le dossier retirerait toutes les autres séances de sa semaine."""
+    if is_invitation(cal):
+        return ("c’est une invitation (réunion, rendez-vous…), pas ton emploi du temps : "
+                "importe-la à la main si tu veux l’ajouter")
+    known = {uid for (uid,) in db.session.query(AgendaEvent.uid).filter(AgendaEvent.user_id == user.id)}
+    if not known:
+        return None  # premier planning : rien à retirer, rien à craindre
+    if any(e.uid in known for e in cal.events) or any(e.kind in ics.KINDS for e in cal.events):
+        return None
+    return ("il ne ressemble pas à ton emploi du temps (aucune séance connue, aucun type de cours reconnu) : "
+            "il a été laissé de côté pour ne rien retirer par erreur")
+
+
+def _source_pick_file(folder: str) -> tuple[str, str] | None:
+    """Fichier .ics le plus récent du dossier (« planning (1).ics » après un nouveau téléchargement) :
+    (chemin, signature nom|date|taille), ou None s'il n'y en a pas."""
+    best = None
+    with os.scandir(folder) as it:
+        for e in it:
+            if not e.name.lower().endswith(".ics") or e.name.startswith("."):
+                continue
+            try:
+                if not e.is_file():
+                    continue
+                st = e.stat()
+            except OSError:
+                continue
+            if best is None or st.st_mtime_ns > best[1].st_mtime_ns:
+                best = (e.path, st)
+    if best is None:
+        return None
+    path, st = best
+    return path, f"{os.path.basename(path)}|{st.st_mtime_ns}|{st.st_size}"[:300]
+
+
+def _source_file_busy(path: str) -> bool:
+    """Fichier sans doute en cours de téléchargement : vide, modifié à l'instant, ou accompagné de son
+    « .part » (Firefox crée le fichier final vide et écrit dans « planning.ics.part »). Il est relu au
+    passage suivant, sans rien signaler."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    if st.st_size == 0 or os.path.exists(path + ".part"):
+        return True
+    age = _clock.time() - st.st_mtime
+    return 0 <= age < SOURCE_SETTLE_SECONDS
+
+
+def source_url(value: str) -> str:
+    """Adresse à lire (webcal:// des liens d'abonnement → https://) ; ValueError si elle n'est pas http(s)."""
+    from urllib.parse import urlsplit
+    v = (value or "").strip()
+    if v.lower().startswith("webcal://"):
+        v = "https://" + v[len("webcal://"):]
+    parts = urlsplit(v)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ValueError("L’adresse doit commencer par https:// (ou webcal://).")
+    return v
+
+
+def _fetch_url(url: str) -> bytes:
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "Hangar (agenda)", "Accept": "text/calendar, */*"})
+    with urllib.request.urlopen(req, timeout=SOURCE_TIMEOUT) as r:  # noqa: S310 - adresse choisie par un administrateur
+        data = r.read(SOURCE_MAX_BYTES + 1)
+    if len(data) > SOURCE_MAX_BYTES:
+        raise ValueError("le fichier est trop gros pour un emploi du temps")
+    return data
+
+
+def _source_note(user: User, message: str, url: str = "/agenda/imports", at: datetime | None = None) -> None:
+    db.session.add(Notification(user_id=user.id, kind="update", message=message[:500], url=url, created_at=at or now()))
+
+
+def check_source(user: User, at: datetime | None = None, force: bool = False) -> str:
+    """Lit la source de l'emploi du temps de `user` et importe un nouveau fichier. Retourne ce qui s'est passé :
+    "off" (pas de source), "wait" (pas encore l'heure), "busy" (fichier en cours de téléchargement),
+    "same" (rien de nouveau), "imported", "ignored"
+    (fichier écarté par le garde-fou) ou "error" (message dans `source_error`)."""
+    at = at or now()
+    s = settings_of(user)
+    kind, where = s.source_kind or "", (s.source_path or "").strip()
+    if kind not in SOURCE_KINDS or not where:
+        return "off"
+    if kind == "url" and not force and s.source_tried_at and at - s.source_tried_at < SOURCE_URL_EVERY:
+        return "wait"
+    s.source_tried_at = at
+
+    def fail(msg: str) -> str:
+        changed = s.source_error != msg
+        s.source_error = msg[:500]
+        if changed:  # une seule notification par problème (pas toutes les 30 s)
+            _source_note(user, f"Emploi du temps automatique : {msg}", at=at)
+        db.session.commit()
+        return "error"
+
+    filename = "planning.ics"
+    if kind == "folder":
+        if not os.path.isdir(where):
+            return fail("le dossier surveillé est introuvable. Vérifie son chemin dans « Emploi du temps ».")
+        try:
+            picked = _source_pick_file(where)
+        except OSError:
+            return fail("le dossier surveillé n’est pas lisible.")
+        if picked is None:  # aucun .ics pour l'instant : rien à signaler
+            s.source_error = ""
+            if s.source_checked_at is None or at - s.source_checked_at >= SOURCE_RECHECK_NOTE:
+                s.source_checked_at = at
+            db.session.commit()
+            return "same"
+        path, seen = picked
+        if _source_file_busy(path):  # source_seen non noté : relu au prochain passage
+            s.source_error = ""
+            db.session.commit()
+            return "busy"
+        if seen == s.source_seen and not force:
+            s.source_error = ""
+            if s.source_checked_at is None or at - s.source_checked_at >= SOURCE_RECHECK_NOTE:
+                s.source_checked_at = at
+            db.session.commit()
+            return "same"
+        try:
+            with open(path, "rb") as fh:
+                raw = fh.read(SOURCE_MAX_BYTES + 1)
+        except OSError:
+            return fail(f"le fichier {os.path.basename(path)} n’est pas lisible.")
+        if len(raw) > SOURCE_MAX_BYTES:
+            return fail(f"le fichier {os.path.basename(path)} est trop gros pour un emploi du temps.")
+        s.source_seen, filename = seen, os.path.basename(path)
+    else:
+        try:
+            url = source_url(where)
+            raw = _fetch_url(url)
+        except ValueError as exc:
+            return fail(f"adresse refusée : {exc}")
+        except Exception:  # noqa: BLE001 - réseau, serveur de l'école : on réessaiera plus tard
+            return fail("l’adresse du planning ne répond pas pour l’instant. Nouvel essai dans quelques heures.")
+        from urllib.parse import urlsplit
+        filename = os.path.basename(urlsplit(url).path) or "planning.ics"
+    try:
+        cal = ics.parse(raw)
+        if not cal.events:
+            raise ics.ICSError("aucune séance dans le fichier")
+    except ics.ICSError as exc:
+        return fail(f"le fichier {filename} n’est pas un emploi du temps lisible.")
+    fp = calendar_fingerprint(cal)
+    s.source_error = ""
+    s.source_checked_at = at
+    if fp == s.source_fingerprint:
+        db.session.commit()
+        return "same"
+    s.source_fingerprint, s.source_changed_at = fp, at
+    reason = foreign_reason(cal, user)
+    if reason:
+        _source_note(user, f"Fichier {filename} ignoré : {reason}.", at=at)
+        db.session.commit()
+        return "ignored"
+    db.session.commit()
+    try:
+        imp = import_calendar(user, raw, filename, "weeks", at=at)
+    except ics.ICSError as exc:
+        db.session.rollback()
+        s = settings_of(user)
+        s.source_fingerprint = ""  # nouvel essai au prochain passage
+        return fail(str(exc))
+    parts = [x for x in (digest.pluriel(imp.modified, "séance modifiée", "séances modifiées") if imp.modified else "",
+                         digest.pluriel(imp.added, "ajoutée") if imp.added else "",
+                         digest.pluriel(imp.removed, "retirée") if imp.removed else "",
+                         digest.pluriel(imp.restored, "rétablie") if imp.restored else "") if x]
+    if parts or imp.warnings:
+        msg = "Emploi du temps mis à jour : " + (", ".join(parts) if parts else "aucun changement de séance") + "."
+        if getattr(imp, "guarded_weeks", None):
+            msg += " Par prudence, des séances n’ont pas été retirées : vois le détail."
+        _source_note(user, msg, url=f"/agenda/imports/{imp.id}", at=at)
+        db.session.commit()
+    return "imported"
+
+
+def check_sources(at: datetime | None = None) -> int:
+    """Passage du fil d'arrière-plan : lit la source de chaque compte qui en a une. Retourne le nombre d'imports."""
+    at = at or now()
+    n = 0
+    rows = AgendaSettings.query.filter(AgendaSettings.source_kind.in_(tuple(SOURCE_KINDS)),
+                                       AgendaSettings.source_path != "").all()
+    for user_id in [r.user_id for r in rows]:
+        user = db.session.get(User, user_id)
+        if user is None or not user.active:
+            continue
+        try:
+            n += check_source(user, at) == "imported"
+        except Exception:  # noqa: BLE001 - un compte en panne n'empêche pas les autres
+            db.session.rollback()
+            current_app.logger.exception("Lecture automatique de l’emploi du temps (compte %s)", user_id)
+            _mail().noter_erreur("Lecture automatique de l’emploi du temps")
+    return n
+
+
+def source_status(s: AgendaSettings, at: datetime | None = None) -> dict:
+    """État de la source automatique, pour la page « Emploi du temps »."""
+    at = at or now()
+    kind = s.source_kind if s.source_kind in SOURCE_KINDS else ""
+    return {"kind": kind, "path": s.source_path or "", "label": SOURCE_KINDS.get(kind, ""),
+            "checked_at": s.source_checked_at, "changed_at": s.source_changed_at, "error": s.source_error or "",
+            "kinds": SOURCE_KINDS}
+
+
 def run_jobs(app=None, at: datetime | None = None) -> dict:
     """Appelé par le fil d'envoi des e-mails (toutes les 30 s). Les deux travaux sont protégés séparément :
-    une erreur dans les rappels n'empêche pas le résumé quotidien (et inversement)."""
+    une erreur dans les rappels n'empêche pas le résumé quotidien (et inversement). La lecture de la source
+    de l'emploi du temps (`check_sources`) est une étape à part du fil, juste avant."""
     from .mailer import _ctx
     with _ctx(app):
         at = at or now()
@@ -1266,9 +1583,79 @@ def events_between(user: User, a: datetime, b: datetime, include_removed: bool =
     return q.order_by(AgendaEvent.start, AgendaEvent.end.desc()).all()
 
 
+# ---------------------------------------------------------------------------
+# Projet d'équipe dans l'agenda : échéances de mes tickets, fins de sprint
+# ---------------------------------------------------------------------------
+
+TICKET_COLOR = "#3f76ff"
+SPRINT_COLOR = "#0d9488"
+
+
+@dataclass
+class TeamItem:
+    """Élément « ticket » de l'agenda (lecture seule) : échéance d'un ticket qui m'est assigné, ou fin d'un
+    sprint (cycle) d'un projet dont je suis membre."""
+    kind: str            # ticket | sprint
+    date: date
+    title: str
+    label: str           # clé du ticket (« PP-12 ») ou nom du projet
+    url: str
+    uid: str             # identifiant stable pour l'export .ics
+    overdue: bool = False
+    color: str = TICKET_COLOR
+    notes: str = ""      # notes de la tâche « Bloquer un créneau » (lien vers le ticket)
+    minutes: int = 0     # (comme une séance : aucune heure de cours)
+    is_active: bool = False
+
+
+def _url(endpoint: str, fallback: str, **kw) -> str:
+    try:
+        from flask import url_for
+        return url_for(endpoint, **kw)
+    except Exception:  # noqa: BLE001 - hors requête (fil d'arrière-plan) : adresse écrite à la main
+        return fallback
+
+
+def team_items(user: User, d0: date, d1: date, today: date | None = None) -> list[TeamItem]:
+    """Tickets ouverts qui me sont assignés avec une échéance entre `d0` et `d1`, et fins des sprints des projets
+    dont je suis membre (même requête que le résumé quotidien : `digest.tickets_assignes`). Vide si je ne vois
+    aucun projet, ou si le module des projets est indisponible."""
+    today = today or date.today()
+    out: list[TeamItem] = []
+    try:
+        issues = digest.tickets_assignes(user) or []
+    except Exception:  # noqa: BLE001 - l'agenda ne doit jamais tomber à cause des projets
+        current_app.logger.exception("Tickets dans l’agenda")
+        return []
+    for i in issues:
+        d = i.target_date
+        if d is None or i.is_closed or not d0 <= d <= d1:
+            continue
+        url = _url("issues.detail", f"/projects/{i.project_id}/issues/{i.sequence_id}", pid=i.project_id,
+                   seq=i.sequence_id)
+        out.append(TeamItem("ticket", d, i.title, i.key, url, f"ticket-{i.id}", overdue=d < today,
+                            notes=f"Ticket [{i.key}]({url}) : {i.title}"))
+    try:
+        from .models import Cycle, Project, ProjectMember
+        rows = (Cycle.query.join(Project, Cycle.project_id == Project.id)
+                .join(ProjectMember, db.and_(ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id))
+                .filter(Project.archived_at.is_(None), Project.cycles_enabled.isnot(False),
+                        Cycle.archived_at.is_(None), Cycle.end_date.isnot(None), Cycle.end_date >= d0,
+                        Cycle.end_date <= d1).all())
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception("Sprints dans l’agenda")
+        rows = []
+    for c in rows:
+        url = _url("cycles.detail", f"/projects/{c.project_id}/cycles/{c.id}", pid=c.project_id, cid=c.id)
+        out.append(TeamItem("sprint", c.end_date, f"Fin du sprint « {c.name} »", c.project.name, url,
+                            f"sprint-{c.id}", color=SPRINT_COLOR, notes=f"Sprint [{c.name}]({url}) ({c.project.name})"))
+    out.sort(key=lambda x: (x.date, x.kind != "sprint", x.label))
+    return out
+
+
 @dataclass
 class Block:
-    type: str            # event | task
+    type: str            # event | task (les tickets ne sont que dans le bandeau « journée »)
     obj: object          # AgendaEvent | Occ
     start: datetime
     end: datetime
@@ -1328,8 +1715,10 @@ def week_view(user: User, ref: date, s: AgendaSettings, at: datetime | None = No
             en = (datetime.combine(o.date, t.end_time) if t.end_time and t.end_time > t.start_time
                   else st + timedelta(minutes=30))
             timed[o.date].append(Block("task", o, st, en))
+    for it in team_items(user, monday, sunday, at.date()):  # tickets et fins de sprint : bandeau « journée »
+        allday.append({"type": "ticket", "obj": it, "d0": it.date, "d1": it.date})
     weekend = bool(s.show_weekends) or any(timed[monday + timedelta(days=i)] for i in (5, 6)) or any(
-        x["type"] == "task" and x["d0"].weekday() >= 5 for x in allday) or any(
+        x["type"] in ("task", "ticket") and x["d0"].weekday() >= 5 for x in allday) or any(
         x["type"] == "event" and x["d0"].weekday() >= 5 and x["d1"] == x["d0"] for x in allday)
     ndays = 7 if weekend else 5
     days = [monday + timedelta(days=i) for i in range(ndays)]
@@ -1388,8 +1777,11 @@ def week_view(user: User, ref: date, s: AgendaSettings, at: datetime | None = No
             "ndays": ndays}
 
 
-def _day_items(evs: list[AgendaEvent], occs: list[Occ], d: date) -> list[dict]:
+def _day_items(evs: list[AgendaEvent], occs: list[Occ], d: date, team: list[TeamItem] = ()) -> list[dict]:
     items = []
+    for it in team:  # tickets à rendre ce jour-là, fins de sprint (journée entière)
+        if it.date == d:
+            items.append({"type": "ticket", "obj": it, "multi": False, "time": "", "sort": (0, time(0))})
     for ev in evs:
         if ev.start.date() <= d <= ev.last_day:
             items.append({"type": "event", "obj": ev, "multi": ev.multi_day,
@@ -1412,12 +1804,13 @@ def month_view(user: User, ref: date, s: AgendaSettings, at: datetime | None = N
     a = datetime.combine(start, time(0))
     evs = events_between(user, a, datetime.combine(end + timedelta(days=1), time(0)), include_removed=bool(s.show_removed))
     occs = task_occurrences(user, start, end)
+    team = team_items(user, start, end, at.date())
     weeks, d = [], start
     while d <= end:
         week = []
         for _ in range(7):
             week.append({"date": d, "out": d.month != first.month, "today": d == at.date(), "weekend": d.weekday() >= 5,
-                         "items": _day_items(evs, occs, d)})
+                         "items": _day_items(evs, occs, d, team)})
             d += timedelta(days=1)
         weeks.append(week)
     prev_m = (first - timedelta(days=1)).replace(day=1)
@@ -1432,10 +1825,11 @@ def list_view(user: User, ref: date, s: AgendaSettings, days: int = 14, at: date
     end = ref + timedelta(days=days - 1)
     evs = events_between(user, a, datetime.combine(end + timedelta(days=1), time(0)), include_removed=bool(s.show_removed))
     occs = task_occurrences(user, ref, end)
+    team = team_items(user, ref, end, at.date())
     out = []
     for i in range(days):
         d = ref + timedelta(days=i)
-        items = _day_items(evs, occs, d)
+        items = _day_items(evs, occs, d, team)
         if items or d == at.date():
             out.append({"date": d, "today": d == at.date(), "items": items,
                         "minutes": sum(x["obj"].minutes for x in items
@@ -1453,7 +1847,7 @@ def dashboard(user: User, at: datetime | None = None, ref: date | None = None) -
     tomorrow_evs = [e for e in events_between(user, t0 + timedelta(days=1), t0 + timedelta(days=2), include_removed=False)
                     if not e.cancelled and not e.multi_day]
     today_occs = task_occurrences(user, today, today)
-    agenda_today = _day_items(today_evs, today_occs, today)
+    agenda_today = _day_items(today_evs, today_occs, today, team_items(user, today, today, today))
     for x in agenda_today:
         if x["type"] == "event" and not x["multi"]:
             ev = x["obj"]
@@ -1486,12 +1880,23 @@ def dashboard(user: User, at: datetime | None = None, ref: date | None = None) -
                      .order_by(AgendaReminder.remind_at).first())
     nudge = False
     if s.weekly_import_nudge:
-        if last is None:
+        auto = s.source_kind in SOURCE_KINDS and bool((s.source_path or "").strip())
+        if last is None and not auto:
             nudge = True
         else:
             covered_to = max((i.range_end for i in AgendaImport.query.filter_by(user_id=user.id, undone_at=None)
                               if i.range_end), default=None)
-            nudge = (at - last.created_at).days >= 6 or covered_to is None or covered_to < today
+            stale = covered_to is None or covered_to < today
+            if auto:
+                # Source automatique : rappel seulement si elle est muette depuis une semaine (illisible, ou plus
+                # aucun nouveau fichier alors que le planning ne couvre plus aujourd'hui)
+                silent = SOURCE_SILENT_DAYS
+                since_change = max((x for x in (s.source_changed_at, last.created_at if last else None) if x),
+                                   default=None)
+                nudge = (s.source_checked_at is None or (at - s.source_checked_at).days >= silent
+                         or (stale and (since_change is None or (at - since_change).days >= silent)))
+            else:
+                nudge = (at - last.created_at).days >= 6 or stale
     today_minutes = sum(e.minutes for e in today_evs if e.is_active and not e.multi_day)
     return {
         "s": s, "at": at, "today": today, "agenda_today": agenda_today, "tomorrow": tomorrow,
@@ -1645,7 +2050,7 @@ RRULES = {"daily": "FREQ=DAILY", "weekdays": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
 
 
 def export_ics(user: User, include_events: bool = True, include_tasks: bool = True,
-               at: datetime | None = None) -> str:
+               at: datetime | None = None, include_team: bool = True) -> str:
     """Agenda au format iCalendar (RFC 5545) : lignes repliées à 75 octets, textes échappés, DTSTAMP en UTC,
     fuseau Europe/Paris décrit (VTIMEZONE), fin de répétition en UTC pour une tâche à heure fixe, rappels
     des tâches sans heure calés sur l'heure de référence (8 h par défaut) comme dans Hangar."""
@@ -1726,8 +2131,50 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
                 elif not repeated and fixed(r):
                     lines += alarm(t.title, fixed(r))
             lines.append("END:VEVENT")
+    if include_team:  # échéances de mes tickets, fins de sprint (journée entière, sans rappel)
+        for it in team_items(user, at.date() - timedelta(days=60), at.date() + timedelta(days=400), at.date()):
+            title = f"{it.label} · {it.title}" if it.kind == "ticket" else f"{it.title} ({it.label})"
+            lines += ["BEGIN:VEVENT", f"UID:{it.uid}@hangar", f"DTSTAMP:{stamp}",
+                      f"DTSTART;VALUE=DATE:{it.date:%Y%m%d}", f"DTEND;VALUE=DATE:{it.date + timedelta(days=1):%Y%m%d}",
+                      f"SUMMARY:{esc(title)}", f"DESCRIPTION:{esc(_mail().absolute(it.url))}",
+                      "TRANSP:TRANSPARENT", "CATEGORIES:Projet", "END:VEVENT"]
     lines.append("END:VCALENDAR")
     return ics.serialize(lines)
+
+
+# ---------------------------------------------------------------------------
+# Abonnement en lecture seule (adresse secrète à coller dans l'agenda du téléphone, Outlook…)
+# ---------------------------------------------------------------------------
+
+FEED_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{32,64}")
+
+
+def regenerate_feed_token(user: User) -> str:
+    """Crée (ou remplace : l'ancienne adresse cesse aussitôt de marcher) le jeton de l'abonnement. Jeton dédié,
+    qui ne donne que la lecture de l'agenda (jamais un jeton d'API, qui ouvrirait aussi l'écriture)."""
+    import secrets
+    s = settings_of(user)
+    s.feed_token = secrets.token_urlsafe(32)
+    db.session.commit()
+    return s.feed_token
+
+
+def disable_feed(user: User) -> None:
+    s = settings_of(user)
+    s.feed_token = None
+    db.session.commit()
+
+
+def feed_user(token: str) -> User | None:
+    """Compte dont `token` est le jeton d'abonnement (None : jeton inconnu, coupé, ou compte désactivé)."""
+    import hmac
+    if not token or not FEED_TOKEN_RE.fullmatch(token):
+        return None
+    s = AgendaSettings.query.filter_by(feed_token=token).first()
+    if s is None or not s.feed_token or not hmac.compare_digest(s.feed_token, token):
+        return None
+    user = db.session.get(User, s.user_id)
+    return user if user is not None and user.active else None
 
 
 __all__ = ["IMPORT_MODES", "RECURRENCES", "REMINDER_OFFSETS", "import_calendar", "undo_import", "week_view",

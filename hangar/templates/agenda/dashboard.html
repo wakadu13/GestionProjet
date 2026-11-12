@@ -27,7 +27,7 @@
     <span class="ag-nudge-ic">{{ icon('upload', 18) }}</span>
     <div class="grow">
       <b>{% if last_import %}Nouveau planning ?{% else %}Importe ton emploi du temps{% endif %}</b>
-      <div class="small text-2">{% if last_import %}Dernier import {{ last_import.created_at|ago }} ({{ last_import.filename }}). Dépose le fichier .ics de la semaine : le dernier envoyé fait foi.{% else %}Dépose le fichier .ics exporté de ton planning : les cours apparaîtront ici et dans le calendrier.{% endif %}</div>
+      <div class="small text-2">{% if s.source_kind and s.source_path %}La récupération automatique n’a rien apporté depuis une semaine{% if s.source_error %} : {{ s.source_error }}{% endif %}. Vérifie la source dans <a href="{{ url_for('agenda.imports') }}#auto">Emploi du temps</a>, ou dépose le fichier .ics ici.{% elif last_import %}Dernier import {{ last_import.created_at|ago }} ({{ last_import.filename }}). Dépose le fichier .ics de la semaine : le dernier envoyé fait foi.{% else %}Dépose le fichier .ics exporté de ton planning : les cours apparaîtront ici et dans le calendrier.{% endif %}</div>
     </div>
     <label class="btn btn-sm btn-primary ag-file">{{ icon('upload', 14) }} Choisir le fichier .ics<input type="file" name="file" accept=".ics,text/calendar" data-autoupload hidden></label>
   </form>
@@ -115,7 +115,9 @@
           <button class="btn btn-xs btn-ghost right" type="button" data-new-task data-date="{{ today.isoformat() }}">{{ icon('plus', 13) }} Tâche</button></div>
         <div class="ag-today">
           {% for x in agenda_today %}
-          {% if x.type == 'event' %}
+          {% if x.type == 'ticket' %}
+          {{ ag.ticket_item(x.obj, 'ag-line') }}
+          {% elif x.type == 'event' %}
           {{ ag.event_line(x.obj, recent, x.get('state', '')) }}
           {% else %}{% set t = x.obj.task %}
           <div class="ag-line task {% if t.is_done %}done{% endif %}" style="--tc: {{ t.color or 'var(--accent)' }}">

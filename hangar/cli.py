@@ -143,6 +143,7 @@ def cmd_run(args):
         print(f"  ! Le port {port} est utilisé par un autre programme : Hangar utilise le port {free}.")
         port = free
     app = create_app(args.data)
+    app.config["HANGAR_HOST"] = args.host  # adresse d'écoute (abonnement .ics : joignable depuis le téléphone ?)
     journal = lancement.ouvrir_journal(app.config["DATA_DIR"])
     lancement.noter_lancement(app.config["DATA_DIR"], port)
     url = f"http://127.0.0.1:{port}"

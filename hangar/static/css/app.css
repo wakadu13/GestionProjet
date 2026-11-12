@@ -975,6 +975,16 @@ dialog.palette::backdrop { background: rgba(15, 18, 25, .4); }
 .ag-line::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--ec, var(--tc, var(--accent))); }
 .ag-line.task { cursor: default; align-items: center; }
 .ag-line.task::before { background: var(--tc); opacity: .55; }
+/* Tickets à rendre et fins de sprint (projet d'équipe) */
+.ticket { cursor: default; align-items: center; }
+.wk-bar.ticket { background: color-mix(in srgb, var(--tc) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--tc) 35%, var(--border)); border-left: 3px solid var(--tc); padding-right: 2px; }
+.ticket.overdue { --tc: var(--danger); }
+.ticket .ticket-link { flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+.ticket .ticket-link:hover { text-decoration: underline; }
+.ticket .ticket-slot { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 4px; background: none; color: var(--text-3); cursor: pointer; }
+.ticket .ticket-slot:hover { background: var(--bg-2); color: var(--text); }
+.ag-chip.ticket { background: color-mix(in srgb, var(--tc) 9%, transparent); }
+.ag-line.ticket::before { background: var(--tc); }
 .ag-line.past { opacity: .55; }
 .ag-line.now { background: color-mix(in srgb, var(--success) 7%, transparent); }
 .ag-line.done .ag-title { text-decoration: line-through; color: var(--text-3); }

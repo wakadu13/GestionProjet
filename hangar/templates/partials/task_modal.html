@@ -64,6 +64,7 @@
           <select class="input input-sm" name="reminder_channel" style="width:auto" aria-label="Moyen de rappel">
             <option value="email">par e-mail + notification</option>
             <option value="app">notification dans l’application</option>
+            <option value="push">notification sur mes appareils</option>
           </select>
         </div>
         <p class="help" data-tm-help-allday hidden>Pour une tâche sans heure, « à l’heure » correspond au jour même à {{ '%02d'|format(A.settings_of(current_user).allday_hour or 8) }} h.</p>

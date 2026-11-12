@@ -1,6 +1,7 @@
 """API REST publique (v1) authentifiée par jeton : intégration avec d'autres outils/scripts.
 
-En-tête : Authorization: Bearer hgr_xxx   (ou X-API-Key: hgr_xxx)
+En-tête : X-API-Key: hgr_xxx   (« Authorization: Bearer » est réservé aux jetons de l’application Android :
+appareils._avant le refuse sur /api/v1/)
 """
 from functools import wraps
 
