@@ -633,6 +633,13 @@ dialog.palette::backdrop { background: rgba(15, 18, 25, .4); }
 .page-editor textarea { border: 0; outline: none; resize: none; padding: 24px 32px; font: 14px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--text); height: 100%; }
 .page-editor .preview { overflow: auto; padding: 24px 32px; border-left: 1px solid var(--border); background: var(--bg-2); }
 .page-editor.single .preview { display: none; }
+/* Modification concurrente refusée (page, description de ticket) ; ancien texte dans l'historique */
+.conflict-box { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; margin: 0 0 12px; border: 1px solid var(--warning); border-radius: var(--radius-sm); background: var(--warning-bg); color: var(--text); font-size: 13px; }
+.conflict-box .ic { color: var(--warning); flex: none; margin-top: 2px; }
+.conflict-current { max-height: 220px; overflow: auto; margin: 0 0 12px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--bg-2); font-size: 13px; white-space: pre-wrap; }
+.tl-old { margin-top: 4px; }
+.tl-old summary { cursor: pointer; color: var(--text-3); font-size: 12px; }
+.tl-old .md { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--border); background: var(--bg-2); border-radius: 4px; color: var(--text); }
 .diff { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; overflow: auto; white-space: pre-wrap; }
 .diff .add { color: var(--success); background: var(--success-bg); display: block; }
 .diff .del { color: var(--danger); background: var(--danger-bg); display: block; }

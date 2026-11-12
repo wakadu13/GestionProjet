@@ -53,13 +53,19 @@
 
     {# Description #}
     <div class="desc-block" data-desc-block>
+      {% if desc_conflict %}
+      <div class="conflict-box" role="alert">{{ icon('alert', 15) }}<div>{{ desc_conflict.message }}</div></div>
+      <div class="small bold" style="margin:0 0 6px">Version actuelle</div>
+      {% endif %}
       <div class="md desc-view" {% if e %}data-desc-view title="Cliquer pour modifier" style="cursor:text; min-height: 40px; padding: 6px; margin: -6px; border-radius: 6px"{% endif %}>
         {% if issue.description %}{{ issue.description|md }}{% else %}<p class="muted">{{ 'Ajouter une description…' if e else 'Pas de description.' }}</p>{% endif %}
       </div>
       {% if e %}
-      <form method="post" action="{{ url_for('issues.edit', pid=project.id, seq=issue.sequence_id) }}" class="desc-edit hide" data-desc-form>
+      <form method="post" action="{{ url_for('issues.edit', pid=project.id, seq=issue.sequence_id) }}" class="desc-edit {% if not desc_conflict %}hide{% endif %}" data-desc-form>
         {{ ui.csrf() }}
-        {{ ui.md_editor('description', issue.description or '', 'Décris le ticket : contexte, attendus, critères de fin…', 10) }}
+        <input type="hidden" name="description_version" value="{{ desc_version }}">
+        {% if desc_conflict %}<div class="small bold" style="margin:12px 0 6px">Ton texte</div>{% endif %}
+        {{ ui.md_editor('description', desc_conflict.text if desc_conflict else (issue.description or ''), 'Décris le ticket : contexte, attendus, critères de fin…', 10) }}
         <div class="form-actions"><button type="button" class="btn btn-sm" data-desc-cancel>Annuler</button><button class="btn btn-sm btn-primary">Enregistrer</button></div>
       </form>
       {% endif %}
@@ -215,7 +221,17 @@
           {% set a = obj %}
           <div class="tl-act">
             <span class="tl-ic">{{ icon({'created': 'plus', 'state': 'check-circle', 'priority': 'flag', 'assignees': 'user', 'labels': 'tag', 'cycle': 'cycle', 'modules': 'module', 'target_date': 'calendar', 'start_date': 'calendar', 'attachment_added': 'paperclip', 'link_added': 'link', 'relation_added': 'link', 'archived': 'archive', 'worklog': 'timer', 'description': 'edit', 'title': 'edit'}.get(a.field or a.verb, 'activity'), 13) }}</span>
-            <div class="tl-t"><b>{{ a.actor.display_name if a.actor else 'Hangar' }}</b> {{ activity_text(a) }} <span class="muted" title="{{ a.created_at|datetime }}">· {{ a.created_at|ago }}</span></div>
+            <div class="tl-t"><b>{{ a.actor.display_name if a.actor else 'Hangar' }}</b> {{ activity_text(a) }} <span class="muted" title="{{ a.created_at|datetime }}">· {{ a.created_at|ago }}</span>
+              {% if a.field == 'description' and a.old_value is not none %}
+              <details class="tl-old">
+                <summary>Voir le texte d’avant</summary>
+                <div class="md">{% if a.old_value.strip() %}{{ a.old_value|md }}{% else %}<p class="muted">(la description était vide)</p>{% endif %}</div>
+                {% if e and a.old_value.strip() != (issue.description or '').strip() %}
+                <form method="post" action="{{ url_for('issues.description_restore', pid=project.id, seq=issue.sequence_id, aid=a.id) }}" data-confirm="Remettre ce texte comme description ? La description actuelle restera dans l’historique.">{{ ui.csrf() }}<button class="btn btn-xs">{{ icon('history', 12) }} Restaurer ce texte</button></form>
+                {% endif %}
+              </details>
+              {% endif %}
+            </div>
           </div>
           {% endif %}
         {% else %}

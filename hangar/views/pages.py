@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..models import Page, PageVersion, now
-from ..services import to_int
+from ..services import text_version, to_int
 from ..utils import can, get_project, slugify
 
 bp = Blueprint("pages", __name__, url_prefix="/projects/<int:pid>/pages")
@@ -203,11 +203,21 @@ def edit(pid, page_id):
     if request.method == "POST":
         title = (request.form.get("title") or "").strip()[:255] or "Sans titre"
         content = request.form.get("content", "")
-        if content != (page.content or "") or title != page.title:
+        changed = content != (page.content or "") or title != page.title
+        base = request.form.get("version")
+        if changed and base is not None and base != page_version(page):
+            # Modifiée entre-temps (autre personne, autre onglet, assistant) : on n'écrit rien.
+            message = _conflict_message(page)
+            if request.headers.get("X-Requested-With") == "fetch":
+                return {"ok": False, "conflict": True, "error": message}, 409
+            return render_template("pages/edit.html", project=project, page=page, version=page_version(page),
+                                   draft={"title": title, "content": content}, error=message), 409
+        if changed:
             last = page.versions[0] if page.versions else None
-            # Une version au plus toutes les 5 minutes par auteur, sauf sauvegarde explicite
+            # Le texte remplacé est archivé s'il vient de quelqu'un d'autre ; sinon une version au plus toutes
+            # les 5 minutes, sauf sauvegarde explicite
             explicit = request.form.get("explicit") == "1"
-            if explicit or last is None or last.author_id != current_user.id or \
+            if explicit or last is None or page.updated_by_id != current_user.id or \
                     (now() - last.created_at).total_seconds() > 300:
                 db.session.add(PageVersion(page=page, title=page.title, content=page.content,
                                            author=page.updated_by or current_user))
@@ -216,10 +226,27 @@ def edit(pid, page_id):
         page.emoji = request.form.get("emoji") or page.emoji
         db.session.commit()
         if request.headers.get("X-Requested-With") == "fetch":
-            return {"ok": True, "saved_at": page.updated_at.strftime("%H:%M:%S")}
+            return {"ok": True, "saved_at": page.updated_at.strftime("%H:%M:%S"), "version": page_version(page)}
         flash("Page enregistrée.", "success")
         return redirect(url_for("pages.view", pid=pid, page_id=page.id))
-    return render_template("pages/edit.html", project=project, page=page)
+    return render_template("pages/edit.html", project=project, page=page, version=page_version(page))
+
+
+def page_version(page: Page) -> str:
+    """Empreinte du titre et du contenu enregistrés : l'éditeur la renvoie à chaque sauvegarde."""
+    return text_version(page.title, page.content)
+
+
+def _conflict_message(page: Page) -> str:
+    who = page.updated_by
+    at = page.updated_at.strftime("%H:%M") if page.updated_at else ""
+    if who is not None and who.id == current_user.id:
+        what = (f"Cette page a été modifiée ailleurs à {at} (autre onglet, autre appareil ou assistant) "
+                "pendant que tu écrivais.")
+    else:
+        name = who.display_name if who is not None else "quelqu’un d’autre"
+        what = f"Cette page a été modifiée par {name} à {at} pendant que tu écrivais."
+    return what + " Rien n’a été écrasé et ton texte est toujours là."
 
 
 @bp.route("/<int:page_id>/versions")
@@ -248,7 +275,8 @@ def restore_version(pid, page_id, vid):
     v = db.session.get(PageVersion, vid)
     if not v or v.page_id != page.id:
         abort(404)
-    db.session.add(PageVersion(page=page, title=page.title, content=page.content, author=current_user))
+    db.session.add(PageVersion(page=page, title=page.title, content=page.content,
+                               author=page.updated_by or current_user))  # l'auteur du texte remplacé
     page.title, page.content = v.title or page.title, v.content
     page.updated_at, page.updated_by = now(), current_user
     db.session.commit()

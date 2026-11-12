@@ -8,7 +8,8 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from ..extensions import db
 from ..models import APIToken, Comment, Issue, Project, now
-from ..services import create_issue, log_activity, serialize_issue, to_int, update_issue
+from ..services import (create_issue, description_conflict, description_conflict_message, log_activity,
+                        serialize_issue, to_int, update_issue)
 from ..utils import can, visible_projects
 
 bp = Blueprint("apiv1", __name__, url_prefix="/api/v1")
@@ -123,7 +124,11 @@ def issue(iid):
         db.session.delete(i)
         db.session.commit()
         return jsonify(ok=True)
-    changed = update_issue(i, request.get_json(silent=True) or {}, g.api_user)
+    data = request.get_json(silent=True) or {}
+    if description_conflict(i, data):  # « description_version » : empreinte de la description lue avant
+        return jsonify(ok=False, conflict=True, error=description_conflict_message(i, g.api_user),
+                       issue=serialize_issue(i)), 409
+    changed = update_issue(i, data, g.api_user)
     db.session.commit()
     return jsonify(ok=True, changed=changed, issue=serialize_issue(i))
 

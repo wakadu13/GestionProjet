@@ -11,12 +11,13 @@ from werkzeug.utils import secure_filename
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import (
-    RELATION_TYPES, Attachment, Comment, Issue, IssueLink, IssueRelation, Project, SavedView, WorkLog,
+    RELATION_TYPES, Activity, Attachment, Comment, Issue, IssueLink, IssueRelation, Project, SavedView, WorkLog,
     group_reactions, now,
 )
 from ..services import (
-    add_relation, archive_issue, create_issue, duplicate_issue, handle_mentions, log_activity,
-    move_issue_to_project, notify_subscribers, restore_issue, run_automations, to_int, update_issue,
+    add_relation, archive_issue, create_issue, description_conflict, description_conflict_message, duplicate_issue,
+    handle_mentions, log_activity, move_issue_to_project, notify_subscribers, restore_issue, run_automations,
+    text_version, to_int, update_issue,
 )
 from ..utils import back_url, can, fmt_minutes, get_project, issue_url, parse_duration, visible_projects
 from .home import _layout_context
@@ -117,7 +118,12 @@ def create():
 @bp.route("/projects/<int:pid>/issues/<int:seq>")
 @login_required
 def detail(pid, seq):
-    issue = get_issue(pid, seq)
+    return _detail_page(get_issue(pid, seq))
+
+
+def _detail_page(issue: Issue, desc_conflict: dict | None = None):
+    """Page d'un ticket. `desc_conflict` : description refusée (modifiée entre-temps par quelqu'un d'autre) à
+    remettre dans l'éditeur, à côté de la version actuelle."""
     project = issue.project
     tab = request.args.get("tab", "all")
     timeline = []
@@ -138,21 +144,45 @@ def detail(pid, seq):
         can_edit=can(current_user, "edit", project), can_comment=can(current_user, "comment", project),
         other_projects=[p for p in visible_projects(current_user) if p.id != project.id
                         and can(current_user, "edit", p)],
-    )
+        desc_version=text_version(issue.description), desc_conflict=desc_conflict,
+    ), 409 if desc_conflict else 200
 
 
-@bp.route("/projects/<int:pid>/issues/<int:seq>/edit", methods=["POST"])
+@bp.route("/projects/<int:pid>/issues/<int:seq>/edit", methods=["GET", "POST"])
 @login_required
 def edit(pid, seq):
+    if request.method == "GET":  # liens relatifs (?tab=…) de la page réaffichée après un conflit
+        tab = request.args.get("tab")
+        return redirect(url_for("issues.detail", pid=pid, seq=seq, **({"tab": tab} if tab else {})))
     issue = get_issue(pid, seq, "edit")
     data = {}
-    for k in ("title", "description"):
+    for k in ("title", "description", "description_version"):
         if k in request.form:
             data[k] = request.form[k]
+    if description_conflict(issue, data):
+        message = description_conflict_message(issue, current_user)
+        if request.headers.get("X-Requested-With") == "fetch":
+            return {"ok": False, "conflict": True, "error": message,
+                    "description": issue.description or "", "description_version": text_version(issue.description)}, 409
+        return _detail_page(issue, {"text": request.form.get("description", ""), "message": message})
     update_issue(issue, data, current_user)
     db.session.commit()
     if request.headers.get("X-Requested-With") == "fetch":
-        return {"ok": True}
+        return {"ok": True, "description_version": text_version(issue.description)}
+    return redirect(issue_url(issue))
+
+
+@bp.route("/projects/<int:pid>/issues/<int:seq>/description/<int:aid>/restore", methods=["POST"])
+@login_required
+def description_restore(pid, seq, aid):
+    """Remet une ancienne description (gardée dans l'historique) ; la description remplacée y reste à son tour."""
+    issue = get_issue(pid, seq, "edit")
+    a = db.session.get(Activity, aid)
+    if a is None or a.issue_id != issue.id or a.field != "description" or a.old_value is None:
+        abort(404)
+    if update_issue(issue, {"description": a.old_value}, current_user):
+        db.session.commit()
+        flash("Ancienne description remise. Celle qu’elle remplace reste dans l’historique.", "success")
     return redirect(issue_url(issue))
 
 
@@ -548,18 +578,36 @@ def import_issues(pid):
     if not file or not file.filename:
         flash("Choisis un fichier .xlsx, .csv ou .json.", "error")
         return redirect(url_for("projects.settings", pid=pid, section="import"))
+    update_existing = bool(request.form.get("update_existing"))
     try:
         rows = importer.read_table(file.stream, file.filename)
+    except Exception as exc:  # fichier illisible
+        flash(f"Import impossible : {exc}", "error")
+        return redirect(url_for("projects.settings", pid=pid, section="import"))
+    backup = None
+    if update_existing:
+        # Filet de sécurité : la mise à jour réécrit des tickets existants.
+        from .settings import make_backup
+        try:
+            backup = os.path.basename(make_backup())
+        except Exception:  # noqa: BLE001 - disque plein, dossier protégé…
+            flash("Sauvegarde de sécurité impossible : rien n’a été importé. Réessaie, ou décoche "
+                  "« Mettre à jour les tickets existants » pour seulement ajouter des tickets.", "error")
+            return redirect(url_for("projects.settings", pid=pid, section="import"))
+    try:
         report = importer.import_rows(project, rows, current_user,
                                       create_members=bool(request.form.get("create_members")),
-                                      update_existing=bool(request.form.get("update_existing")))
+                                      update_existing=update_existing)
         db.session.commit()
-    except Exception as exc:  # fichier illisible
+    except Exception as exc:  # contenu inattendu
         db.session.rollback()
         flash(f"Import impossible : {exc}", "error")
         return redirect(url_for("projects.settings", pid=pid, section="import"))
     flash(f"Import terminé : {report['created']} créé(s), {report['updated']} mis à jour, "
           f"{report['skipped']} ignoré(s).", "success")
+    if backup:
+        flash(f"Une sauvegarde de la base a été faite juste avant ({backup}) : un administrateur peut la "
+              "restaurer depuis Sauvegardes.", "info")
     for w in report["warnings"][:8]:
         flash(w, "info")
     return redirect(url_for("issues.index", pid=pid))

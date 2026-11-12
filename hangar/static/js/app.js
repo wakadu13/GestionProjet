@@ -1170,28 +1170,54 @@
     const titleIn = $('[name=title]', form);
     const preview = $('[data-page-preview]', form);
     const status = $('[data-save-status]');
-    let lastSaved = ta.value + titleIn.value;
+    const versionIn = $('[name=version]', form);  // empreinte de la page telle qu'elle a été chargée
+    const explicitIn = $('[name=explicit]', form);
+    const conflictBox = $('[data-page-conflict]', form);
+    // Réaffichée après un conflit : le texte de l'éditeur n'est pas enregistré (alerte avant de quitter).
+    let lastSaved = form.hasAttribute('data-unsaved') ? null : ta.value + titleIn.value;
+    let saving = false;
+    let again = false;
+    let conflict = false;
     const refresh = debounce(async () => {
       if (pageEd.classList.contains('single')) return;
       try { const r = await api(H.urls.markdown, 'POST', { text: ta.value }); preview.innerHTML = r.html; } catch (e) { /* ignore */ }
     }, 350);
-    const autosave = debounce(async () => {
+    // Page modifiée ailleurs : le serveur a refusé (409) sans rien écrire. On arrête l'enregistrement
+    // automatique et on garde le texte ; « Enregistrer » réaffiche l'éditeur avec la version actuelle à côté.
+    const showConflict = (msg) => {
+      conflict = true;
+      if (conflictBox) { $('[data-page-conflict-text]', conflictBox).textContent = msg; conflictBox.classList.remove('hide'); }
+      if (status) status.textContent = 'Enregistrement automatique arrêté';
+      toast(msg, 'error', 8000);
+    };
+    const save = async () => {
       const cur = ta.value + titleIn.value;
-      if (cur === lastSaved) return;
+      if (conflict || cur === lastSaved) return;
+      if (saving) { again = true; return; }  // une seule sauvegarde à la fois : la suivante part avec la nouvelle empreinte
+      saving = true;
       if (status) status.textContent = 'Enregistrement…';
       try {
-        const fd = new FormData(form);
-        const r = await fetch(form.action, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'fetch' } });
-        const j = await r.json();
-        lastSaved = cur;
-        if (status) status.textContent = `Enregistré à ${j.saved_at}`;
+        const r = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-Requested-With': 'fetch' } });
+        let j = {};
+        try { j = await r.json(); } catch (e) { /* réponse non JSON (session expirée…) */ }
+        if (r.ok && j.ok) {
+          lastSaved = cur;
+          if (versionIn && j.version) versionIn.value = j.version;
+          if (explicitIn) explicitIn.value = '0';
+          if (status) status.textContent = `Enregistré à ${j.saved_at}`;
+        } else if (r.status === 409) {
+          showConflict(j.error || 'Cette page a été modifiée ailleurs pendant que tu écrivais. Rien n’a été écrasé.');
+        } else if (status) status.textContent = 'Échec de l’enregistrement automatique';
       } catch (e) { if (status) status.textContent = 'Échec de l’enregistrement automatique'; }
-    }, 2500);
-    ta.addEventListener('input', () => { refresh(); autosave(); if (status) status.textContent = 'Modifications non enregistrées'; });
+      saving = false;
+      if (again) { again = false; save(); }
+    };
+    const autosave = debounce(save, 2500);
+    ta.addEventListener('input', () => { refresh(); autosave(); if (status && !conflict) status.textContent = 'Modifications non enregistrées'; });
     titleIn.addEventListener('input', autosave);
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') { e.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('[name=explicit]', form).value = '1'; form.submit(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); submitNow(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); mdApply(ta, 'bold'); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') { e.preventDefault(); mdApply(ta, 'italic'); }
     });
@@ -1200,7 +1226,18 @@
     if (toggle) toggle.addEventListener('click', () => { pageEd.classList.toggle('single'); toggle.classList.toggle('active', !pageEd.classList.contains('single')); refresh(); });
     refresh();
     window.addEventListener('beforeunload', (e) => { if (ta.value + titleIn.value !== lastSaved && !form.dataset.submitting) { e.preventDefault(); e.returnValue = ''; } });
-    form.addEventListener('submit', () => { form.dataset.submitting = '1'; });
+    // Enregistrement explicite (bouton, Ctrl+S) : attendre la sauvegarde automatique en cours, pour envoyer
+    // l'empreinte à jour (sinon le serveur verrait un faux conflit).
+    function submitNow() {
+      if (saving) { setTimeout(submitNow, 150); return; }
+      if (explicitIn) explicitIn.value = '1';
+      form.dataset.submitting = '1';
+      form.submit();
+    }
+    form.addEventListener('submit', (e) => {
+      if (saving) { e.preventDefault(); submitNow(); return; }
+      form.dataset.submitting = '1';
+    });
   }
 
   /* ------------------------------------------------------------------ Barre latérale mobile */
