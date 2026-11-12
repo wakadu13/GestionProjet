@@ -21,12 +21,20 @@
 {% endblock %}
 
 {% block content %}
-<form id="page-form" method="post" action="{{ url_for('pages.edit', pid=project.id, page_id=page.id) }}" style="display:flex;flex-direction:column;flex:1;min-height:0">
+<form id="page-form" method="post" action="{{ url_for('pages.edit', pid=project.id, page_id=page.id) }}" style="display:flex;flex-direction:column;flex:1;min-height:0" {% if error %}data-unsaved{% endif %}>
   {{ ui.csrf() }}
-  <input type="hidden" name="explicit" value="0">
+  {# Après un conflit, la 1re sauvegarde archive la version actuelle (explicit=1) avant de la remplacer. #}
+  <input type="hidden" name="explicit" value="{{ '1' if error else '0' }}">
+  {# `page_version` : empreinte de la page ; `version` reste la version de l'appli (?v= de app.css / app.js) #}
+  <input type="hidden" name="version" value="{{ page_version }}">
+  <div class="conflict-box {% if not error %}hide{% endif %}" role="alert" data-page-conflict style="margin:10px 16px 0">{{ icon('alert', 15) }}<div><span data-page-conflict-text>{{ error }}</span>
+    {% if error %}<div class="small" style="margin-top:4px">Ton texte est dans l’éditeur. La version actuelle de la page est ci-dessous : reprends-en ce qui manque, puis clique sur « Enregistrer ». Elle restera de toute façon dans l’historique.</div>{% else %}<div class="small" style="margin-top:4px">L’enregistrement automatique est arrêté. Clique sur « Enregistrer » pour comparer ton texte avec la version actuelle, ou copie ton texte puis recharge la page.</div>{% endif %}</div></div>
+  {% if error %}
+  <details class="conflict-current" open style="margin:8px 16px 0"><summary class="small bold">Version actuelle : « {{ page.title }} »</summary>{{ page.content or '' }}</details>
+  {% endif %}
   <div class="subbar" style="gap:8px">
     <input class="input input-sm" name="emoji" value="{{ page.emoji }}" maxlength="16" title="Emoji de la page" style="width:52px;text-align:center;font-size:16px">
-    <input class="input input-lg input-bare grow" name="title" value="{{ page.title }}" placeholder="Titre de la page" autocomplete="off" required style="font-weight:650;min-width:200px">
+    <input class="input input-lg input-bare grow" name="title" value="{{ draft.title if draft else page.title }}" placeholder="Titre de la page" autocomplete="off" required style="font-weight:650;min-width:200px">
     <div class="flex gap-4 md-toolbar" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px 4px">
       <button type="button" data-page-tool="bold" title="Gras (Ctrl+B)">{{ icon('bold', 15) }}</button>
       <button type="button" data-page-tool="italic" title="Italique (Ctrl+I)">{{ icon('italic', 15) }}</button>
@@ -42,7 +50,7 @@
     <button class="btn btn-sm btn-primary" title="Enregistrer et créer une version (Ctrl+S)">{{ icon('check', 14) }} Enregistrer</button>
   </div>
   <div class="page-editor" data-page-editor style="flex:1;min-height:0;grid-template-rows:minmax(0,1fr)">
-    <textarea name="content" data-mention placeholder="Écris en markdown… (# titre, - liste, - [ ] tâche, **gras**, @mention, EAE-12 pour lier un ticket)" spellcheck="true">{{ page.content or '' }}</textarea>
+    <textarea name="content" data-mention placeholder="Écris en markdown… (# titre, - liste, - [ ] tâche, **gras**, @mention, EAE-12 pour lier un ticket)" spellcheck="true">{{ draft.content if draft else (page.content or '') }}</textarea>
     <div class="preview md" data-page-preview></div>
   </div>
 </form>

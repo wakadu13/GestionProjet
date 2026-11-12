@@ -4,7 +4,8 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..models import Comment, Issue, Notification, Reaction
-from ..services import create_issue, move_issue, serialize_issue, to_int, update_issue
+from ..services import (create_issue, description_conflict, description_conflict_message, move_issue,
+                        serialize_issue, to_int, update_issue)
 from ..utils import can, excerpt, render_markdown, visible_projects
 from .home import search_everything
 
@@ -40,9 +41,13 @@ def issue_get(iid):
 def issue_update(iid):
     issue = _issue(iid)
     data = request.get_json(silent=True) or {}
-    allowed = {"title", "description", "state_id", "priority", "assignee_ids", "label_ids", "module_ids",
-               "start_date", "target_date", "estimate", "cycle_id", "parent_id"}
-    changed = update_issue(issue, {k: v for k, v in data.items() if k in allowed}, current_user)
+    allowed = {"title", "description", "description_version", "state_id", "priority", "assignee_ids", "label_ids",
+               "module_ids", "start_date", "target_date", "estimate", "cycle_id", "parent_id"}
+    data = {k: v for k, v in data.items() if k in allowed}
+    if description_conflict(issue, data):
+        return jsonify(ok=False, conflict=True, error=description_conflict_message(issue, current_user),
+                       issue=serialize_issue(issue)), 409
+    changed = update_issue(issue, data, current_user)
     db.session.commit()
     return jsonify(ok=True, changed=changed, props=render_props(issue), issue=serialize_issue(issue))
 

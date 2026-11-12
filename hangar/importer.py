@@ -131,23 +131,40 @@ def read_table(stream, filename: str):
     if ext == "json":
         payload = json.loads(data.decode("utf-8"))
         items = payload.get("issues", payload) if isinstance(payload, dict) else payload
-        rows = []
-        for it in items:
-            rows.append({
-                "key": it.get("key"), "external_id": it.get("external_id"), "title": it.get("title"),
-                "description": it.get("description"),
-                "state": (it.get("state") or {}).get("name") if isinstance(it.get("state"), dict) else it.get("state"),
-                "priority": it.get("priority"),
-                "assignees": ", ".join(a.get("username", a.get("name", "")) if isinstance(a, dict) else str(a)
-                                       for a in it.get("assignees") or []),
-                "labels": ", ".join(l.get("name", "") if isinstance(l, dict) else str(l) for l in it.get("labels") or []),
-                "module": ", ".join(m.get("name", "") if isinstance(m, dict) else str(m) for m in it.get("modules") or []),
-                "cycle": (it.get("cycle") or {}).get("name") if isinstance(it.get("cycle"), dict) else it.get("cycle"),
-                "start": it.get("start_date"), "target": it.get("target_date"), "estimate": it.get("estimate"),
-                "parent": it.get("parent"),
-            })
-        return rows
+        return [_row_from_json(it) for it in items if isinstance(it, dict)]
     raise ValueError("Format non pris en charge (xlsx, csv ou json attendu).")
+
+
+def _row_from_json(it: dict) -> dict:
+    """Ligne d'import depuis un ticket JSON (export de Hangar ou fichier proche). Seules les clés présentes dans
+    l'objet sont reprises : un champ absent du fichier ne doit pas effacer la valeur du ticket mis à jour."""
+    def name(v, *keys):
+        if isinstance(v, dict):
+            return next((v[k] for k in keys if v.get(k)), "")
+        return v
+
+    def names(v, *keys):
+        if v is None:
+            return []
+        return [name(x, *keys) for x in (v if isinstance(v, (list, tuple)) else [v])]
+
+    simple = {"key": "key", "external_id": "external_id", "title": "title", "description": "description",
+              "priority": "priority", "start_date": "start", "target_date": "target", "estimate": "estimate",
+              "parent": "parent"}
+    row = {field: it[k] for k, field in simple.items() if k in it}
+    if "state" in it:
+        row["state"] = name(it["state"], "name")
+    if "cycle" in it:
+        row["cycle"] = name(it["cycle"], "name")
+    if "assignees" in it:
+        row["assignees"] = names(it["assignees"], "username", "name")
+    if "labels" in it:
+        row["labels"] = names(it["labels"], "name")
+    if "modules" in it:
+        row["module"] = names(it["modules"], "name")
+    if "blocked_by" in it:
+        row["depends"] = names(it["blocked_by"], "key")
+    return row
 
 
 # ---------------------------------------------------------------------------
@@ -164,11 +181,92 @@ def _text(v) -> str:
 
 
 def _split(v) -> list[str]:
+    """Personnes ou dépendances d'une cellule (« Dupont et Martin », « EAE-3, EAE-4 ») ; liste JSON acceptée."""
+    if isinstance(v, (list, tuple)):
+        return [s for s in (_text(x) for x in v) if s]
     s = _text(v)
     if not s:
         return []
     parts = re.split(r"\s*(?:[,;/&+\n]|\bet\b)\s*", s)
     return [p.strip() for p in parts if p.strip()]
+
+
+# « Terrain / Analyse », « R&D », « Plan + suivi », « Santé et sécurité » : deux noms possibles (voir _split_names)
+_NAME_JOINERS = re.compile(r"\s*(?:[/&+]|\bet\b)\s*")
+
+
+def _cut_names(s: str, brackets: bool) -> list[tuple[str, bool]] | None:
+    """Coupe sur « , », « ; » et les retours à la ligne, sauf entre guillemets ("a, b") et, si `brackets`, entre
+    parenthèses. Renvoie des couples (nom, était entre guillemets), ou None si les parenthèses ne sont pas
+    équilibrées."""
+    parts, buf, quoted, depth, i = [], [], False, 0, 0
+    while i < len(s):
+        ch = s[i]
+        if ch == '"' and not "".join(buf).strip():  # nom entre guillemets ("" = guillemet dans le nom)
+            j, inside = i + 1, []
+            while j < len(s) and not (s[j] == '"' and s[j + 1:j + 2] != '"'):
+                inside.append(s[j])
+                j += 2 if s[j] == '"' else 1
+            buf, quoted, i = inside, True, j + 1
+            continue
+        if brackets and ch in "([":
+            depth += 1
+        elif brackets and ch in ")]":
+            depth -= 1
+        if ch in ",;\n" and depth == 0:
+            parts.append(("".join(buf), quoted))
+            buf, quoted = [], False
+        else:
+            buf.append(ch)
+        i += 1
+    parts.append(("".join(buf), quoted))
+    if depth != 0:
+        return None
+    return [(p.strip(), q) for p, q in parts if p.strip()]
+
+
+def _split_names(v, known=()) -> list[str]:
+    """Noms d'étiquettes ou de modules d'une cellule. La cellule entière est d'abord cherchée parmi les noms
+    existants (« Phase 1, préparation »). Sinon elle est coupée sur « , », « ; » ou un retour à la ligne, jamais
+    entre guillemets ni entre parenthèses (« Recueil terrain (entretiens, sondages) ») ; « R&D » ou « Santé et
+    sécurité » restent entiers. Une liste (fichier JSON) est prise telle quelle."""
+    if isinstance(v, (list, tuple)):
+        return [s for s in (_text(x) for x in v) if s]
+    s = _text(v)
+    if not s:
+        return []
+    known = {k.lower() for k in known}
+    if s.lower() in known:
+        return [s]
+    names = _cut_names(s, brackets=True)
+    out = []
+    for n, quoted in names if names is not None else _cut_names(s, brackets=False):
+        # « Terrain / Analyse » : deux noms seulement s'ils existent déjà tous les deux. Jamais entre guillemets :
+        # c'est ainsi que l'export écrit un nom qui contient « / », « & », « + » ou « et ».
+        sub = [] if quoted else [p.strip() for p in _NAME_JOINERS.split(n) if p.strip()]
+        out += sub if len(sub) > 1 and n.lower() not in known and all(p.lower() in known for p in sub) else [n]
+    return out
+
+
+def _join_names(names) -> str:
+    """Inverse de `_split_names` pour l'export : un nom qui contient un séparateur (« , » « ; » « / » « & » « + »
+    « et »…) est mis entre guillemets, pour être relu entier même si ses morceaux existent comme noms."""
+    out = []
+    for n in names:
+        if any(c in n for c in ',;"\n') or _NAME_JOINERS.search(n):
+            n = '"' + n.replace('"', '""') + '"'
+        out.append(n)
+    return ", ".join(out)
+
+
+def _key_parts(ref) -> tuple[str | None, int | None]:
+    """« EAE-12 » -> ("EAE", 12) ; autre chose -> (None, None)."""
+    ref = _text(ref)
+    if "-" in ref:
+        prefix, num = ref.rsplit("-", 1)
+        if num.strip().isdigit() and prefix.strip():
+            return prefix.strip().upper(), int(num)
+    return None, None
 
 
 class UserMatcher:
@@ -247,11 +345,18 @@ def _map_priority(value):
 
 
 def import_rows(project: Project, rows, actor: User, create_members=False, update_existing=False):
+    """Crée (ou met à jour) les tickets d'un fichier. Seules les cellules remplies comptent : une colonne absente
+    ou une cellule vide ne change pas le ticket mis à jour. Une clé d'un autre projet (« EAE-5 » importé dans
+    « MEM ») n'est jamais rapprochée d'un ticket existant ; Parent et Bloqué par visent d'abord les tickets du
+    fichier lui-même (table clé du fichier -> ticket créé ou mis à jour)."""
     report = {"created": 0, "updated": 0, "skipped": 0, "warnings": []}
     users = UserMatcher(project, create=create_members)
+    ident = (project.identifier or "").upper()
     by_ext: dict[str, Issue] = {}
+    by_key: dict[str, Issue] = {}  # clé du fichier (« EAE-5 ») -> ticket créé ou mis à jour par cet import
     pending_deps, pending_parent = [], []
     touched_modules = set()
+    foreign, duplicated = set(), 0
     for i in Issue.query.filter(Issue.project_id == project.id, Issue.external_id.isnot(None)):
         by_ext[i.external_id] = i
     for row in rows:
@@ -260,15 +365,20 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
             report["skipped"] += 1
             continue
         ext = _text(row.get("external_id"))
-        existing = None
-        if update_existing:
-            if ext and ext in by_ext:
-                existing = by_ext[ext]
-            key = _text(row.get("key"))
-            if not existing and key and "-" in key and key.rsplit("-", 1)[1].isdigit():
-                existing = Issue.query.filter_by(project_id=project.id,
-                                                 sequence_id=int(key.rsplit("-", 1)[1])).first()
-        # Description composée
+        file_key = _text(row.get("key")).upper()
+        prefix, num = _key_parts(file_key)
+        match = None
+        if prefix and prefix != ident:
+            foreign.add(prefix)  # ticket d'un autre projet : toujours une copie, jamais un écrasement
+        else:
+            match = by_ext.get(ext) if ext else None
+            if match is None and prefix:
+                match = Issue.query.filter_by(project_id=project.id, sequence_id=num).first()
+        existing = match if update_existing else None
+        if match is not None and not update_existing:
+            duplicated += 1
+        data = {"title": title[:255]}
+        # Description composée, seulement si le fichier en donne une
         desc_parts = []
         if _text(row.get("description")):
             desc_parts.append(_text(row.get("description")))
@@ -278,11 +388,13 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
             desc_parts.append(f"**Profil :** {_text(row.get('profile'))}")
         if _text(row.get("source")):
             desc_parts.append(f"**Source :** {_text(row.get('source'))}")
-        data = {"title": title[:255], "description": "\n\n".join(desc_parts)}
+        if desc_parts:
+            data["description"] = "\n\n".join(desc_parts)
         st = _map_state(project, row.get("state"))
         if st:
             data["state_id"] = st.id
-        data["priority"] = _map_priority(row.get("priority"))
+        if _text(row.get("priority")):
+            data["priority"] = _map_priority(row.get("priority"))
         people = []
         for name in _split(row.get("assignees")) + _split(row.get("support")):
             u = users.find(name)
@@ -292,14 +404,16 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
         db.session.flush()
         if people:
             data["assignee_ids"] = [u.id for u in people]
-        label_names = _split(row.get("labels")) if row.get("labels") is not None else []
-        if re.match(r"^\s*jalon\b", title, re.I):
-            label_names.append("Jalon")
-        if re.match(r"^\s*marge\b", title, re.I):
-            label_names.append("Marge")
+        label_names = _split_names(row.get("labels"), [l.name for l in project.labels])
+        auto = [w for w in ("Jalon", "Marge") if re.match(rf"^\s*{w}\b", title, re.I)]
+        if auto and not label_names and existing is not None:
+            label_names = [l.name for l in existing.labels]  # pas d'étiquette dans le fichier : on garde les siennes
+        label_names += [w for w in auto if w.lower() not in {n.lower() for n in label_names}]
         if label_names:
-            data["label_ids"] = [get_or_create_label(project, n).id for n in label_names]
-        mods = [m for m in re.split(r"\s*[,;]\s*", _text(row.get("module"))) if m]
+            labels = [get_or_create_label(project, n) for n in label_names]
+            db.session.flush()  # identifiants des étiquettes tout juste créées
+            data["label_ids"] = [l.id for l in labels]
+        mods = _split_names(row.get("module"), [m.name for m in project.modules])
         if mods:
             ms = [get_or_create_module(project, m) for m in mods]
             db.session.flush()
@@ -313,10 +427,10 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
                 db.session.add(cyc)
                 db.session.flush()
             data["cycle_id"] = cyc.id
-        for field, key in (("start", "start_date"), ("target", "target_date")):
+        for field, attr in (("start", "start_date"), ("target", "target_date")):
             d = parse_date(row.get(field))
             if d:
-                data[key] = d
+                data[attr] = d
         est = row.get("estimate")
         try:
             if est not in (None, ""):
@@ -340,6 +454,8 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
             report["created"] += 1
         if ext:
             by_ext[ext] = issue
+        if file_key:
+            by_key[file_key] = issue
         comment = _text(row.get("comments"))
         if comment and not existing:
             author = people[0] if people else actor
@@ -352,10 +468,14 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
     db.session.flush()
 
     def resolve(ref):
+        ref = ref.strip()
+        if ref.upper() in by_key:  # ticket du fichier : sa copie dans ce projet
+            return by_key[ref.upper()]
         if ref in by_ext:
             return by_ext[ref]
-        if "-" in ref and ref.rsplit("-", 1)[1].isdigit():
-            return Issue.query.filter_by(project_id=project.id, sequence_id=int(ref.rsplit("-", 1)[1])).first()
+        prefix, num = _key_parts(ref)
+        if prefix == ident:  # ticket de ce projet absent du fichier
+            return Issue.query.filter_by(project_id=project.id, sequence_id=num).first()
         return None
 
     for issue, deps in pending_deps:
@@ -369,6 +489,17 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
         parent = resolve(ref)
         if parent:
             update_issue(issue, {"parent_id": parent.id}, actor, log=False)
+        else:
+            report["warnings"].append(f"Ticket parent introuvable « {ref} » pour « {issue.title[:40]} ».")
+    if foreign and update_existing:
+        names = ", ".join(f"« {p}-… »" for p in sorted(foreign))
+        report["warnings"].insert(0, f"Les clés {names} ne sont pas celles de ce projet ({ident}) : ces lignes "
+                                     "ont été ajoutées comme nouveaux tickets, sans toucher aux tickets existants.")
+    if duplicated:
+        report["warnings"].insert(0, f"{duplicated} ligne(s) correspondent à des tickets déjà présents (même ID ou "
+                                     "même clé) : elles ont été ajoutées en double. Si tu voulais modifier ces "
+                                     "tickets, supprime les doublons puis réimporte en cochant « Mettre à jour "
+                                     "les tickets existants ».")
     # Dates et statut des modules à partir de leurs tickets
     for m in touched_modules:
         refresh_module(m)
@@ -409,8 +540,8 @@ def _issue_row(i: Issue):
     return [
         i.key, i.title, i.description or "", i.state.name if i.state else "",
         STATE_GROUP_LABELS.get(i.state_group, ""), PRIORITY_LABELS.get(i.priority, ""),
-        ", ".join(u.display_name for u in i.assignees), ", ".join(l.name for l in i.labels),
-        ", ".join(m.name for m in i.modules), i.cycle.name if i.cycle else "",
+        ", ".join(u.display_name for u in i.assignees), _join_names(l.name for l in i.labels),
+        _join_names(m.name for m in i.modules), i.cycle.name if i.cycle else "",
         i.start_date, i.target_date, i.estimate, i.parent.key if i.parent else "", ", ".join(blockers),
         fmt_minutes(i.time_spent_minutes) if i.worklogs else "", i.created_by.display_name if i.created_by else "",
         i.created_at, i.updated_at, i.completed_at, i.external_id or "",
@@ -488,7 +619,14 @@ def export_xlsx(issues, title="Tickets") -> io.BytesIO:
 
 def export_json(issues) -> str:
     from .services import serialize_issue
-    return json.dumps({"exported_at": now().isoformat(), "issues": [serialize_issue(i) for i in issues]},
+
+    def item(i):
+        d = serialize_issue(i)
+        d["blocked_by"] = [r.related.key for r in IssueRelation.query.filter_by(issue_id=i.id,
+                                                                                relation_type="blocked_by")]
+        d["external_id"] = i.external_id
+        return d
+    return json.dumps({"exported_at": now().isoformat(), "issues": [item(i) for i in issues]},
                       ensure_ascii=False, indent=2)
 
 

@@ -1,6 +1,7 @@
 """Logique métier : création/modification de tickets, historique, notifications."""
 from __future__ import annotations
 
+import hashlib
 from datetime import date
 
 from flask import url_for
@@ -231,6 +232,47 @@ def activity_plain(a: Activity) -> str:
 # Tickets
 # ---------------------------------------------------------------------------
 
+def text_version(*parts) -> str:
+    """Empreinte courte d'un texte tel qu'il a été chargé (description, titre + contenu d'une page). Renvoyée par
+    le formulaire, elle montre si quelqu'un a modifié le texte entre-temps. Les fins de ligne Windows et les
+    blancs aux extrémités ne comptent pas."""
+    norm = "\x00".join((p or "").replace("\r\n", "\n").strip() for p in parts)
+    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:20]
+
+
+def description_conflict(issue: Issue, data: dict) -> bool:
+    """Contrôle avant d'écrire `data["description"]`. `data["description_version"]` (retiré de `data`) est
+    l'empreinte de la description chargée par l'éditeur ; sans elle, pas de contrôle (anciens clients).
+    Renvoie True si la description a changé depuis et que le texte envoyé l'écraserait. Si l'éditeur n'a rien
+    changé au texte chargé, la description actuelle est gardée (la clé est retirée de `data`)."""
+    base = data.pop("description_version", None)
+    if "description" not in data or not base:
+        return False
+    current = text_version(issue.description)
+    sent = text_version(data.get("description"))
+    if base == current or sent == current:
+        return False
+    if sent == base:  # texte inchangé dans cet éditeur : ne pas remettre l'ancienne version
+        data.pop("description")
+        return False
+    return True
+
+
+def description_conflict_message(issue: Issue, user: User) -> str:
+    """Message affiché quand `description_conflict` refuse un enregistrement."""
+    a = (Activity.query.filter_by(issue_id=issue.id, verb="updated", field="description")
+         .order_by(Activity.id.desc()).first())
+    who = a.actor if a else None
+    if who is not None and who.id == user.id:
+        what = "Tu as modifié la description ailleurs (autre onglet ou autre appareil) pendant que tu l’écrivais ici."
+    elif who is not None:
+        what = f"{who.display_name} a modifié la description pendant que tu l’écrivais."
+    else:
+        what = "Quelqu’un a modifié la description pendant que tu l’écrivais."
+    return (what + " Rien n’a été écrasé : compare ton texte avec la version actuelle, reprends ce qui manque, "
+            "puis enregistre à nouveau.")
+
+
 def _descendant_ids(issue: Issue) -> set[int]:
     out, stack = set(), list(issue.children)
     while stack:
@@ -262,7 +304,7 @@ def update_issue(issue: Issue, data: dict, actor: User, log: bool = True) -> lis
     if "description" in data:
         d = data.get("description") or ""
         if d.strip() != (issue.description or "").strip():
-            rec("description", None, None)
+            rec("description", issue.description or "", d)  # l'ancien texte reste dans l'historique
             issue.description = d
             handle_mentions(d, issue, actor, "la description")
 
@@ -580,6 +622,7 @@ def serialize_issue(i: Issue) -> dict:
     return {
         "id": i.id, "key": i.key, "project_id": i.project_id, "sequence_id": i.sequence_id,
         "title": i.title, "description": i.description,
+        "description_version": text_version(i.description),  # à renvoyer avec une nouvelle description
         "state": {"id": i.state.id, "name": i.state.name, "group": i.state.group, "color": i.state.color}
         if i.state else None,
         "priority": i.priority,
