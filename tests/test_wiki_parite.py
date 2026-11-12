@@ -179,7 +179,8 @@ class PaletteTests(PariteTestCase):
         self.assertIn("H.paletteSources", app_js)
         palette_js = (racine / "static" / "wiki" / "palette.js").read_text(encoding="utf-8")
         self.assertIn("paletteSources", palette_js)
-        self.assertIn('normalize("NFD")', palette_js)  # recherche tolérante aux accents
+        # Recherche tolérante aux accents (décomposition NFKD, comme hangar/texte.py, plier).
+        self.assertRegex(palette_js, r"""normalize\(["']NFK?D["']\)""")
 
 
 class DocumentationTests(PariteTestCase):

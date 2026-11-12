@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -25,6 +26,7 @@ from .models import (
     PRIORITY_ORDER, RECURRENCES, REMINDER_OFFSETS, AgendaEvent, AgendaImport, AgendaReminder, AgendaSettings,
     AgendaSubjectLink, AgendaTask, Notification, User, now,
 )
+from .texte import cle_tri
 from .utils import DAYS, DAYS_FULL, MONTHS, MONTHS_FULL, normalize
 
 IMPORT_MODES = {
@@ -124,7 +126,7 @@ def event_color(ev: AgendaEvent) -> str:
         return EXAM_COLOR
     if ev.kind in KIND_COLORS:
         return KIND_COLORS[ev.kind]
-    h = int(hashlib.md5(normalize(ev.title).encode()).hexdigest()[:8], 16)
+    h = int(hashlib.md5(_ancienne_cle(ev.title).encode()).hexdigest()[:8], 16)
     return SUBJECT_COLORS[h % len(SUBJECT_COLORS)]
 
 
@@ -456,7 +458,7 @@ TASK_GROUP_LABELS = [("overdue", "En retard"), ("today", "Aujourd’hui"), ("tom
 def categories(user: User) -> list[str]:
     rows = (db.session.query(AgendaTask.category).filter(AgendaTask.user_id == user.id, AgendaTask.category != "")
             .distinct().all())
-    return sorted({r[0] for r in rows if r[0]}, key=str.lower)
+    return sorted({r[0] for r in rows if r[0]}, key=cle_tri)
 
 
 # ---------------------------------------------------------------------------
@@ -722,7 +724,7 @@ def _digest_taches(ctx):
         return None
     html = ""
     if occs:
-        occs.sort(key=lambda o: (o.task.start_time or time(23, 59), o.task.title.lower()))
+        occs.sort(key=lambda o: (o.task.start_time or time(23, 59), cle_tri(o.task.title)))
         html += '<ul style="padding-left:18px;margin:0">' + "".join(_task_line(o.task, ctx.aujourdhui) for o in occs) + "</ul>"
     if overdue:
         html += ('<div style="font-size:12.5px;font-weight:600;color:#dc2626;margin:10px 0 2px">'
@@ -1257,6 +1259,22 @@ def subject_key(title: str) -> str:
     return normalize(title)[:300]
 
 
+def _ancienne_cle(title: str) -> str:
+    """Titre normalisé comme avant que ``normalize`` écrive « œ » en « oe » et lise « ’ » comme
+    « ' » (« Manœuvre » donnait « manuvre », « Droit de l’homme » « droit de lhomme »). Garde les
+    liens de matière enregistrés avant et la couleur des séances (calculée sur ce titre)."""
+    text = unicodedata.normalize("NFKD", str(title or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _subject_link(user, title: str) -> AgendaSubjectLink | None:
+    """Lien de matière d'un titre de séance, y compris s'il a été enregistré avec l'ancienne clé."""
+    key, old = subject_key(title), _ancienne_cle(title)[:300]
+    links = AgendaSubjectLink.query.filter(AgendaSubjectLink.user_id == user.id,
+                                           AgendaSubjectLink.subject.in_({key, old})).all()
+    return next((l for l in links if l.subject == key), links[0] if links else None)
+
+
 def _words(text: str) -> list[str]:
     out = []
     for w in normalize(re.sub(r"([a-z])([A-Z])", r"\1 \2", text or "")).split():
@@ -1303,7 +1321,7 @@ def _wiki_collections() -> list[dict]:
     except Exception:  # noqa: BLE001 - wiki absent ou coffre illisible
         return []
     out = []
-    for path in sorted(vault.folders(), key=lambda p: p.lower()):
+    for path in sorted(vault.folders(), key=cle_tri):
         parts = [p for p in str(path).split("/") if p]
         if not parts or len(parts) > 3 or parts[0].lower() in _IGNORED_FOLDERS or any(p.startswith(".") for p in parts):
             continue
@@ -1353,7 +1371,7 @@ def qcm_categories(user) -> dict[str, int]:
 
 def subject_links(user, ev: AgendaEvent) -> dict:
     """Liens et suggestions d'une séance pour la fenêtre de détail."""
-    link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=subject_key(ev.title)).first()
+    link = _subject_link(user, ev.title)
     out = {"subject": ev.title, "wiki": None, "qcm": None, "wikiSuggest": [], "qcmSuggest": [], "wikiAll": [],
            "qcmAll": []}
     cols = wiki_collections()
@@ -1380,13 +1398,15 @@ def subject_links(user, ev: AgendaEvent) -> dict:
     if out["qcm"] is None and cats:
         scored = sorted(((score(c), c) for c in cats), key=lambda x: -x[0])
         out["qcmSuggest"] = [c for s, c in scored[:3] if s >= 45]
-        out["qcmAll"] = sorted(cats, key=str.lower)
+        out["qcmAll"] = sorted(cats, key=cle_tri)
     return out
 
 
 def set_subject_link(user, title: str, wiki_path: str | None = None, qcm_category: str | None = None) -> AgendaSubjectLink:
     key = subject_key(title)
-    link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=key).first()
+    link = _subject_link(user, title)
+    if link is not None and link.subject != key:
+        link.subject = key  # enregistré avec l'ancienne clé : mis à jour en passant
     if link is None:
         link = AgendaSubjectLink(user_id=user.id, subject=key, title=title[:300], created_at=now())
         db.session.add(link)
@@ -1400,7 +1420,7 @@ def set_subject_link(user, title: str, wiki_path: str | None = None, qcm_categor
 
 def set_exam_objective(user, ev: AgendaEvent) -> int:
     """Date d'examen des sets de la catégorie de QCM liée = jour du contrôle. Retourne le nombre de sets."""
-    link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=subject_key(ev.title)).first()
+    link = _subject_link(user, ev.title)
     if link is None or not link.qcm_category:
         return 0
     from .qcm.models import QuizDeck

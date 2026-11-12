@@ -21,12 +21,13 @@ import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path, PurePosixPath
 
 import yaml
 from flask import current_app, has_app_context
 
+from ..texte import UN_POUR_UN, cle_tri
 from .liens import wiki_url
 
 journal = logging.getLogger(__name__)
@@ -61,6 +62,9 @@ class _FoldTable(dict):
 
     def __missing__(self, code):
         ch = chr(code)
+        if ch in UN_POUR_UN:  # apostrophes et guillemets typographiques, espaces insécables
+            self[code] = UN_POUR_UN[ch]
+            return UN_POUR_UN[ch]
         base = "".join(c for c in unicodedata.normalize("NFD", ch) if not unicodedata.combining(c))
         folded = (base if len(base) == 1 else ch).lower()
         # Garde la longueur (« İ ».lower() donne 2 caractères) pour que les positions concordent.
@@ -72,11 +76,48 @@ _FOLD_TABLE = _FoldTable()
 
 
 def fold(text):
-    """Minuscules sans accents, en gardant la longueur (é→e) pour repérer les extraits.
+    """Minuscules sans accents, en gardant la longueur (é→e, ’→') pour repérer les extraits.
 
-    Permet de chercher « reseau » et de trouver « Réseau ».
+    Permet de chercher « reseau d'acces » et de trouver « Réseau d’accès ». « œ » et « æ »
+    restent tels quels (la longueur changerait) : ``trouve``, ``compte`` et ``positions``
+    les font correspondre à « oe » et « ae ».
     """
     return text.translate(_FOLD_TABLE)
+
+
+_LIGATURE_RE = re.compile("oe|œ|ae|æ")
+
+
+@lru_cache(maxsize=512)
+def _motif(mot):
+    """Motif d'un mot replié par ``fold`` où « oe » et « œ » (« ae » et « æ ») se valent :
+    « noeud » trouve « nœud » et inversement. ``None`` si le mot n'en contient pas."""
+    if not _LIGATURE_RE.search(mot):
+        return None
+    morceaux, debut = [], 0
+    for m in _LIGATURE_RE.finditer(mot):
+        morceaux += [re.escape(mot[debut:m.start()]), "(?:oe|œ)" if m.group() in ("oe", "œ") else "(?:ae|æ)"]
+        debut = m.end()
+    morceaux.append(re.escape(mot[debut:]))
+    return re.compile("".join(morceaux))
+
+
+def trouve(mot, texte):
+    """Vrai si le mot replié (``fold``) figure dans le texte replié, ligatures comprises."""
+    motif = _motif(mot)
+    return mot in texte if motif is None else motif.search(texte) is not None
+
+
+def compte(mot, texte, debut=0, fin=None):
+    """Nombre d'occurrences du mot replié dans ``texte[debut:fin]``, ligatures comprises."""
+    fin = len(texte) if fin is None else fin
+    motif = _motif(mot)
+    return texte.count(mot, debut, fin) if motif is None else len(motif.findall(texte, debut, fin))
+
+
+def positions(mot, texte):
+    """(début, fin) de chaque occurrence du mot replié dans le texte replié."""
+    return [m.span() for m in re.finditer(_motif(mot) or re.escape(mot), texte)] if mot else []
 
 
 def map_outside_code(text, fn, pattern=CODE_RE):
@@ -393,19 +434,19 @@ class Vault:
         return None
 
     def sorted_notes(self):
-        return sorted(self.notes.values(), key=lambda n: n.key.lower())
+        return sorted(self.notes.values(), key=lambda n: cle_tri(n.key))
 
     def recent_notes(self, limit=10):
         return sorted(self.notes.values(), key=lambda n: n.mtime, reverse=True)[:limit]
 
     def notes_with_tag(self, tag):
-        return sorted(self.tags.get(tag.lower().lstrip("#"), ()), key=lambda n: n.title.lower())
+        return sorted(self.tags.get(tag.lower().lstrip("#"), ()), key=lambda n: cle_tri(n.title))
 
     def all_tags(self):
-        return sorted(((tag, len(notes)) for tag, notes in self.tags.items()), key=lambda t: t[0])
+        return sorted(((tag, len(notes)) for tag, notes in self.tags.items()), key=lambda t: cle_tri(t[0]))
 
     def pdfs(self):
-        return sorted((a for a in self.attachments.values() if a.suffix == ".pdf"), key=lambda a: str(a.path).lower())
+        return sorted((a for a in self.attachments.values() if a.suffix == ".pdf"), key=lambda a: cle_tri(str(a.path)))
 
     @cached_property
     def tree(self):
@@ -427,7 +468,7 @@ class Vault:
             folder(pdf.path.parent.parts)["files"].append(pdf)
 
         def freeze(node):
-            node["folders"] = [freeze(f) for _, f in sorted(node["folders"].items(), key=lambda i: i[0].lower())]
+            node["folders"] = [freeze(f) for _, f in sorted(node["folders"].items(), key=lambda i: cle_tri(i[0]))]
             node["count"] = len(node["notes"]) + len(node["files"]) + sum(f["count"] for f in node["folders"])
             return node
 
@@ -439,7 +480,7 @@ class Vault:
         for dirpath, dirnames, _ in os.walk(self.root):
             dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS and not d.startswith(".")]
             found.update(Path(dirpath, d).relative_to(self.root).as_posix() for d in dirnames)
-        return sorted(found, key=str.lower)
+        return sorted(found, key=cle_tri)
 
     def link_for(self, item):
         """Texte à mettre entre [[ ]] : le nom seul suffit, sauf si un autre
@@ -462,7 +503,7 @@ class Vault:
         found = [a for a in self.attachments.values() if a.suffix in suffixes]
         return [
             {"link": self.link_for(a), "folder": str(a.path.parent) if a.path.parent.parts else "", "url": a.view_url}
-            for a in sorted(found, key=lambda a: str(a.path).lower())
+            for a in sorted(found, key=lambda a: cle_tri(str(a.path)))
         ]
 
     def attachment_folder(self, note_key):
@@ -492,29 +533,26 @@ class Vault:
         return self._rendered[note.key]
 
     def search(self, query, limit=50):
-        """Recherche insensible à la casse et aux accents. Renvoie (note, extrait HTML)."""
+        """Recherche insensible à la casse, aux accents, à la forme de l'apostrophe et aux
+        ligatures (« noeud d'acces » trouve « Nœud d’accès »). Renvoie (note, extrait HTML)."""
         words = [fold(w) for w in query.split() if w]
         if not words:
             return []
         results = []
         for note in self.notes.values():
             title, body = note.folded_title, note.folded_body
-            in_title = [w for w in words if w in title]
-            if not all(w in title or w in body for w in words):
+            in_title = [w for w in words if trouve(w, title)]
+            if not all(w in in_title or trouve(w, body) for w in words):
                 continue
-            score = 5 * len(in_title) + sum(body.count(w) for w in words)
-            results.append((score, note, self._snippet(note.clean_body, body, words)))
-        results.sort(key=lambda r: (-r[0], r[1].title.lower()))
-        return [(note, snippet) for _, note, snippet in results[:limit]]
+            score = 5 * len(in_title) + sum(compte(w, body) for w in words)
+            results.append((score, note))
+        results.sort(key=lambda r: (-r[0], cle_tri(r[1].title)))
+        return [(note, self._snippet(note.clean_body, note.folded_body, words)) for _, note in results[:limit]]
 
     @staticmethod
     def _snippet(text, folded, words, width=240):
         """Extrait du corps centré sur la première occurrence, termes surlignés."""
-        spans = sorted(
-            (m.start(), m.end())
-            for w in words
-            for m in re.finditer(re.escape(w), folded)
-        )
+        spans = sorted(span for w in words for span in positions(w, folded))
         if not spans:
             snippet = text[:width]
             return escape(snippet) + ("…" if len(text) > width else "")

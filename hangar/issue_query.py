@@ -14,7 +14,7 @@ from .models import (
     MODULE_STATUS_COLORS, PRIORITIES, PRIORITY_ORDER, STATE_GROUP_ORDER, STATE_GROUPS, Cycle, Issue,
     Label, Module, Project, State, User, issue_subscribers,
 )
-from .utils import week_bounds
+from .utils import cle_tri, contient, week_bounds
 
 LAYOUTS = [
     ("list", "Liste", "list"),
@@ -166,10 +166,9 @@ def apply_filters(q, f: dict, me: User):
             q = q.filter(Issue.project_id.in_(db.select(Project.id).where(
                 Project.identifier == m.group(1).upper())), Issue.sequence_id == int(m.group(2)))
         elif text.isdigit():
-            q = q.filter(db.or_(Issue.sequence_id == int(text), Issue.title.ilike(f"%{text}%")))
+            q = q.filter(db.or_(Issue.sequence_id == int(text), contient(Issue.title, text)))
         else:
-            like = f"%{text}%"
-            q = q.filter(db.or_(Issue.title.ilike(like), Issue.description.ilike(like)))
+            q = q.filter(db.or_(contient(Issue.title, text), contient(Issue.description, text)))
     return q
 
 
@@ -217,7 +216,7 @@ def sort_issues(issues, order_by: str):
         "priority": lambda i: (PRIORITY_ORDER.get(i.priority, 9), i.sort_order or 0),
         "target": lambda i: (i.target_date or far, PRIORITY_ORDER.get(i.priority, 9)),
         "start": lambda i: (i.start_date or far, i.target_date or far),
-        "title": lambda i: i.title.lower(),
+        "title": lambda i: cle_tri(i.title),
         "key": lambda i: (i.project.identifier, i.sequence_id),
     }
     reverse = order_by in ("-created", "-updated")
@@ -268,7 +267,7 @@ def group_issues(issues, group_by: str, projects: list[Project], show_empty=True
         for p in projects:
             for u in p.member_users:
                 members[u.id] = u
-        for u in sorted(members.values(), key=lambda u: u.display_name.lower()):
+        for u in sorted(members.values(), key=lambda u: cle_tri(u.display_name)):
             add(_group(u.id, u.display_name, "user", u.avatar_color, u))
         none = _group("none", "Non assigné", "user")
         for i in issues:

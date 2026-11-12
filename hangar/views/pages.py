@@ -7,7 +7,7 @@ from flask_login import current_user, login_required
 from ..extensions import db
 from ..models import Page, PageVersion, now
 from ..services import to_int
-from ..utils import can, get_project, slugify
+from ..utils import can, contient, get_project, slugify, tri_fr
 
 bp = Blueprint("pages", __name__, url_prefix="/projects/<int:pid>/pages")
 
@@ -160,9 +160,9 @@ def index(pid):
             q = q.filter(Page.is_public.is_(True))
     text = (request.args.get("q") or "").strip()
     if text:
-        q = q.filter(db.or_(Page.title.ilike(f"%{text}%"), Page.content.ilike(f"%{text}%")))
+        q = q.filter(db.or_(contient(Page.title, text), contient(Page.content, text)))
     sort = request.args.get("sort", "updated")
-    q = q.order_by(Page.title) if sort == "title" else q.order_by(Page.updated_at.desc())
+    q = q.order_by(tri_fr(Page.title)) if sort == "title" else q.order_by(Page.updated_at.desc())
     pages = [p for p in q.all() if _visible(p)]
     return render_template("pages/index.html", project=project, pages=pages, tab=tab, q=text, sort=sort,
                            templates=TEMPLATES, can_edit=can(current_user, "edit", project))

@@ -9,7 +9,7 @@ from ..models import (
     ESTIMATE_TYPES, PALETTE, ROLES, STATE_GROUP_LABELS, Issue, Label, Project, ProjectMember, State, User, now,
 )
 from ..services import create_project, ensure_member, log_activity, to_int
-from ..utils import back_url, get_project, parse_date, project_role, visible_projects
+from ..utils import back_url, contient_plie, get_project, parse_date, project_role, tri_fr, visible_projects
 
 bp = Blueprint("projects", __name__, url_prefix="/projects")
 
@@ -36,9 +36,9 @@ def index():
         projects = [p for p in projects if p.archived_at]
     elif tab == "mine":
         projects = [p for p in projects if p.member(current_user)]
-    text = (request.args.get("q") or "").strip().lower()
+    text = (request.args.get("q") or "").strip()
     if text:
-        projects = [p for p in projects if text in p.name.lower() or text in p.identifier.lower()]
+        projects = [p for p in projects if contient_plie(text, p.name) or contient_plie(text, p.identifier)]
     if sort == "recent":
         projects.sort(key=lambda p: p.created_at, reverse=True)
     elif sort == "members":
@@ -89,7 +89,7 @@ def new():
 
 
 def _active_users():
-    return User.query.filter_by(active=True).order_by(User.first_name, User.last_name).all()
+    return User.query.filter_by(active=True).order_by(tri_fr(User.first_name), tri_fr(User.last_name)).all()
 
 
 @bp.route("/<int:pid>")

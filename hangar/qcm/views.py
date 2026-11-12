@@ -19,6 +19,7 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..icons import ICONS
+from ..texte import cle_tri
 from . import coffre, masque, planning, quiz, rendu, services
 from .models import _JAMAIS, Activite, ObjectifRevision, QuizDeck, QuizProgress, Signalement, TempsRevision, _get_or_create
 from .services import ancre, bibliotheque, file_du_jour, peut_modifier
@@ -68,7 +69,7 @@ def _menu():
             c["dues"] += x["revisions"]
         request._qcm_menu = {
             "dues": e["cartes_dues"], "a_reviser": e["a_reviser"],
-            "categories": sorted(cats.values(), key=lambda c: c["nom"].lower()),
+            "categories": sorted(cats.values(), key=lambda c: cle_tri(c["nom"])),
             "langues": [{"nom": l["nom"], "dues": l["a_revoir"]} for l in e["langues"]],
             "signalements": Signalement.query.filter_by(traite=False).count() if current_user.is_admin else 0,
             "peut_modifier": peut_modifier(current_user),
@@ -155,7 +156,7 @@ def index():
             "maitrise": round(sum(en["summary"]["pct_maitrise"] * en["summary"]["total"] for en in entries) / total) if total else 0,
             "ancre": "cat-" + ancre(cat)[4:],
         })
-    categories = sorted(par_langue.pop("", []), key=lambda c: c["nom"].lower())
+    categories = sorted(par_langue.pop("", []), key=lambda c: cle_tri(c["nom"]))
     langues = []
     resumes = {l["nom"]: l for l in e["langues"]}
     for nom in library.noms_langues():
@@ -165,7 +166,7 @@ def index():
         for f in l["fichiers"]:
             par_dossier.setdefault(services.dossier_de(f), []).append(f)
         dossiers = []
-        for dossier, fs in sorted(par_dossier.items(), key=lambda t: t[0].lower()):
+        for dossier, fs in sorted(par_dossier.items(), key=lambda t: cle_tri(t[0])):
             entries = []
             for f in fs:
                 texte = quiz.normaliser_texte(" ".join((f.titre, f.description, dossier, nom)))
@@ -177,7 +178,7 @@ def index():
                              "resume": services.resume_langue(uid, nom, fs, now)})
         langues.append({"nom": nom, "resume": l["resume"], "dossiers": dossiers, "nb": len(l["fichiers"]),
                         "categories": par_langue.get(nom, []),
-                        "noms_dossiers": sorted({d["nom"] for d in dossiers} | {c["nom"] for c in par_langue.get(nom, [])}, key=str.lower)})
+                        "noms_dossiers": sorted({d["nom"] for d in dossiers} | {c["nom"] for c in par_langue.get(nom, [])}, key=cle_tri)})
     act = Activite.resume(uid, quiz.jour(now))
     examens = services.objectifs_par_categorie(services.objectifs(uid, library, e["decks"], now, 60))
     return render_template(
@@ -361,7 +362,7 @@ def stats():
     calendrier = Activite.calendrier(uid, aujourdhui)
     temps_max = max([l["total"] for l in temps] + [1])
     return render_template(
-        "qcm/stats.html", categories=sorted(categories.items(), key=lambda t: t[0].lower()),
+        "qcm/stats.html", categories=sorted(categories.items(), key=lambda t: cle_tri(t[0])),
         boites=range(quiz.BOITE_MAX + 1), ia=_ia(), can_edit=peut_modifier(current_user),
         previsions=prev, previsions_max=max([p["n"] for p in prev] + [1]),
         previsions_total=sum(p["n"] for p in prev), semaines=semaines, temps=temps, temps_totaux=temps_totaux,
@@ -402,7 +403,7 @@ def aujourdhui():
     jour = quiz.jour(now)
     e = services.etat_page(uid)
     sets_dus = sorted((x for x in e["sets"] if x["summary"]["a_reviser"]),
-                      key=lambda x: (-x["revisions"], -x["summary"]["a_reviser"], x["set"].titre.lower()))
+                      key=lambda x: (-x["revisions"], -x["summary"]["a_reviser"], cle_tri(x["set"].titre)))
     examens = services.objectifs(uid, e["library"], e["decks"], now)
     activite = Activite.resume(uid, jour)
     objectif = ObjectifRevision.de(uid)
@@ -470,7 +471,7 @@ def planning_page():
         if deck.date_objectif:
             cat["dates"].add(deck.date_objectif)
     cats = []
-    for c in sorted(categories.values(), key=lambda c: (c["langue"].lower(), c["nom"].lower())):
+    for c in sorted(categories.values(), key=lambda c: (cle_tri(c["langue"]), cle_tri(c["nom"]))):
         c["date_objectif"] = min(c["dates"]) if c["dates"] else None
         c["configures"] = sum(1 for s in c["sets"] if s["deck"].configure)
         c["ancre"] = "cat-" + ancre(c["nom"])[4:]
@@ -508,7 +509,7 @@ def _categories_import():
     racine = coffre.racine() / coffre.DOSSIER_QCM
     if not racine.is_dir():
         return []
-    return sorted((d.name for d in racine.iterdir() if d.is_dir() and not d.name.startswith(".")), key=str.lower)
+    return sorted((d.name for d in racine.iterdir() if d.is_dir() and not d.name.startswith(".")), key=cle_tri)
 
 
 # ---------------------------------------------------------------------------

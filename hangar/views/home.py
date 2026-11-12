@@ -10,7 +10,7 @@ from ..models import (
     Activity, Comment, Cycle, Favorite, Issue, Module, Notification, Page, Project, SavedView, State, Sticky,
     User, issue_assignees, now,
 )
-from ..utils import back_url, visible_projects, week_bounds
+from ..utils import back_url, contient, contient_plie, visible_projects, week_bounds
 
 bp = Blueprint("home", __name__)
 
@@ -174,21 +174,21 @@ def search_everything(text: str, limit=8):
     me = current_user
     projects = visible_projects(me)
     pids = [p.id for p in projects] or [0]
-    like = f"%{text}%"
     f = {"q": text}
     issues = IQ.apply_filters(IQ.base_query().filter(Issue.project_id.in_(pids)), f, me) \
         .order_by(Issue.updated_at.desc()).limit(limit).all()
     return {
         "issues": issues,
-        "projects": [p for p in projects if text.lower() in p.name.lower() or text.lower() in p.identifier.lower()][:limit],
-        "cycles": Cycle.query.filter(Cycle.project_id.in_(pids), Cycle.name.ilike(like)).limit(limit).all(),
-        "modules": Module.query.filter(Module.project_id.in_(pids), Module.name.ilike(like)).limit(limit).all(),
+        "projects": [p for p in projects if contient_plie(text, p.name) or contient_plie(text, p.identifier)][:limit],
+        "cycles": Cycle.query.filter(Cycle.project_id.in_(pids), contient(Cycle.name, text)).limit(limit).all(),
+        "modules": Module.query.filter(Module.project_id.in_(pids), contient(Module.name, text)).limit(limit).all(),
         "pages": Page.query.filter(Page.project_id.in_(pids), Page.archived_at.is_(None),
                                    db.or_(Page.is_public.is_(True), Page.owner_id == me.id),
-                                   db.or_(Page.title.ilike(like), Page.content.ilike(like))).limit(limit).all(),
+                                   db.or_(contient(Page.title, text), contient(Page.content, text))).limit(limit).all(),
         "members": User.query.filter(User.active.is_(True), db.or_(
-            User.first_name.ilike(like), User.last_name.ilike(like), User.username.ilike(like))).limit(limit).all(),
-        "comments": Comment.query.join(Issue).filter(Issue.project_id.in_(pids), Comment.body.ilike(like))
+            contient(db.func.coalesce(User.first_name, "") + " " + db.func.coalesce(User.last_name, ""), text),
+            contient(User.username, text))).limit(limit).all(),
+        "comments": Comment.query.join(Issue).filter(Issue.project_id.in_(pids), contient(Comment.body, text))
         .order_by(Comment.created_at.desc()).limit(limit).all(),
     }
 

@@ -7,9 +7,11 @@
   const categories = Array.from(document.querySelectorAll("details.qcm-cat"));
   const STORAGE_KEY = "hangar.qcm.categories-ouvertes";
 
-  // Même normalisation que quiz.normaliser_texte côté serveur.
+  // Même normalisation que quiz.normaliser_texte côté serveur (hangar/texte.py, plier).
+  const plier = (s) => String(s || '').replace(/[\u2018\u2019\u201a\u201b\u02bc\u2032\u00b4]/g, "'").replace(/[\u00ab\u00bb\u201c\u201d\u201e\u201f]/g, '"').replace(/[\u2010\u2011]/g, '-')
+    .normalize('NFKD').toLowerCase().replace(/\u0153/g, 'oe').replace(/\u00e6/g, 'ae').replace(/[\u0300-\u036f]/g, '');
   function normalize(text) {
-    return text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/\s+/).filter(Boolean);
+    return plier(text).split(/\s+/).filter(Boolean);
   }
   function loadOpen() {
     try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY)) || []); } catch (e) { return new Set(); }

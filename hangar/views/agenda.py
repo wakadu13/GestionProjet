@@ -14,7 +14,7 @@ from ..extensions import db
 from ..models import (PRIORITY_LABELS, RECURRENCES, REMINDER_OFFSETS, TASK_COLORS, AgendaEvent, AgendaImport,
                       AgendaReminder, AgendaTask, now)
 from ..services import to_int
-from ..utils import back_url, parse_date
+from ..utils import back_url, parse_date, plier
 
 bp = Blueprint("agenda", __name__)
 
@@ -191,12 +191,12 @@ def _own_event(eid: int) -> AgendaEvent:
 @login_required
 def tasks():
     show = request.args.get("show", "open")
-    q = (request.args.get("q") or "").strip().lower()
+    q = plier((request.args.get("q") or "").strip())
     cat = request.args.get("cat") or ""
     today = date.today()
 
     def keep(t):
-        if q and q not in (t.title + " " + (t.notes or "") + " " + (t.category or "")).lower():
+        if q and q not in plier(t.title + " " + (t.notes or "") + " " + (t.category or "")):
             return False
         return not cat or (t.category or "") == cat
 

@@ -19,6 +19,7 @@ from markupsafe import escape
 
 from ..extensions import db
 from ..models import now
+from ..texte import cle_tri
 from . import core, demandes, jobs, travaux
 from .models import AICopie, AIJob, AITutorExchange
 from .providers import AIError
@@ -456,7 +457,7 @@ def copie():
         cle = request.args.get("page", "")
         return render_template("ai/copie.html", dispo=_dispo(), plafond=_dispo() and core.cap_reached(),
                                max_photos=MAX_PHOTOS, page=vault.notes.get(cle.lower()) if cle else None,
-                               pages=sorted((n.key for n in vault.notes.values()), key=str.lower),
+                               pages=sorted((n.key for n in vault.notes.values()), key=cle_tri),
                                corrections=[_bloc_copie(c) for c in mes.limit(GARDER_COPIES)])
     if not _dispo():
         return _sans_ia()
@@ -644,8 +645,8 @@ def transformations():
                            en_cours=any(x["job"].status in ("pending", "running") for x in lignes),
                            lots=any(x["job"].status == "batch" for x in lignes),
                            pdfs=[a.path.as_posix() for a in vault.pdfs()],
-                           pages=sorted((n.key for n in vault.notes.values()), key=str.lower),
-                           dossiers=sorted({n.folder for n in vault.notes.values() if n.folder}, key=str.lower))
+                           pages=sorted((n.key for n in vault.notes.values()), key=cle_tri),
+                           dossiers=sorted({n.folder for n in vault.notes.values() if n.folder}, key=cle_tri))
 
 
 @bp.route("/transformations/<int:jid>/relire/", methods=["GET", "POST"])

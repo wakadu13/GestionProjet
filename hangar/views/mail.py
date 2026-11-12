@@ -11,7 +11,7 @@ from .. import mailer
 from ..extensions import db
 from ..models import EmailMessage, Issue, MailConfig, User
 from ..services import to_int
-from ..utils import can, render_markdown, require_admin
+from ..utils import can, render_markdown, require_admin, tri_fr
 
 bp = Blueprint("mail", __name__)
 
@@ -130,7 +130,7 @@ def settings():
             db.session.commit()
             flash(f"Historique vidé ({n} message(s)) et fichiers .eml supprimés.", "info")
         return redirect(url_for("mail.settings") + (f"#{action}" if action else ""))
-    users = User.query.filter_by(active=True).order_by(User.first_name, User.last_name).all()
+    users = User.query.filter_by(active=True).order_by(tri_fr(User.first_name), tri_fr(User.last_name)).all()
     history = EmailMessage.query.order_by(EmailMessage.created_at.desc(), EmailMessage.id.desc()).limit(100).all()
     return render_template("mail/settings.html", cfg=cfg, users=users, history=history, counts=_counts(),
                            presets=PRESETS, KIND_LABELS=mailer.KIND_LABELS, STATUS_LABELS=mailer.STATUS_LABELS,
@@ -219,7 +219,7 @@ def compose():
         issue = db.session.get(Issue, iid)
         if issue is not None and not can(current_user, "view", issue.project):
             issue = None
-    members = User.query.filter(User.active.is_(True)).order_by(User.first_name, User.last_name).all()
+    members = User.query.filter(User.active.is_(True)).order_by(tri_fr(User.first_name), tri_fr(User.last_name)).all()
     with_email = [u for u in members if mailer.valid_email(u.contact_email)]
     if request.method == "POST":
         f = request.form

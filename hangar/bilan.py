@@ -15,6 +15,7 @@ from .models import (
     PRIORITY_LABELS, PRIORITY_ORDER, Activity, Comment, Issue, IssueRelation, Page,
     Project, WorkLog,
 )
+from .texte import cle_tri
 from .utils import MONTHS_FULL, fmt_date, fmt_minutes, week_bounds
 
 PERIODS = [
@@ -168,7 +169,7 @@ def compute_bilan(projects: list[Project], start: date, end: date, label: str | 
         for u in p.member_users:
             members[u.id] = u
     member_rows = []
-    for u in sorted(members.values(), key=lambda u: u.display_name.lower()):
+    for u in sorted(members.values(), key=lambda u: cle_tri(u.display_name)):
         mine_open = [i for i in open_now if any(a.id == u.id for a in i.assignees)]
         member_rows.append({
             "name": u.display_name, "username": u.username, "color": u.avatar_color, "initials": u.initials,

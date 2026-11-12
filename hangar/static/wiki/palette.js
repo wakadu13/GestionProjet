@@ -14,7 +14,9 @@
   let chargement = null;
   let chargeA = 0;
 
-  const normaliser = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  // Même pliage que hangar/texte.py (plier) : casse, accents, forme de l'apostrophe et ligatures ignorés.
+  const normaliser = (s) => String(s || '').replace(/[\u2018\u2019\u201a\u201b\u02bc\u2032\u00b4]/g, "'").replace(/[\u00ab\u00bb\u201c\u201d\u201e\u201f]/g, '"').replace(/[\u2010\u2011]/g, '-')
+    .normalize('NFKD').toLowerCase().replace(/\u0153/g, 'oe').replace(/\u00e6/g, 'ae').replace(/[\u0300-\u036f]/g, '');
 
   function charger() {
     if (chargement && Date.now() - chargeA < GARDE_MS) return chargement;

@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 from ..extensions import db
 from ..models import Comment, Issue, Notification, Reaction
 from ..services import create_issue, move_issue, serialize_issue, to_int, update_issue
-from ..utils import can, excerpt, render_markdown, visible_projects
+from ..utils import can, contient, excerpt, render_markdown, tri_fr, visible_projects
 from .home import search_everything
 
 bp = Blueprint("api", __name__, url_prefix="/api")
@@ -176,11 +176,11 @@ def lookup():
         q = q.filter(Issue.project_id == pid)
     if text:
         if text.isdigit():
-            q = q.filter(db.or_(Issue.sequence_id == int(text), Issue.title.ilike(f"%{text}%")))
+            q = q.filter(db.or_(Issue.sequence_id == int(text), contient(Issue.title, text)))
         elif "-" in text and text.rsplit("-", 1)[1].isdigit():
             q = q.filter(Issue.sequence_id == int(text.rsplit("-", 1)[1]))
         else:
-            q = q.filter(Issue.title.ilike(f"%{text}%"))
+            q = q.filter(contient(Issue.title, text))
     if exclude:
         q = q.filter(Issue.id != exclude)
     return jsonify(ok=True, issues=[_issue_hit(i) for i in q.order_by(Issue.updated_at.desc()).limit(15)])
@@ -217,6 +217,6 @@ def notifications_summary():
 @login_required
 def members():
     from ..models import User
-    users = User.query.filter_by(active=True).order_by(User.first_name, User.last_name).all()
+    users = User.query.filter_by(active=True).order_by(tri_fr(User.first_name), tri_fr(User.last_name)).all()
     return jsonify(ok=True, members=[{"username": u.username, "name": u.display_name, "initials": u.initials,
                                       "color": u.avatar_color} for u in users])

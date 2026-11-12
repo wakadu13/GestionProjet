@@ -16,6 +16,7 @@ from flask import Response, abort, flash, jsonify, redirect, render_template, re
 from flask_login import current_user, login_required
 
 from ..extensions import db
+from ..texte import cle_tri
 from . import anki, coffre, langues, paquets, quiz
 from .coffre import DOSSIER_QCM, clean_key, invalider
 from .models import QuizDeck, QuizProgress, Signalement
@@ -129,9 +130,9 @@ def importer():
     library = bibliotheque(current_user.id)
     return render_template(
         "qcm/importer.html", categories_import=_categories_import(),
-        langues=sorted(set(library.noms_langues()) | {"Anglais"}, key=str.lower),
+        langues=sorted(set(library.noms_langues()) | {"Anglais"}, key=cle_tri),
         dossiers_langue=sorted({s.path.parent.name for s in library.langues.values() if not s.proprietaire}
-                               | {paquets.DOSSIER_VOCABULAIRE}, key=str.lower),
+                               | {paquets.DOSSIER_VOCABULAIRE}, key=cle_tri),
         cartes=_cartes(), ia=_ia(), pages=_pages_wiki() if _ia() else [],
     )
 
@@ -146,7 +147,7 @@ def _pages_wiki():
     for rel, _m, _s in coffre.signature(coffre.racine()):
         if rel.lower().endswith(".md") and not rel.startswith(DOSSIER_QCM + "/"):
             out.append((rel[:-3], PurePosixPath(rel).stem))
-    return sorted(out, key=lambda p: p[0].lower())[:3000]
+    return sorted(out, key=lambda p: cle_tri(p[0]))[:3000]
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +545,7 @@ def perso():
         "qcm/perso.html", elements=elements, erreurs=library.erreurs_perso.get(quiz.nom_perso(uid), []),
         max_fichiers=MAX_FICHIERS_PERSO, nombre=len(fichiers_perso(uid)),
         taille=taille_perso(uid), max_octets=MAX_OCTETS_PERSO,
-        langues=sorted(set(library.noms_langues()) | {"Anglais"}, key=str.lower), cartes=_cartes(),
-        dossiers=sorted({x["dossier"] for x in elements}, key=str.lower),
-        dossiers_langue=sorted({x["dossier"] for x in elements} | {paquets.DOSSIER_VOCABULAIRE}, key=str.lower),
+        langues=sorted(set(library.noms_langues()) | {"Anglais"}, key=cle_tri), cartes=_cartes(),
+        dossiers=sorted({x["dossier"] for x in elements}, key=cle_tri),
+        dossiers_langue=sorted({x["dossier"] for x in elements} | {paquets.DOSSIER_VOCABULAIRE}, key=cle_tri),
     )

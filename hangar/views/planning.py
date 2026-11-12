@@ -11,6 +11,7 @@ from .. import issue_query as IQ
 from ..models import (
     MODULE_STATUS_COLORS, STATE_GROUP_COLORS, Issue, IssueRelation,
 )
+from ..texte import cle_tri
 from ..utils import MONTHS, can, fmt_date, get_project, visible_projects
 
 bp = Blueprint("planning", __name__)
@@ -85,7 +86,7 @@ def _group_issues(project, issues, group_by):
         for i in issues:
             for u in i.assignees:
                 users[u.id] = u
-        ordered = sorted(users.values(), key=lambda u: u.display_name.lower())
+        ordered = sorted(users.values(), key=lambda u: cle_tri(u.display_name))
         buckets = {u.id: [] for u in ordered}
         none = []
         for i in issues:

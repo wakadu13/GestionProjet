@@ -15,6 +15,7 @@ from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .extensions import db
+from .texte import cle_tri
 
 
 def now() -> datetime:
@@ -283,19 +284,19 @@ class Project(db.Model):
     states = db.relationship("State", back_populates="project", cascade="all, delete-orphan",
                              order_by="State.sequence")
     labels = db.relationship("Label", back_populates="project", cascade="all, delete-orphan",
-                             order_by="Label.name")
+                             order_by="Label.name.collate('fr')")
     issues = db.relationship("Issue", back_populates="project", cascade="all, delete-orphan",
                              foreign_keys="Issue.project_id")
     cycles = db.relationship("Cycle", back_populates="project", cascade="all, delete-orphan",
                              order_by="Cycle.start_date")
     modules = db.relationship("Module", back_populates="project", cascade="all, delete-orphan",
-                              order_by="Module.name")
+                              order_by="Module.name.collate('fr')")
     pages = db.relationship("Page", back_populates="project", cascade="all, delete-orphan")
     views = db.relationship("SavedView", back_populates="project", cascade="all, delete-orphan")
 
     @property
     def member_users(self):
-        return sorted((m.user for m in self.members if m.user.active), key=lambda u: u.display_name.lower())
+        return sorted((m.user for m in self.members if m.user.active), key=lambda u: cle_tri(u.display_name))
 
     def member(self, user) -> "ProjectMember | None":
         for m in self.members:
@@ -432,8 +433,8 @@ class Issue(db.Model):
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     parent = db.relationship("Issue", remote_side=[id], foreign_keys=[parent_id], backref="children")
     intake_duplicate_of = db.relationship("Issue", remote_side=[id], foreign_keys=[intake_duplicate_of_id])
-    assignees = db.relationship("User", secondary=issue_assignees, order_by="User.first_name")
-    labels = db.relationship("Label", secondary=issue_labels, order_by="Label.name")
+    assignees = db.relationship("User", secondary=issue_assignees, order_by="User.first_name.collate('fr')")
+    labels = db.relationship("Label", secondary=issue_labels, order_by="Label.name.collate('fr')")
     modules = db.relationship("Module", secondary=issue_modules, back_populates="issues")
     subscribers = db.relationship("User", secondary=issue_subscribers)
     comments = db.relationship("Comment", back_populates="issue", cascade="all, delete-orphan",
@@ -1207,10 +1208,10 @@ class Initiative(db.Model):
 
     lead = db.relationship("User", foreign_keys=[lead_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
-    projects = db.relationship("Project", secondary=initiative_projects, order_by="Project.name",
-                               backref=db.backref("initiatives", order_by="Initiative.name"))
-    modules = db.relationship("Module", secondary=initiative_modules, order_by="Module.name",
-                              backref=db.backref("initiatives", order_by="Initiative.name"))
+    projects = db.relationship("Project", secondary=initiative_projects, order_by="Project.name.collate('fr')",
+                               backref=db.backref("initiatives", order_by="Initiative.name.collate('fr')"))
+    modules = db.relationship("Module", secondary=initiative_modules, order_by="Module.name.collate('fr')",
+                              backref=db.backref("initiatives", order_by="Initiative.name.collate('fr')"))
     updates = db.relationship("InitiativeUpdate", back_populates="initiative", cascade="all, delete-orphan",
                               order_by="InitiativeUpdate.created_at.desc()")
 

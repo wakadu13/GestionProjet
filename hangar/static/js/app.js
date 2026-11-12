@@ -7,6 +7,9 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+  // Même pliage que hangar/texte.py (plier) : casse, accents, forme de l'apostrophe et ligatures ignorés.
+  const plier = (s) => String(s || '').replace(/[\u2018\u2019\u201a\u201b\u02bc\u2032\u00b4]/g, "'").replace(/[\u00ab\u00bb\u201c\u201d\u201e\u201f]/g, '"').replace(/[\u2010\u2011]/g, '-')
+    .normalize('NFKD').toLowerCase().replace(/\u0153/g, 'oe').replace(/\u00e6/g, 'ae').replace(/[\u0300-\u036f]/g, '');
   const isTyping = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
 
   /* ------------------------------------------------------------------ Réseau */
@@ -141,9 +144,9 @@
   // Filtre textuel dans les menus d'options
   document.addEventListener('input', (e) => {
     if (!e.target.matches('[data-opt-filter]')) return;
-    const q = e.target.value.trim().toLowerCase();
+    const q = plier(e.target.value.trim());
     const form = e.target.closest('form');
-    $$('.opt[data-opt-text]', form).forEach((o) => { o.hidden = q && !o.dataset.optText.includes(q); });
+    $$('.opt[data-opt-text]', form).forEach((o) => { o.hidden = q && !plier(o.dataset.optText).includes(q); });
     $$('.pm-section', form).forEach((sec) => {
       const opts = $$('.opt[data-opt-text]', sec);
       if (opts.length) sec.hidden = opts.every((o) => o.hidden);
@@ -205,8 +208,8 @@
     let kb = cfg.noSearch ? 0 : -1;
     let shown = [];
     const render = () => {
-      const q = input ? input.value.trim().toLowerCase() : '';
-      shown = cfg.options.filter((o) => !q || o.label.toLowerCase().includes(q) || (o.hint || '').toLowerCase().includes(q));
+      const q = input ? plier(input.value.trim()) : '';
+      shown = cfg.options.filter((o) => !q || plier(o.label).includes(q) || plier(o.hint).includes(q));
       list.innerHTML = shown.length ? shown.map((o, i) => `<div class="pop-opt ${selected.has(o.id) ? 'sel' : ''} ${i === kb ? 'kb' : ''}" data-i="${i}">${o.icon || ''}<span class="ellipsis grow">${esc(o.label)}</span>${o.hint ? `<span class="muted tiny nowrap">${esc(o.hint)}</span>` : ''}<span class="check">${ICON.check}</span></div>`).join('') : '<div class="pop-empty">Aucun résultat</div>';
       const cur = $('.pop-opt.kb', list);
       if (cur) cur.scrollIntoView({ block: 'nearest' });
@@ -922,9 +925,8 @@
     pal.close();
     if (it.run) it.run(); else if (it.url) location.href = it.url;
   }
-  const sansAccents = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const palSearch = debounce(async (q) => {
-    const acts = ACTIONS.filter((a) => !q || sansAccents(a.title).includes(sansAccents(q)));
+    const acts = ACTIONS.filter((a) => !q || plier(a.title).includes(plier(q)));
     let r = { issues: [], projects: [], pages: [], members: [], cycles: [], modules: [] };
     try { r = await api(`${H.urls.search}?q=${encodeURIComponent(q)}`); } catch (e) { /* hors ligne */ }
     // Sources des modules (wiki : pages, PDF, QCM, langues, commandes) : H.paletteSources, [[groupe, éléments], …]

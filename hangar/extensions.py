@@ -6,6 +6,8 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
+from .texte import COLLATION_FR, comparer, contient_sql, plier
+
 db = SQLAlchemy()
 
 login_manager = LoginManager()
@@ -16,10 +18,16 @@ login_manager.login_message_category = "info"
 
 @event.listens_for(Engine, "connect")
 def _sqlite_pragmas(dbapi_conn, _record):
-    """Active les clés étrangères et le mode WAL (plusieurs lecteurs simultanés)."""
+    """Active les clés étrangères et le mode WAL (plusieurs lecteurs simultanés), et déclare la
+    recherche et le tri à la française (voir texte.py) : les fonctions ``plier(texte)`` (sans casse
+    ni accents) et ``contient_plie(texte, aiguille)`` (utils.contient), et la collation « fr »
+    (``ORDER BY nom COLLATE fr`` : « École » avant « Zèbre »)."""
     if isinstance(dbapi_conn, sqlite3.Connection):
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA foreign_keys=ON")
         cur.execute("PRAGMA journal_mode=WAL")
         cur.execute("PRAGMA synchronous=NORMAL")
         cur.close()
+        dbapi_conn.create_function("plier", 1, plier, deterministic=True)
+        dbapi_conn.create_function("contient_plie", 2, contient_sql, deterministic=True)
+        dbapi_conn.create_collation(COLLATION_FR, comparer)

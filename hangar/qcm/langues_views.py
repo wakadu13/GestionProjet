@@ -14,6 +14,7 @@ from flask import abort, flash, jsonify, redirect, render_template, request, url
 from flask_login import current_user, login_required
 
 from ..extensions import db
+from ..texte import cle_tri
 from . import fsrs, langues, quiz, services
 from .models import Activite, QuizProgress, TempsRevision, _get_or_create
 from .services import dossier_de
@@ -60,7 +61,7 @@ def langues_index():
         for f in l["fichiers"]:
             par_dossier.setdefault(dossier_de(f), []).append(f)
         dossiers = [{"nom": d, "sets": fs, "resume": services.resume_langue(uid, l["nom"], fs, now)}
-                    for d, fs in sorted(par_dossier.items(), key=lambda t: t[0].lower())]
+                    for d, fs in sorted(par_dossier.items(), key=lambda t: cle_tri(t[0]))]
         liste.append({**l, "dossiers": dossiers})
     return render_template("qcm/langues.html", langues=liste)
 

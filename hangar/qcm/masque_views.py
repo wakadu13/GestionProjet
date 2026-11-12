@@ -11,6 +11,7 @@ from pathlib import PurePosixPath
 from flask import abort, jsonify, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
+from ..texte import cle_tri
 from . import coffre, masque, paquets, quiz
 from .coffre import DOSSIER_QCM, clean_key, invalider
 from .gestion import MAX_FICHIERS_PERSO, MAX_OCTETS_PERSO, fichiers_perso, taille_perso
@@ -35,7 +36,7 @@ def _images_perso(user_id):
     if not dossier.is_dir():
         return []
     return [{"lien": masque.PERSO_IMAGE + f.name, "dossier": "Mon espace", "url": url_for("qcm.image_perso", nom=f.name)}
-            for f in sorted(dossier.iterdir(), key=lambda f: f.name.lower()) if f.suffix.lower() in masque.FORMATS]
+            for f in sorted(dossier.iterdir(), key=lambda f: cle_tri(f.name)) if f.suffix.lower() in masque.FORMATS]
 
 
 def _images_coffre():
@@ -66,7 +67,7 @@ def masque_editeur():
                    "image_url": masque.url_image(existant, str(q.get("image", ""))),
                    "masquer_tout": bool(q.get("masquer_tout", True)), "zones": q.get("zones", []),
                    "jouer": url_for("qcm.play", set=existant.id, mode="all")}
-    dossiers = sorted({s.categorie for s in bibliotheque(uid).sets.values() if s.est_masque} | {DOSSIER_DEFAUT}, key=str.lower)
+    dossiers = sorted({s.categorie for s in bibliotheque(uid).sets.values() if s.est_masque} | {DOSSIER_DEFAUT}, key=cle_tri)
     return render_template(
         "qcm/masque.html", donnees=donnees, images=_images_perso(uid) + _images_coffre(), dossiers=dossiers,
         enonce_defaut=masque.ENONCE_DEFAUT, max_zones=masque.MAX_ZONES, can_edit=peut_modifier(current_user))

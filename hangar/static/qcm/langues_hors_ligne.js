@@ -42,7 +42,9 @@
   }
 
   // -- Correction (langues.py) --
-  const normaliserTexte = (s) => String(s).trim().toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/\s+/).join(" ");
+  const plier = (s) => String(s || '').replace(/[\u2018\u2019\u201a\u201b\u02bc\u2032\u00b4]/g, "'").replace(/[\u00ab\u00bb\u201c\u201d\u201e\u201f]/g, '"').replace(/[\u2010\u2011]/g, '-')
+    .normalize('NFKD').toLowerCase().replace(/\u0153/g, 'oe').replace(/\u00e6/g, 'ae').replace(/[\u0300-\u036f]/g, '');
+  const normaliserTexte = (s) => plier(s).trim().split(/\s+/).join(" ");
   function normaliserStrict(s) {
     s = String(s).trim().toLowerCase();
     s = s.replace(/[’‘`ʼ]/g, "'").replace(/[“”«»]/g, '"');
@@ -326,7 +328,7 @@
     const h = el("div", "hl-section-h");
     h.append(el("h2", "", "Langues"), el("span", "count", pluriel(sets.length, "paquet")));
     section.append(h);
-    for (const [langue, fichiers] of [...parLangue.entries()].sort((a, b) => a[0].localeCompare(b[0], "fr"))) {
+    for (const [langue, fichiers] of [...parLangue.entries()].sort((a, b) => a[0].localeCompare(b[0], "fr", { numeric: true }))) {
       const r = resume(fichiers, now);
       const details = el("details", "qcm-cat");
       details.open = true;
@@ -341,7 +343,7 @@
       const q = "langue=" + encodeURIComponent(langue);
       actions.append(lien("Session du jour", "#langue?mode=quotidien&" + q, "primary"), lien("Points faibles", "#langue?mode=faibles&" + q), lien("Révision intensive", "#langue?mode=intensif&" + q));
       const ul = el("ul", "qcm-sets");
-      for (const s of fichiers.sort((a, b) => a.titre.localeCompare(b.titre, "fr"))) {
+      for (const s of fichiers.sort((a, b) => a.titre.localeCompare(b.titre, "fr", { numeric: true }))) {
         const rs = resume([s], now);
         const li = el("li", "qcm-set");
         const head = el("div", "qcm-set-head");

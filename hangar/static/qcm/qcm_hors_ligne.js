@@ -160,7 +160,7 @@
       if (!cats.has(nom)) cats.set(nom, []);
       cats.get(nom).push(s);
     }
-    return [...cats.entries()].sort((a, b) => a[0].localeCompare(b[0], "fr"));
+    return [...cats.entries()].sort((a, b) => a[0].localeCompare(b[0], "fr", { numeric: true }));
   }
 
   function categorieRepliable(nom, meta) {
@@ -197,7 +197,7 @@
     for (const [nom, sets] of parCategorie(qcm)) {
       let dues = 0;
       const ul = el("ul", "qcm-sets");
-      for (const s of sets.sort((a, b) => a.titre.localeCompare(b.titre, "fr"))) {
+      for (const s of sets.sort((a, b) => a.titre.localeCompare(b.titre, "fr", { numeric: true }))) {
         const n = fileDuJour(s, now).length;
         dues += n;
         const li = el("li", "qcm-set");

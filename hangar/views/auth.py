@@ -8,7 +8,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from .. import blocage_connexion as blocage
 from ..extensions import db
 from ..models import PALETTE, User, Workspace, now
-from ..utils import is_safe_next
+from ..utils import is_safe_next, tri_fr
 
 bp = Blueprint("auth", __name__)
 
@@ -79,7 +79,7 @@ def login():
         else:
             blocage.noter_echec(ident, ip)
             flash("Identifiant ou mot de passe incorrect.", "error")
-    accounts = User.query.filter_by(active=True).order_by(User.role, User.first_name, User.last_name).all()
+    accounts = User.query.filter_by(active=True).order_by(User.role, tri_fr(User.first_name), tri_fr(User.last_name)).all()
     return render_template("auth/login.html", ws=ws, accounts=accounts)
 
 

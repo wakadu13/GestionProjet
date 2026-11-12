@@ -83,10 +83,11 @@
     }
 
     // -- Comparaison souple pour les TROU/QRC (casse, accents, espaces, apostrophes
-    // typographiques et ponctuation finale ignorés) — même règle que normaliser_reponse --
+    // typographiques, ligatures « œ » et « æ », ponctuation finale ignorés) — même règle que normaliser_reponse --
+    const plier = (s) => String(s || '').replace(/[\u2018\u2019\u201a\u201b\u02bc\u2032\u00b4]/g, "'").replace(/[\u00ab\u00bb\u201c\u201d\u201e\u201f]/g, '"').replace(/[\u2010\u2011]/g, '-')
+      .normalize('NFKD').toLowerCase().replace(/\u0153/g, 'oe').replace(/\u00e6/g, 'ae').replace(/[\u0300-\u036f]/g, '');
     function normalize(s) {
-      return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
-        .replace(/[\u2018\u2019]/g, "'").trim().replace(/[.!?;:\s]+$/, "").replace(/\s+/g, " ");
+      return plier(s).trim().replace(/[.!?;:\s]+$/, "").replace(/\s+/g, " ");
     }
 
     function current() {

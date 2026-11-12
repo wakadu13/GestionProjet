@@ -11,6 +11,7 @@ from ..models import (
     MODULE_STATUS_COLORS, PALETTE, PRIORITIES, PRIORITY_COLORS, PRIORITY_LABELS, STATE_GROUP_COLORS,
     STATE_GROUP_LABELS, STATE_GROUPS, Issue, WorkLog,
 )
+from ..texte import cle_tri
 from ..utils import fmt_date, fmt_minutes, get_project, normalize, visible_projects, MONTHS
 
 bp = Blueprint("analytics", __name__)
@@ -230,7 +231,7 @@ def _team(issues, projects, period):
     pids = [p.id for p in projects] or [0]
     logs = WorkLog.query.join(Issue).filter(Issue.project_id.in_(pids), WorkLog.date >= start).all()
     rows = []
-    for u in sorted(members.values(), key=lambda u: u.display_name.lower()):
+    for u in sorted(members.values(), key=lambda u: cle_tri(u.display_name)):
         mine = [i for i in issues if any(a.id == u.id for a in i.assignees)]
         open_ = [i for i in mine if not i.is_closed]
         done_p = [i for i in mine if i.completed_at and i.completed_at.date() >= start and i.state_group == "completed"]
