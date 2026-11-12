@@ -266,6 +266,42 @@ class ArchivesPiegeesTests(unittest.TestCase):
         s = anki.lire_apkg(_zip({"collection.anki2": base}), "lent.apkg")
         self.assertEqual(len(s["questions"]), anki.MAX_NOTES_IMPORT)
 
+    def test_apkg_colonne_generee_refusee(self):
+        # Quelques Ko envoyés, mais chaque note « contiendrait » 4 Mo calculés à la lecture.
+        base = _base_anki(self.tmp, """
+            CREATE TABLE col (decks TEXT, models TEXT);
+            INSERT INTO col VALUES ('{}', '{}');
+            CREATE TABLE notes (id INTEGER, mid INTEGER, tags TEXT,
+                                flds TEXT GENERATED ALWAYS AS (printf('%.*c', 4000000, 'x')) VIRTUAL);
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 200)
+                INSERT INTO notes (id, mid, tags) SELECT x, 1, '' FROM n;
+        """)
+        contenu = _zip({"collection.anki2": base})
+        self.assertLess(len(contenu), 20_000)
+        debut = datetime.now()
+        with self.assertRaises(anki.ImportAnkiImpossible) as cm:
+            anki.lire_apkg(contenu, "calcul.apkg")
+        self.assertIn("ce n'est pas un paquet Anki", str(cm.exception))
+        self.assertLess((datetime.now() - debut).total_seconds(), 2)
+
+    def test_apkg_volume_total_des_notes_borne(self):
+        # Une colonne ajoutée après coup avec une longue valeur par défaut : chaque note la renvoie
+        # sans qu'elle soit stockée. Seul un budget global sur ce qui est lu protège la mémoire.
+        base = _base_anki(self.tmp, f"""
+            CREATE TABLE col (decks TEXT, models TEXT);
+            INSERT INTO col VALUES ('{{}}', '{{}}');
+            CREATE TABLE notes (id INTEGER, mid INTEGER, tags TEXT);
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 1000)
+                INSERT INTO notes SELECT x, 1, '' FROM n;
+            ALTER TABLE notes ADD COLUMN flds TEXT DEFAULT '{"x" * 100_000}';
+        """)
+        contenu = _zip({"collection.anki2": base})
+        self.assertLess(len(contenu), 20_000)  # 100 Mo de texte une fois lu
+        with mock.patch.object(anki, "VOLUME_MAX_NOTES", 10 * 1024 * 1024):
+            with self.assertRaises(anki.ImportAnkiImpossible) as cm:
+                anki.lire_apkg(contenu, "lourd.apkg")
+        self.assertIn("trop volumineux", str(cm.exception))
+
     def test_paquet_anki_sain_toujours_importe(self):
         contenu = anki.apkg("x", "Bio", "", [("n1", "Cœur", "Pompe", False), ("n2", "Rein", "Filtre", True)])
         s = anki.lire_apkg(contenu, "bio.apkg")
@@ -297,6 +333,35 @@ class ArchivesPiegeesTests(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 importer.read_table(io.BytesIO(contenu), "taches.xlsx")
         self.assertIn("décompressé", str(cm.exception))
+
+    def test_xlsx_cellules_vides_mises_en_forme_au_dela_de_la_borne(self):
+        # Deux tickets, et une cellule seulement colorée tout en bas : le classeur s'importe.
+        import openpyxl
+        from openpyxl.styles import PatternFill
+
+        from hangar import importer
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Titre", "État"])
+        ws.append(["A", "À faire"])
+        ws.append(["B", "Terminé"])
+        ws["A30000"].fill = PatternFill("solid", fgColor="FFFF00")
+        tampon = io.BytesIO()
+        wb.save(tampon)
+        lignes = importer.read_table(io.BytesIO(tampon.getvalue()), "taches.xlsx")
+        self.assertEqual([l["title"] for l in lignes], ["A", "B"])
+        # Au-delà de la borne en lignes réellement remplies : refus clair.
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Titre"])
+        for i in range(30):
+            ws.append([f"T{i}"])
+        tampon = io.BytesIO()
+        wb.save(tampon)
+        with mock.patch.object(importer, "XLSX_MAX_LIGNES", 20):
+            with self.assertRaises(ValueError) as cm:
+                importer.read_table(io.BytesIO(tampon.getvalue()), "taches.xlsx")
+        self.assertIn("20 lignes", str(cm.exception))
 
 
 class ImportApkgPiegeHttpTests(BaseTestCase):

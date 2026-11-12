@@ -110,10 +110,14 @@ def read_table(stream, filename: str):
         best = None
         for ws in wb.worksheets:
             matrix = []
-            # Bornes explicites : un classeur peut annoncer 1 048 576 lignes × 16 384 colonnes.
-            for r in ws.iter_rows(values_only=True, max_row=XLSX_MAX_LIGNES + 1, max_col=XLSX_MAX_COLONNES):
+            # Bornes explicites : un classeur peut annoncer 1 048 576 lignes × 16 384 colonnes. Seules
+            # les lignes remplies comptent (une cellule vide mais colorée tout en bas en crée d'autres) ;
+            # les lignes vides sont lues sans être gardées.
+            for r in ws.iter_rows(values_only=True, max_col=XLSX_MAX_COLONNES):
+                if all(v is None or (isinstance(v, str) and not v.strip()) for v in r):
+                    continue
                 if len(matrix) >= XLSX_MAX_LIGNES:
-                    raise ValueError(f"Classeur trop grand : {XLSX_MAX_LIGNES} lignes au plus par import.")
+                    raise ValueError(f"Classeur trop grand : {XLSX_MAX_LIGNES} lignes remplies au plus par import.")
                 matrix.append(list(r))
             try:
                 rows = _rows_from_matrix(matrix)

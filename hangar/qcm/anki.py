@@ -277,7 +277,10 @@ MAX_NOTES_IMPORT = 5000
 # durée de lecture de la base.
 TAILLE_MAX_BASE = 200 * 1024 * 1024
 MAX_ENTREES_APKG = 100_000
-TAILLE_MAX_CHAMP = 5 * 1024 * 1024
+TAILLE_MAX_CHAMP = 1024 * 1024
+# Volume total (en caractères) des champs et étiquettes lus : une base de quelques Ko peut renvoyer
+# la même longue valeur pour chaque note (valeur par défaut d'une colonne ajoutée après coup).
+VOLUME_MAX_NOTES = 64 * 1024 * 1024
 DUREE_MAX_LECTURE = 15  # secondes
 
 
@@ -304,7 +307,8 @@ def _depuis_html(champ):
 def _lire_base(chemin, nom):
     """(notes, ligne de « col ») de la base SQLite d'un paquet, avec des garde-fous : lecture seule,
     `notes` et `col` doivent être de vraies tables (une vue ferait exécuter la requête de son
-    choix), schéma non fiable, taille d'une valeur bornée, durée bornée, 5 000 notes au plus."""
+    choix), sans colonne calculée ni cachée, schéma non fiable, taille d'une valeur et volume total
+    lu bornés, durée bornée, 5 000 notes au plus."""
     try:
         base = sqlite3.connect(f"{Path(chemin).as_uri()}?mode=ro", uri=True)
     except sqlite3.Error as e:
@@ -325,7 +329,24 @@ def _lire_base(chemin, nom):
         types = dict(base.execute("SELECT name, type FROM sqlite_master WHERE name IN ('notes', 'col')").fetchall())
         if types.get("notes") != "table" or types.get("col") != "table":
             raise ImportAnkiImpossible(f"{nom} : ce n'est pas un paquet Anki (tables des notes introuvables).")
-        lignes = base.execute("SELECT id, mid, flds, tags FROM notes ORDER BY id LIMIT ?", (MAX_NOTES_IMPORT,)).fetchall()
+        # Une colonne générée (GENERATED ALWAYS AS …) est recalculée à chaque lecture : quelques Ko
+        # de fichier pourraient produire des gigaoctets. Anki n'en utilise jamais.
+        for table in ("notes", "col"):
+            if any(c[6] != 0 for c in base.execute(f"PRAGMA table_xinfo({table})")):
+                raise ImportAnkiImpossible(f"{nom} : ce n'est pas un paquet Anki (structure inattendue).")
+        lignes, volume = [], 0
+        # Lecture dans l'ordre de stockage (pas d'ORDER BY : SQLite trierait toutes les notes, champs
+        # compris, avant d'en rendre une seule), puis tri par id ici. Dans un vrai paquet, id est la
+        # clé de la table : l'ordre est le même.
+        curseur = base.execute("SELECT id, mid, flds, tags FROM notes LIMIT ?", (MAX_NOTES_IMPORT,))
+        for ligne in curseur:  # une note à la fois, pour arrêter dès que le volume lu est trop grand
+            volume += sum(len(v) for v in ligne[2:] if isinstance(v, (str, bytes)))
+            if volume > VOLUME_MAX_NOTES:
+                raise ImportAnkiImpossible(f"{nom} : paquet trop volumineux une fois ouvert "
+                                           f"({VOLUME_MAX_NOTES // (1024 * 1024)} Mo de texte au plus).")
+            lignes.append(ligne)
+        curseur.close()
+        lignes.sort(key=lambda l: (not isinstance(l[0], int), l[0] if isinstance(l[0], int) else 0))
         col = base.execute("SELECT decks, models FROM col LIMIT 1").fetchone()
     except sqlite3.DatabaseError as e:
         if trop_long:
