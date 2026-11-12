@@ -4,7 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time as _clock
+import urllib.request
 from datetime import datetime, timedelta
 
 from flask import current_app
@@ -12,7 +14,7 @@ from flask import current_app
 from .. import agenda as A  # le paquet : voir hangar/agenda/__init__.py
 from .. import digest, ics
 from ..extensions import db
-from ..models import AgendaEvent, AgendaSettings, Notification, User
+from ..models import AgendaEvent, AgendaImport, AgendaSettings, Notification, User
 
 
 # ---------------------------------------------------------------------------
@@ -27,9 +29,12 @@ SOURCE_KINDS = {"folder": "Dossier surveillé (ex. Téléchargements)", "url": "
 SOURCE_URL_EVERY = timedelta(hours=3)        # une adresse est relue toutes les 3 h (le dossier : à chaque passage)
 SOURCE_RECHECK_NOTE = timedelta(hours=1)     # dossier inchangé : « dernière lecture » notée au plus une fois par heure
 SOURCE_MAX_BYTES = 5 * 1024 * 1024
-SOURCE_TIMEOUT = 20
+SOURCE_TIMEOUT = 20                          # chaque opération réseau (connexion, chaque lecture)
+SOURCE_DEADLINE = 60                         # lecture entière d'une adresse : au-delà, abandon (fil d'arrière-plan)
+SOURCE_CHUNK = 64 * 1024
 SOURCE_SILENT_DAYS = 6                       # source muette depuis une semaine : le rappel d'import revient
 SOURCE_SETTLE_SECONDS = 5                    # fichier modifié il y a moins que ça : sans doute en cours d'écriture
+SOURCE_RETRY_EVERY = timedelta(minutes=30)   # import en panne qui dure : nouvel essai espacé (pas toutes les 30 s)
 
 
 def calendar_fingerprint(cal) -> str:
@@ -104,14 +109,67 @@ def source_url(value: str) -> str:
     return v
 
 
-def _fetch_url(url: str) -> bytes:
-    import urllib.request
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    """Redirections suivies seulement sur le même site, et jamais de https vers http : l'adresse choisie par
+    l'administrateur ne doit pas mener le serveur ailleurs (réseau local, 127.0.0.1…)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        from urllib.parse import urlsplit
+        old, new = urlsplit(req.full_url), urlsplit(newurl)
+        if old.scheme == "https" and new.scheme != "https":
+            raise ValueError("l’adresse redirige vers une adresse non chiffrée (http://)")
+        if (new.hostname or "").lower() != (old.hostname or "").lower() or new.port != old.port:
+            raise ValueError(f"l’adresse redirige vers un autre site ({new.hostname or '?'}) : "
+                             "colle directement l’adresse finale")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _fetch_url_now(url: str, deadline: float, stop: threading.Event) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "Hangar (agenda)", "Accept": "text/calendar, */*"})
-    with urllib.request.urlopen(req, timeout=SOURCE_TIMEOUT) as r:  # noqa: S310 - adresse choisie par un administrateur
-        data = r.read(SOURCE_MAX_BYTES + 1)
+    opener = urllib.request.build_opener(_SafeRedirect)
+    chunks: list[bytes] = []
+    size = 0
+    with opener.open(req, timeout=SOURCE_TIMEOUT) as r:  # noqa: S310 - adresse choisie par un administrateur
+        while True:
+            if stop.is_set() or _clock.monotonic() > deadline:
+                raise TimeoutError("l’adresse met trop de temps à envoyer le planning")
+            chunk = r.read1(SOURCE_CHUNK)  # une seule lecture réseau à la fois (read() attendrait tout le bloc)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+            if size > SOURCE_MAX_BYTES:
+                break
+    data = b"".join(chunks)
     if len(data) > SOURCE_MAX_BYTES:
         raise ValueError("le fichier est trop gros pour un emploi du temps")
     return data
+
+
+def _fetch_url(url: str) -> bytes:
+    """Contenu de l'adresse. `SOURCE_TIMEOUT` borne chaque opération réseau, `SOURCE_DEADLINE` la lecture
+    entière, connexion et en-têtes compris : la lecture se fait dans un fil à part, abandonné au-delà (il
+    s'arrête de lui-même à l'opération réseau suivante). Un serveur qui envoie au compte-gouttes ne retient
+    donc pas le fil d'arrière-plan (rappels de l'agenda) ; TimeoutError au-delà."""
+    deadline = _clock.monotonic() + SOURCE_DEADLINE
+    stop = threading.Event()
+    out: dict = {}
+
+    def run():
+        try:
+            out["data"] = _fetch_url_now(url, deadline, stop)
+        except BaseException as exc:  # noqa: BLE001 - transmise au fil appelant
+            out["error"] = exc
+
+    worker = threading.Thread(target=run, name="hangar-agenda-source", daemon=True)
+    worker.start()
+    worker.join(max(0.0, deadline - _clock.monotonic()))
+    if worker.is_alive():
+        stop.set()
+        raise TimeoutError("l’adresse met trop de temps à envoyer le planning")
+    if "error" in out:
+        raise out["error"]
+    return out["data"]
 
 
 def _source_note(user: User, message: str, url: str = "/agenda/imports", at: datetime | None = None) -> None:
@@ -122,7 +180,13 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
     """Lit la source de l'emploi du temps de `user` et importe un nouveau fichier. Retourne ce qui s'est passé :
     "off" (pas de source), "wait" (pas encore l'heure), "busy" (fichier en cours de téléchargement),
     "same" (rien de nouveau), "imported", "ignored"
-    (fichier écarté par le garde-fou) ou "error" (message dans `source_error`)."""
+    (fichier écarté par le garde-fou) ou "error" (message dans `source_error`).
+
+    `force` (« Vérifier maintenant », enregistrement du réglage) : lit tout de suite, même un fichier déjà vu
+    (son contenu n'est réimporté que si l'import qui l'avait apporté a été annulé). L'empreinte n'est validée
+    qu'avec un import réussi : une première panne pendant l'import (base occupée…) laisse le fichier à relire
+    au passage suivant ; si elle dure, nouvel essai toutes les `SOURCE_RETRY_EVERY`, avec une seule
+    notification et une seule trace."""
     at = at or A.now()
     s = A.settings_of(user)
     kind, where = s.source_kind or "", (s.source_path or "").strip()
@@ -130,17 +194,19 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
         return "off"
     if kind == "url" and not force and s.source_tried_at and at - s.source_tried_at < SOURCE_URL_EVERY:
         return "wait"
-    s.source_tried_at = at
+    if kind == "url":
+        s.source_tried_at = at  # dossier : noté seulement quand le fichier est lu (voir plus bas)
+    previous_error = s.source_error or ""  # source_error est remis à vide (et validé) avant l'import
 
     def fail(msg: str) -> str:
-        changed = s.source_error != msg
+        changed = previous_error != msg[:500]
         s.source_error = msg[:500]
         if changed:  # une seule notification par problème (pas toutes les 30 s)
             _source_note(user, f"Emploi du temps automatique : {msg}", at=at)
         db.session.commit()
         return "error"
 
-    filename = "planning.ics"
+    filename, seen = "planning.ics", None
     if kind == "folder":
         if not os.path.isdir(where):
             return fail("le dossier surveillé est introuvable. Vérifie son chemin dans « Emploi du temps ».")
@@ -159,12 +225,17 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
             s.source_error = ""
             db.session.commit()
             return "busy"
-        if seen == s.source_seen and not force:
+        if seen == s.source_seen and not force and s.source_error:
+            # Import de ce fichier en panne qui dure : nouvel essai espacé, l'erreur reste affichée
+            if s.source_tried_at and at - s.source_tried_at < SOURCE_RETRY_EVERY:
+                return "wait"
+        elif seen == s.source_seen and not force:
             s.source_error = ""
             if s.source_checked_at is None or at - s.source_checked_at >= SOURCE_RECHECK_NOTE:
                 s.source_checked_at = at
             db.session.commit()
             return "same"
+        s.source_tried_at = at
         try:
             with open(path, "rb") as fh:
                 raw = fh.read(SOURCE_MAX_BYTES + 1)
@@ -172,7 +243,7 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
             return fail(f"le fichier {os.path.basename(path)} n’est pas lisible.")
         if len(raw) > SOURCE_MAX_BYTES:
             return fail(f"le fichier {os.path.basename(path)} est trop gros pour un emploi du temps.")
-        s.source_seen, filename = seen, os.path.basename(path)
+        filename = os.path.basename(path)  # source_seen : noté plus bas, une fois le fichier traité
     else:
         try:
             url = source_url(where)
@@ -192,23 +263,44 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
     fp = calendar_fingerprint(cal)
     s.source_error = ""
     s.source_checked_at = at
-    if fp == s.source_fingerprint:
+    if fp == s.source_fingerprint and (not force or not _fingerprint_undone(user, s)):
+        if seen is not None:
+            s.source_seen = seen
         db.session.commit()
         return "same"
-    s.source_fingerprint, s.source_changed_at = fp, at
     reason = foreign_reason(cal, user)
     if reason:
+        s.source_fingerprint, s.source_changed_at = fp, at
+        if seen is not None:
+            s.source_seen = seen
         _source_note(user, f"Fichier {filename} ignoré : {reason}.", at=at)
         db.session.commit()
         return "ignored"
-    db.session.commit()
+    db.session.commit()  # heure de lecture notée, même si l'import échoue
     try:
+        # Empreinte et fichier vu posés dans la transaction de l'import (validés par son commit)
+        s.source_fingerprint, s.source_changed_at = fp, at
+        if seen is not None:
+            s.source_seen = seen
         imp = A.import_calendar(user, raw, filename, "weeks", at=at)
-    except ics.ICSError as exc:
+    except Exception as exc:  # noqa: BLE001 - ICSError, base occupée, bogue : relu au prochain passage
         db.session.rollback()
         s = A.settings_of(user)
-        s.source_fingerprint = ""  # nouvel essai au prochain passage
-        return fail(str(exc))
+        msg = str(exc) if isinstance(exc, ics.ICSError) else (
+            f"le fichier {filename} n’a pas pu être importé (erreur passagère ?). "
+            "Nouvel essai bientôt ; si le problème dure, importe-le à la main.")
+        durable = previous_error == msg[:500]
+        # Première panne : nouvel essai au prochain passage (base occupée…). Panne qui dure : le fichier est
+        # noté comme vu, et relu seulement après SOURCE_RETRY_EVERY (pas d'import en double toutes les 30 s).
+        s.source_fingerprint = ""
+        s.source_seen = seen if (durable and seen is not None) else ""
+        s.source_tried_at = at
+        if isinstance(exc, ics.ICSError):
+            return fail(msg)
+        if not durable:  # une trace par panne, pas toutes les 30 s
+            current_app.logger.exception("Import automatique de l’emploi du temps (compte %s)", user.id)
+            A._mail().noter_erreur("Lecture automatique de l’emploi du temps")
+        return fail(msg)
     parts = [x for x in (digest.pluriel(imp.modified, "séance modifiée", "séances modifiées") if imp.modified else "",
                          digest.pluriel(imp.added, "ajoutée") if imp.added else "",
                          digest.pluriel(imp.removed, "retirée") if imp.removed else "",
@@ -222,6 +314,16 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
     return "imported"
 
 
+def _fingerprint_undone(user: User, s: AgendaSettings) -> bool:
+    """L'import qui a donné l'empreinte actuelle a-t-il été annulé ? (« Vérifier maintenant » réimporte alors
+    le même fichier ; sinon, rien de nouveau : pas d'import vide qui masquerait le vrai pour l'annulation.)"""
+    if not s.source_changed_at:
+        return False
+    imp = (AgendaImport.query.filter_by(user_id=user.id, created_at=s.source_changed_at)
+           .order_by(AgendaImport.id.desc()).first())
+    return imp is not None and imp.undone_at is not None
+
+
 def check_sources(at: datetime | None = None) -> int:
     """Passage du fil d'arrière-plan : lit la source de chaque compte qui en a une. Retourne le nombre d'imports."""
     at = at or A.now()
@@ -230,8 +332,8 @@ def check_sources(at: datetime | None = None) -> int:
                                        AgendaSettings.source_path != "").all()
     for user_id in [r.user_id for r in rows]:
         user = db.session.get(User, user_id)
-        if user is None or not user.active:
-            continue
+        if user is None or not user.active or not user.is_admin:
+            continue  # réglage réservé aux administrateurs : un compte rétrogradé n'est plus lu
         try:
             n += check_source(user, at) == "imported"
         except Exception:  # noqa: BLE001 - un compte en panne n'empêche pas les autres
