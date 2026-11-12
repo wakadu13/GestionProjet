@@ -632,11 +632,19 @@ def _simple_bilan_md(projects, start: date, end: date) -> str:
 
 def build_bilan_email(user: User, projects, start: date, end: date, cfg: MailConfig) -> tuple[str, str]:
     from .utils import render_markdown
+    from flask import has_request_context
+
+    from .bilan import bilan_markdown, compute_bilan
     md = None
     try:
-        from .bilan import bilan_markdown, compute_bilan
-        md = bilan_markdown(compute_bilan(projects, start, end))
-    except Exception:
+        if has_request_context():
+            md = bilan_markdown(compute_bilan(projects, start, end))
+        else:  # fil d'arrière-plan, « hangar mail-send » : les adresses des tickets demandent une requête
+            with current_app.test_request_context("/"):
+                md = bilan_markdown(compute_bilan(projects, start, end))
+    except Exception:  # noqa: BLE001 - l'e-mail part quand même, en version réduite, mais l'erreur est notée
+        from .wiki import erreurs
+        erreurs.signaler("Bilan hebdomadaire par e-mail : version réduite envoyée", dans_la_transaction=True)
         md = None
     if not md:
         md = _simple_bilan_md(projects, start, end)
@@ -709,11 +717,8 @@ def run_scheduled(app=None, at: datetime | None = None, force: set[str] | frozen
 
 def noter_erreur(contexte: str) -> None:
     """Note l'exception en cours sur la page « Erreurs du serveur » (/erreurs/). Ne lève jamais."""
-    try:
-        from .wiki import erreurs
-        erreurs.noter(contexte=contexte)
-    except Exception:  # noqa: BLE001
-        pass
+    from .wiki import erreurs
+    erreurs.noter(contexte=contexte)  # ne lève jamais
 
 
 def _etape(app, nom: str, fn):
@@ -740,7 +745,9 @@ def _qcm_rappels(app):
 
 def tick(app) -> None:
     """Un tour du fil d'arrière-plan : envois planifiés, agenda, révisions, puis la file d'e-mails."""
-    with app.app_context():
+    # Un contexte de requête neuf à chaque tour : les adresses des pages (url_for) se construisent comme dans
+    # l'appli, et les caches rangés dans `g` pendant le tour sont oubliés au suivant.
+    with app.test_request_context("/"):
         try:
             _etape(app, "envois planifiés (rappels d’échéance, récapitulatifs, bilans)", lambda: run_scheduled())
             _etape(app, "rappels de l’agenda et résumé quotidien", _agenda_jobs)
@@ -757,11 +764,17 @@ def start_worker(app, interval: int = 30):
         return _worker
 
     def loop():
+        tours = 0
         while True:
             try:
                 tick(app)
             except Exception:  # ne jamais arrêter le serveur pour un e-mail
                 app.logger.exception("Erreur dans l’envoi des e-mails")
+            tours += 1
+            if tours % max(1, 600 // max(interval, 1)) == 0:  # toutes les 10 minutes environ
+                from .extensions import vider_journal
+                with app.app_context():
+                    vider_journal()  # hangar.db à jour même si la fenêtre est fermée brutalement
             time.sleep(interval)
 
     _worker = threading.Thread(target=loop, name="hangar-mail", daemon=True)

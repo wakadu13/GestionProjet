@@ -225,3 +225,50 @@ def recentes(limite=40):
     trouvees.sort(key=lambda t: t[:2], reverse=True)
     return [{"page": f.parent.relative_to(racine).as_posix(), "id": f.name, "date": date, "auteur": _auteur_affiche(qui)}
             for date, _, f, qui in trouvees[:limite]]
+
+
+def deplacer(ancien_rel, nouveau_rel) -> None:
+    """Page renommée ou déplacée : son historique la suit (dossier ``wiki_versions`` déplacé). Si une ancienne
+    page du même nom avait déjà des versions sous le nouveau nom, les deux historiques sont réunis."""
+    source, cible = _dossier_page(ancien_rel), _dossier_page(nouveau_rel)
+    if not source.is_dir() or source == cible:
+        return
+    if not cible.exists() or source.samefile(cible):  # absent, ou même dossier (seule la casse change)
+        cible.parent.mkdir(parents=True, exist_ok=True)
+        source.replace(cible)
+    else:
+        for f in source.glob("*.md"):
+            if not (cible / f.name).exists():
+                f.replace(cible / f.name)
+        try:
+            source.rmdir()
+        except OSError:  # un fichier inattendu reste : on le laisse
+            pass
+    # Dossiers parents devenus vides (ex. « Maths/ » après avoir déplacé sa seule page)
+    parent, racine = source.parent, dossier().resolve()
+    while parent.resolve() != racine and parent.is_dir() and not any(parent.iterdir()):
+        parent.rmdir()
+        parent = parent.parent
+
+
+def pages_sans_fichier(existantes) -> list[dict]:
+    """Pages dont il reste un historique mais plus de fichier dans le coffre (supprimées, ou renommées hors du
+    wiki) : [{page (chemin .md), versions, derniere (date), auteur}], la plus récemment modifiée d'abord.
+    ``existantes`` : chemins .md (en minuscules) des pages du coffre."""
+    racine = dossier()
+    if not racine.is_dir():
+        return []
+    out = []
+    for d in racine.rglob("*.md"):
+        if not d.is_dir():
+            continue
+        versions = _versions(d)
+        if not versions:
+            continue
+        rel = d.relative_to(racine).as_posix()
+        if rel.lower() in existantes:
+            continue
+        _, date, qui, _ = versions[-1]
+        out.append({"page": rel, "versions": len(versions), "derniere": date, "auteur": _auteur_affiche(qui)})
+    out.sort(key=lambda p: p["derniere"], reverse=True)
+    return out

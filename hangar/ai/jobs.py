@@ -239,10 +239,7 @@ def annuler(job: AIJob) -> bool:
             except AIError as e:
                 if e.code not in LOT_ECHEC_DEFINITIF:
                     raise AIError(f"Lot non annulé : {e.message}", e.code, e.status) from None
-            try:
-                prov.delete_files(job.options.get("files"))
-            except Exception:  # noqa: BLE001
-                pass
+            _retirer_fichiers(prov, job)
     job.status, job.message, job.finished_at = "error", ANNULE, now()
     db.session.commit()
     return True
@@ -295,10 +292,7 @@ def check_batches() -> int:
             calls[i] = {"error": "Lot terminé sans résultat pour ce travail.", "code": "lot"}
         job.calls, job.status, job.batch_id = calls, "pending", ""
         db.session.commit()
-        try:
-            prov.delete_files(job.options.get("files"))
-        except Exception:  # noqa: BLE001
-            pass
+        _retirer_fichiers(prov, job)
         n += 1
     return n
 
@@ -318,10 +312,7 @@ def _lot_en_echec(job: AIJob, prov, raison: str) -> None:
     job.status, job.finished_at = "error", now()
     job.message = f"Lot non récupéré : {raison} Tu peux relancer le travail."[:500]
     db.session.commit()
-    try:
-        prov.delete_files(job.options.get("files"))
-    except Exception:  # noqa: BLE001
-        pass
+    _retirer_fichiers(prov, job)
     notifier(job)
 
 
@@ -370,10 +361,16 @@ def _loop(app) -> None:
                 _worker = None
 
 
+def _retirer_fichiers(prov, job: AIJob) -> None:
+    """Supprime chez le fournisseur les fichiers envoyés pour un lot. Un échec n'arrête rien (ils expirent d'eux-mêmes)
+    mais reste dans le journal."""
+    try:
+        prov.delete_files(job.options.get("files"))
+    except Exception:  # noqa: BLE001
+        log.warning("Travail d'IA %s : fichiers du lot non supprimés chez le fournisseur", job.id, exc_info=True)
+
+
 def _noter_erreur(contexte: str) -> None:
     """Incident du fil des travaux : noté aussi sur la page « Erreurs du serveur » (/erreurs/)."""
-    try:
-        from ..wiki import erreurs
-        erreurs.noter(contexte=contexte)
-    except Exception:  # noqa: BLE001
-        pass
+    from ..wiki import erreurs
+    erreurs.noter(contexte=contexte)  # ne lève jamais

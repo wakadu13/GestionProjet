@@ -146,6 +146,10 @@ class Workspace(db.Model):
     login_accounts = db.Column(db.Boolean, default=True)
     week_starts_monday = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=now)
+    # Jeton des sessions : mis dans chaque session et chaque cookie « se souvenir de moi » ; changé à chaque
+    # restauration de sauvegarde, il ferme toutes les sessions ouvertes (un numéro de compte peut désigner
+    # quelqu'un d'autre dans la base restaurée). Vide tant qu'aucune restauration n'a eu lieu.
+    jeton_sessions = db.Column(db.String(40), default="")
 
     @staticmethod
     def get() -> "Workspace":
@@ -155,6 +159,11 @@ class Workspace(db.Model):
             db.session.add(ws)
             db.session.commit()
         return ws
+
+    @staticmethod
+    def jeton_actuel() -> str:
+        ws = db.session.get(Workspace, 1)
+        return (ws.jeton_sessions or "") if ws is not None else ""
 
 
 MOT_DE_PASSE_MIN = 8  # longueur minimale d'un nouveau mot de passe (les anciens, plus courts, restent valables)
@@ -204,7 +213,8 @@ class User(UserMixin, db.Model):
     def empreinte_session(self) -> str:
         from flask import current_app
         cle = str(current_app.config["SECRET_KEY"]).encode()
-        msg = f"{self.id}|{self.password_hash}|{self.session_version or 0}".encode()
+        # Jeton de l'espace : changé à chaque restauration de sauvegarde (voir Workspace.jeton_sessions).
+        msg = f"{self.id}|{self.password_hash}|{self.session_version or 0}|{Workspace.jeton_actuel()}".encode()
         return hmac.new(cle, msg, hashlib.sha256).hexdigest()[:32]
 
     @classmethod

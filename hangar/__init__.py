@@ -34,6 +34,9 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
     (data / "uploads").mkdir(exist_ok=True)
     (data / "backups").mkdir(exist_ok=True)
 
+    from .wiki import coffre
+    wiki_dir, wiki_origine = coffre.choisir(data)
+
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=_secret_key(data),
@@ -45,14 +48,14 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
         DATA_DIR=str(data),
         UPLOAD_DIR=str(data / "uploads"),
         BACKUP_DIR=str(data / "backups"),
-        # Wiki (coffre Obsidian) : dossier de notes, réglable avec HANGAR_VAULT (ex. un coffre Obsidian existant)
-        WIKI_DIR=str(Path(os.environ.get("HANGAR_VAULT") or data / "vault").resolve()),
+        # Wiki (coffre Obsidian) : HANGAR_VAULT, sinon le dossier mémorisé dans data/coffre.txt, sinon data/vault
+        WIKI_DIR=str(wiki_dir),
+        WIKI_ORIGINE=wiki_origine,
         WIKI_HOME=os.environ.get("HANGAR_WIKI_HOME", "Accueil"),
         MAX_CONTENT_LENGTH=50 * 1024 * 1024,
         SESSION_COOKIE_SAMESITE="Lax",
         REMEMBER_COOKIE_SAMESITE="Lax",  # cookie « Rester connecté » : pas envoyé depuis un autre site
         REMEMBER_COOKIE_DURATION=60 * 60 * 24 * 30,
-        REMEMBER_COOKIE_SAMESITE="Lax",
         REMEMBER_COOKIE_HTTPONLY=True,
         TESTING=testing,
         JSON_AS_ASCII=False,
@@ -68,16 +71,17 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
     from .ai import models as _ai_models  # noqa: F401
     from .qcm import models as _qcm_models  # noqa: F401
     from .wiki import models as _wiki_models  # noqa: F401
-    Path(app.config["WIKI_DIR"]).mkdir(parents=True, exist_ok=True)
+    if wiki_origine == coffre.DEFAUT:  # un coffre choisi n'est jamais créé : introuvable, le wiki le dit
+        wiki_dir.mkdir(parents=True, exist_ok=True)
 
     with app.app_context():
-        db.create_all()
-        _auto_migrate()
+        migrer_schema()
         models.Workspace.get()
 
     @login_manager.user_loader
     def load_user(uid):
-        return models.User.depuis_session(uid)  # « numéro:empreinte » (models.User.get_id)
+        # « numéro:empreinte » (models.User.get_id) ; l'empreinte change aussi à chaque restauration de sauvegarde.
+        return models.User.depuis_session(uid)
 
     from . import securite, web
     # securite d'abord : ses fonctions after_request passent après celles de web (ordre inverse de Flask)
@@ -89,18 +93,36 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
     return app
 
 
-def _auto_migrate() -> None:
-    """Ajoute aux tables existantes les colonnes déclarées dans les modèles mais absentes de la base.
+def migrer_schema() -> list[str]:
+    """Met la base au niveau du code : tables manquantes (``db.create_all``), puis colonnes et index manquants
+    (``_auto_migrate``). Appelée au démarrage et juste après la restauration d'une sauvegarde (une base d'une
+    version plus ancienne marche alors sans redémarrer). Renvoie la liste des changements faits (vide : la base
+    était déjà à jour)."""
+    from sqlalchemy import inspect
+    avant = set(inspect(db.engine).get_table_names())
+    db.create_all()
+    changements = [f"table {t.name}" for t in db.metadata.sorted_tables if t.name not in avant]
+    return changements + _auto_migrate()
 
-    Permet de faire évoluer le modèle sans perdre les données (SQLite : ALTER TABLE ADD COLUMN).
-    """
+
+def _auto_migrate() -> list[str]:
+    """Ajoute aux tables existantes les colonnes déclarées dans les modèles mais absentes de la base, et crée
+    leurs index manquants (``db.create_all`` ne touche pas une table qui existe déjà).
+
+    Permet de faire évoluer le modèle sans perdre les données (SQLite : ALTER TABLE ADD COLUMN). Une colonne
+    obligatoire (NOT NULL) présente dans la base mais plus dans le modèle signale un renommage : chaque création
+    échouerait. Elle est seulement signalée dans le journal (garder l'ancien nom avec ``db.Column("ancien", …)``).
+    Renvoie la liste des changements faits."""
+    import logging
+
     from sqlalchemy import inspect, text
     insp = inspect(db.engine)
-    changed = False
+    changements = []
     for table in db.metadata.sorted_tables:
         if not insp.has_table(table.name):
             continue
-        existing = {c["name"] for c in insp.get_columns(table.name)}
+        colonnes = insp.get_columns(table.name)
+        existing = {c["name"] for c in colonnes}
         for col in table.columns:
             if col.name in existing:
                 continue
@@ -115,9 +137,25 @@ def _auto_migrate() -> None:
                 elif isinstance(v, str):
                     default = " DEFAULT '" + v.replace("'", "''") + "'"
             db.session.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {coltype}{default}'))
-            changed = True
-    if changed:
+            changements.append(f"colonne {table.name}.{col.name}")
+        for c in colonnes:
+            if c["name"] not in table.columns and not c.get("nullable", True) and c.get("default") is None:
+                logging.getLogger(__name__).warning(
+                    "Base : la colonne obligatoire %s.%s n'existe plus dans le modèle (renommée ?) : "
+                    "les créations dans cette table échoueront.", table.name, c["name"])
+    if changements:
         db.session.commit()
+    noms_index = {i["name"] for t in insp.get_table_names() for i in insp.get_indexes(t)}
+    for table in db.metadata.sorted_tables:
+        for index in table.indexes:
+            if index.name and index.name not in noms_index:
+                try:
+                    index.create(bind=db.engine, checkfirst=True)
+                except Exception as exc:  # noqa: BLE001 - index unique sur des doublons : Hangar démarre quand même
+                    logging.getLogger(__name__).warning("Base : index %s impossible à créer (%s)", index.name, exc)
+                    continue
+                changements.append(f"index {index.name}")
+    return changements
 
 
 def _register_blueprints(app: Flask) -> None:
@@ -184,12 +222,35 @@ def _register_hooks(app: Flask) -> None:
 
     @app.errorhandler(500)
     def _server_error(err):
-        db.session.rollback()
-        from .wiki import erreurs  # page /erreurs/ des administrateurs
-        erreurs.noter(getattr(err, "original_exception", None), request=request)
+        # Rien ici ne doit lever à son tour : une base au mauvais format (sauvegarde ancienne restaurée…)
+        # ferait sinon tomber aussi la page d'erreur, et le navigateur n'afficherait qu'un texte anglais brut.
+        try:
+            db.session.rollback()
+        except Exception:  # noqa: BLE001
+            app.logger.exception("Annulation impossible après une erreur")
+        try:
+            from .wiki import erreurs  # page /erreurs/ des administrateurs
+            erreurs.noter(getattr(err, "original_exception", None), request=request)
+        except Exception:  # noqa: BLE001
+            app.logger.exception("Erreur impossible à noter")
         if request.path.startswith("/api/"):
             return {"ok": False, "error": "Erreur interne"}, 500
-        return render_template("errors.html", error=err), 500
+        try:
+            return render_template("errors.html", error=err), 500
+        except Exception:  # noqa: BLE001
+            app.logger.exception("Page d'erreur impossible à afficher")
+            return PAGE_ERREUR_MINIMALE, 500, {"Content-Type": "text/html; charset=utf-8"}
+
+
+# Page d'erreur sans gabarit ni base de données : affichée quand la vraie page d'erreur échoue elle-même.
+PAGE_ERREUR_MINIMALE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Erreur · Hangar</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:560px;margin:15vh auto;padding:0 20px;color:#1f2937">
+<h1 style="font-size:22px">Une erreur inattendue s’est produite</h1>
+<p>Hangar n’arrive pas à afficher cette page. Réessaie dans un instant.</p>
+<p>Si l’erreur revient sur toutes les pages, ferme la fenêtre de Hangar puis relance-le
+(double-clic sur <b>lancer.bat</b>, ou <code>uv run hangar</code>).</p>
+<p><a href="/">Revenir à l’accueil</a></p></body></html>"""
 
 
 def _register_template_helpers(app: Flask) -> None:

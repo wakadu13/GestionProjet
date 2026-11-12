@@ -28,7 +28,7 @@ def clean_title(value) -> str:
     """Titre de ticket sur une seule ligne : les retours à la ligne (cellule Excel avec Alt+Entrée, API…) et
     les espaces en trop deviennent une seule espace. Un retour à la ligne casserait l'objet des e-mails de
     notification et l'export .ics."""
-    from .utils import single_line  # caractères de contrôle (tabulation, saut de ligne collé…) compris
+    # single_line : caractères de contrôle (tabulation, saut de ligne collé…) compris
     return " ".join(single_line(str(value or "")).split())[:255]
 
 

@@ -9,7 +9,7 @@ Application web en **Python** (Flask + SQLite) organisée comme [Plane](https://
 | **Wiki** | le coffre Obsidian des cours (port complet de [Revision](https://github.com/wakadu13/Revision)) : rendu Obsidian, formules, éditeur, historique, PDF, graphe |
 | **QCM** | révision espacée (FSRS) des sets de QCM et des langues, planning d'examens, statistiques |
 | **IA** | assistant façon « Plane AI » branché sur **Claude** ou sur des **IA open source** (Ollama, LM Studio, vLLM…), avec les fonctions d'IA de Revision |
-| **Réglages** | profil, e-mails, fournisseurs d'IA, sauvegardes |
+| **Réglages** | profil, espace (dont le coffre du wiki), e-mails, fournisseurs d'IA, sauvegardes, version |
 
 Aucun service en ligne n'est nécessaire : les données restent sur ta machine et l'interface fonctionne hors connexion (KaTeX, Mermaid, CodeMirror et pdf.js sont embarqués, aucun CDN). Seul l'assistant IA contacte le fournisseur que tu choisis (et rien du tout avec un modèle local).
 
@@ -36,7 +36,7 @@ Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochai
 - **Résumé quotidien** par e-mail (activé par défaut à 7 h) : un seul message avec tout ce qu'il y a à faire — cours du jour (horaires, salles), tâches du jour et en retard, tickets de projet à échéance, cartes de QCM à réviser et examens proches, contrôles de la semaine, changements récents du planning, initiatives à risque. Le matin pour la journée, ou la veille au soir pour le lendemain ; rien n'est envoyé les jours vides ; aperçu dans *Agenda › Résumé quotidien*.
 - **Rappel automatique des contrôles** (la veille, 2 jours, 1 semaine avant), e-mail récapitulatif des **changements après chaque import**.
 - Pour recevoir réellement les e-mails : renseigne ton adresse dans *Rappels et e-mails*, puis (administrateur) configure l'envoi dans *Réglages › Envoi des e-mails* (aussi dans le menu de l'espace) — mode **SMTP**, préréglage Gmail avec un [mot de passe d'application](https://myaccount.google.com/apppasswords). Sinon, les messages sont seulement enregistrés en `.eml` dans `data/outbox/`.
-- Les rappels partent tant que Hangar est lancé (`uv run hangar`). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée (un rappel « à une date précise » part encore jusqu'à 24 h après son heure, même après l'échéance de la tâche). Une tâche répétée a un rappel à chaque occurrence, même si tu n'as pas coché la précédente.
+- Les rappels partent tant que Hangar est lancé (`uv run hangar`). Sous Windows, fais-le démarrer tout seul avec ta session : voir [Sous Windows](#sous-windows--démarrage-avec-la-session-et-mise-à-jour). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée (un rappel « à une date précise » part encore jusqu'à 24 h après son heure, même après l'échéance de la tâche). Une tâche répétée a un rappel à chaque occurrence, même si tu n'as pas coché la précédente.
 - Si un e-mail ne part pas à cause d'une panne passagère (Wi-Fi pas encore revenu au réveil du portable, serveur injoignable), Hangar réessaie seul après 1, 5, 15 puis 60 minutes, jusqu'à la fin de la séance ou de la tâche pour un rappel, jusqu'à la fin de la journée pour le résumé (24 h pour les autres e-mails). Un mot de passe refusé ou une adresse rejetée ne sont pas réessayés. Les e-mails en échec s'affichent dans *Rappels et e-mails* et sur le tableau de bord, avec un bouton « Renvoyer les échecs ».
 
 **Matières reliées au wiki et aux QCM** : dans la fenêtre d'une séance, relie la matière à sa collection du wiki et à sa catégorie de QCM (suggestions automatiques d'après le nom, le sigle ou l'intervenant). Pour un contrôle, « Préparer ce contrôle » fixe la date d'examen des QCM liés au jour du contrôle : les révisions s'organisent pour être prêt à temps.
@@ -44,7 +44,11 @@ Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochai
 ## Wiki : les cours (coffre Obsidian)
 
 Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaque fichier `.md` du coffre est une page.
-- **Récupérer tes cours** : `uv run hangar wiki-import https://github.com/wakadu13/Revision` (ou le chemin d'un dossier Obsidian ; `--remplacer` pour écraser, `--images` pour enregistrer aussi les images hébergées sur d'autres sites). Ou travaille directement dans un coffre existant : `HANGAR_VAULT=/chemin/du/coffre uv run hangar`.
+- **Récupérer tes cours** : `uv run hangar wiki-import https://github.com/wakadu13/Revision` (ou le chemin d'un dossier Obsidian ; `--remplacer` pour écraser, `--images` pour enregistrer aussi les images hébergées sur d'autres sites). Les cours sont alors copiés dans `data/vault/`.
+- **Ou travailler directement dans ton coffre Obsidian** (Hangar et Obsidian lisent les mêmes fichiers) : choisis-le une fois pour toutes dans *Réglages › Espace › Coffre du wiki* (sur l'ordinateur de Hangar), ou avec `uv run hangar wiki-coffre "C:\Users\moi\Documents\Obsidian\Cours"`. Le choix est gardé dans `data/coffre.txt` et vaut pour tous les lancements, `lancer.bat` compris ; `uv run hangar wiki-coffre` seul affiche le coffre utilisé, `--defaut` revient à `data/vault/`. Le chemin du coffre s'affiche au démarrage.
+  - Si ce dossier est introuvable (clé ou disque débranché, OneDrive pas encore synchronisé, faute de frappe), le wiki le dit au lieu d'ouvrir un coffre vide, et Hangar ne crée rien à sa place : rebranche le disque puis recharge la page. Hangar n'écrit jamais ses pages de bienvenue dans un coffre que tu as choisi.
+  - Pour un seul lancement, la variable `HANGAR_VAULT` passe avant ce choix. Sous Windows : `set HANGAR_VAULT=C:\chemin\du\coffre` puis `uv run hangar` dans l'invite de commandes (cmd), ou `$env:HANGAR_VAULT = "C:\chemin\du\coffre"` dans PowerShell ; sous Linux/macOS : `HANGAR_VAULT=/chemin/du/coffre uv run hangar`.
+- **Corbeille et renommage** : « Mettre à la corbeille » range la page dans le dossier `.trash` du coffre, à son chemin d'origine ; la page *Corbeille* du menu du wiki la remet en place d'un clic. Une page supprimée hors du wiki (ou une corbeille vidée) garde son historique : la Corbeille le liste, et « Recréer la page avec cette version » la fait revenir. « Renommer / déplacer » (menu ⋯ d'une page) met à jour les liens `[[…]]` des autres pages (leur ancien texte reste dans l'historique), ainsi que l'historique, les favoris, les pages récentes, le tuteur et les QCM générés d'après la page. Un lien écrit avec un alias de la page reste tel quel : l'alias suit la page.
 - Syntaxe Obsidian : liens `[[…]]` et alias, intégrations `![[…]]` (images, PDF, notes, sections), encadrés `> [!note]`, propriétés YAML, tags, formules `$…$` / `$$…$$`, diagrammes Mermaid, surlignage, notes de bas de page…
 - **Images hébergées ailleurs** : le wiki ne charge jamais rien d'un autre site. Il affiche un lien « Image externe : légende ↗ » à la place de l'image. Le bouton « Enregistrer ces images dans le wiki » de la page Importer (ou `hangar wiki-import --images`) les télécharge une fois dans `image/` et met les pages à jour (`![[image.png]]`) : elles s'affichent alors aussi hors ligne.
 - **Fichiers récalcitrants** : une note que Windows refuse d'ouvrir (antivirus, OneDrive « en ligne uniquement » sans réseau) ne bloque plus le wiki. Elle est signalée dans le sommaire et relue dès que possible. Une note écrite avec un vieux Bloc-notes (ANSI) s'ouvre normalement et passe au format habituel quand tu l'enregistres (l'original reste dans l'historique).
@@ -77,7 +81,7 @@ Bouton **Assistant IA** en haut à droite (ou Ctrl+J) : un panneau comme « Plan
 - Réponses en direct, « @ » pour ajouter du contexte, « / » pour les commandes ; l'assistant consulte tickets, tâches, agenda et wiki, et **propose des actions** que tu valides d'un clic : créer la tâche, créer le ticket, ajouter à la page, ajouter au cycle, changer une échéance.
 - Avant de valider une action, « Voir le contenu » montre le texte exact qui sera ajouté (bloc de page, description du ticket, notes de la tâche). L'assistant traite le contenu des pages, des PDF et des commentaires comme des données, jamais comme des consignes, et ses réponses ne chargent aucune image externe : une consigne cachée dans un document ne peut pas faire sortir tes données sans clic.
 - Fonctions d'IA de Revision : expliquer une réponse de QCM, corriger une réponse rédigée, générer un QCM ou des fiches de vocabulaire depuis un cours, « Demander au wiki » (réponses avec sources), tuteur d'une page, améliorer la rédaction dans l'éditeur, transformer un PDF ou du LaTeX en page, corriger une copie photographiée.
-- En ligne de commande : `hangar ia-ajouter ollama`, `ia-tester`, `ia-demander "…"`, `ia-usage`.
+- En ligne de commande : `hangar ia-fournisseurs`, `ia-ajouter ollama`, `ia-tester`, `ia-demander "…"`, `ia-usage`, `ia-travaux`.
 - **Plafond mensuel** (*Réglages › Plafond et consignes*) : il compte aussi les **travaux en lot** dès leur dépôt (chaque lot réserve son coût au plus, remplacé par le coût réel à son retour) et les **réponses arrêtées en cours de route** (bouton Arrêter, coupure). Un nouveau travail est refusé quand le plafond est atteint. Un modèle Claude absent de la table des prix est compté au tarif le plus cher de sa famille, et les réglages affichent « Tarif inconnu » (y compris pour un service payant compatible OpenAI dont tu n'as pas saisi les prix).
 - **Travaux** (*IA › Travaux*) : « Annuler » arrête un travail en attente, en cours ou dans un lot (le lot est aussi annulé chez Anthropic ; ce qui est déjà traité reste facturé). Un lot impossible à récupérer (clé changée, lot expiré, plus de 29 jours) passe en échec et se relance d'un clic. `hangar run` reprend les travaux interrompus dès le démarrage.
 - **Pages longues** : l'IA reçoit les passages de la page qui parlent de ta question (ou un aperçu de toute la page pour « Interroge-moi » et « Résumer »), et sait qu'elle n'a que des extraits. La pastille du panneau affiche « page coupée ». Claude lit jusqu'à 80 000 caractères de la page ouverte, un modèle local 12 000.
@@ -94,17 +98,18 @@ En plus des projets, tickets, cycles et modules :
 
 ## Démarrage rapide
 
-Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python et les dépendances tout seul).
+Prérequis : [uv](https://docs.astral.sh/uv/) (il installe Python et les dépendances tout seul) et, pour récupérer Hangar et le mettre à jour, [Git](https://git-scm.com/download/win).
 
 ```bash
-cd "Projet Pluri/hangar"
+git clone https://github.com/wakadu13/GestionProjet
+cd GestionProjet
 uv run hangar
 ```
 
-Le navigateur s'ouvre sur <http://127.0.0.1:5000>. Raccourcis : `./lancer.sh` (Linux/macOS) ou `lancer.bat` (Windows).
+Sous Windows, il suffit ensuite de **double-cliquer sur `lancer.bat`** dans le dossier `GestionProjet` (Linux/macOS : `./lancer.sh`). Le navigateur s'ouvre sur <http://127.0.0.1:5000>. Garde la fenêtre ouverte tant que tu utilises Hangar (ou fais-le démarrer avec Windows, voir plus bas).
 
 - **Première ouverture sur une base vide** : un écran d'installation crée l'espace de travail et le compte administrateur.
-- **Données du projet EAE** : `uv run hangar demo` crée l'équipe (9 membres), le projet « Optimisation des procédures d'intégration EAE », 7 sprints de deux semaines et **123 tickets rédigés d'après les documents du dossier** (fiche de cadrage, comptes rendus, matrices RGPD, benchmark, plan d'actions, mails prêts à envoyer, démonstrateur…), avec les documents sources joints aux tickets et 12 pages de comptes rendus. Le planning Excel prévisionnel n'est pas utilisé (il reste importable : `uv run hangar demo --planning ../Planning/Plan_taches_gouvernance_donnees_v5.xlsx`).
+- **Données du projet EAE** : `uv run hangar demo` crée l'équipe (9 membres), le projet « Optimisation des procédures d'intégration EAE », 7 sprints de deux semaines et **123 tickets rédigés d'après les documents du projet** (fiche de cadrage, comptes rendus, matrices RGPD, benchmark, plan d'actions, mails prêts à envoyer, démonstrateur…) et 5 pages de comptes rendus. Les documents eux-mêmes ne sont pas dans le dépôt : pour les joindre aux tickets (et avoir les 12 comptes rendus), copie le contenu du dossier « Projet Pluri » (« Avancement projet », « fichier généré »…) dans le dossier qui contient `GestionProjet`, puis lance `uv run hangar rebuild-docs`. La commande `demo` affiche le chemin exact où elle les cherche. Le planning Excel prévisionnel, hors du dépôt lui aussi, reste importable : `uv run hangar demo --planning "chemin\vers\Plan_taches_gouvernance_donnees_v5.xlsx"`.
 
 Connexion par **identifiant et mot de passe** (pas d'e-mail) ; l'écran de connexion affiche les membres : clique sur ton nom puis tape le mot de passe.
 
@@ -118,6 +123,18 @@ Connexion par **identifiant et mot de passe** (pas d'e-mail) ; l'écran de conne
 > Base créée par une ancienne version : l'ancien mot de passe de démonstration, qui était public, doit être changé à la prochaine connexion, et `uv run hangar run --host 0.0.0.0` avertit au démarrage tant qu'un compte l'utilise encore.
 
 > Prénoms retrouvés dans les documents : Raphaël Lazaro, Mathieu Brancourt, Vincent Flohic, Benoit Loubatier. Les autres se complètent depuis **Équipe** ou **Réglages › Profil**.
+
+## Sous Windows : démarrage avec la session et mise à jour
+
+Les rappels, le résumé du matin et les notifications ne partent que si Hangar tourne. Pour ne plus y penser, dans le dossier `GestionProjet\scripts` :
+
+- **`demarrer-avec-windows.bat`** (double-clic) : Hangar démarre tout seul, **sans fenêtre**, à chaque ouverture de ta session, et tout de suite. Pour l'ouvrir, double-clique sur `lancer.bat` (il voit que Hangar tourne et ouvre seulement le navigateur) ou va sur <http://127.0.0.1:5000>. Aucun droit d'administrateur n'est demandé : c'est un raccourci dans le dossier *Démarrage* de ta session.
+- **`ne-plus-demarrer-avec-windows.bat`** : annule, et arrête le Hangar qui tourne en arrière-plan.
+- **`mettre-a-jour.bat`** : fait une sauvegarde complète (dans `data\backups`, les 5 dernières sont gardées), récupère la nouvelle version (`git pull`), installe ce qu'il faut, puis relance Hangar. Il s'arrête sans rien changer si quelque chose cloche (pas d'Internet, fichiers de Hangar modifiés à la main, sauvegarde impossible).
+
+Sans fenêtre, les messages d'erreur vont dans `data\journal\` : `hangar.log` (erreurs et avertissements) et `console.log` (ce qu'afficherait la fenêtre). Les erreurs des pages et des envois automatiques sont aussi listées pour les administrateurs sur la page des erreurs du serveur (`/erreurs/`).
+
+**Version qui tourne** : *Réglages › À propos* affiche la version lancée. Si tu as mis Hangar à jour sans le relancer, cette page et `lancer.bat` te préviennent que l'ancienne version tourne encore : ferme sa fenêtre (ou redémarre l'ordinateur s'il démarre avec ta session), puis relance-le.
 
 ## Travailler à plusieurs (réseau local)
 
@@ -170,6 +187,7 @@ Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse
 - Notifications instantanées (assignation, mention, commentaire…), rappel quotidien des échéances, récapitulatif hebdomadaire, bilan hebdomadaire envoyé aux responsables, e-mails manuels avec modèles (relance, convocation, compte rendu, demande de documents).
 - Mode **boîte d'envoi locale** par défaut : rien ne sort de la machine, les messages sont enregistrés en `.eml` dans `data/outbox/` (ouvrables avec Thunderbird/Outlook). Mode **SMTP** pour un envoi réel (préréglages Gmail avec mot de passe d'application, Outlook, Orange, Free).
 - En cas de panne passagère, nouvel essai automatique (1, 5, 15 puis 60 min) jusqu'à la date limite du message ; bouton **« Renvoyer les échecs »** après avoir corrigé les réglages (par exemple un mot de passe d'application). Les incidents du fil d'arrière-plan sont notés sur la page des erreurs du serveur (`/erreurs/`).
+- Le bilan hebdomadaire envoyé automatiquement (ou par `hangar mail-send`) est le bilan complet, le même que le bouton « Lancer ». Si son calcul échoue, un résumé simplifié part quand même et l'erreur est notée sur `/erreurs/`.
 - Chaque membre renseigne son adresse de notification et ses préférences dans **Réglages › Profil** (l'adresse ne sert pas à la connexion).
 
 **Équipe**
@@ -186,7 +204,7 @@ Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse
 **Données**
 - Import Excel / CSV / JSON (détection automatique des colonnes : Titre/Tâche, Statut, Priorité, Responsable, Appui, Début, Échéance, Phase, Partie, Dépend de…), export Excel (avec feuille de synthèse), CSV, JSON, Markdown, calendrier iCalendar (.ics). Un fichier exporté par Hangar se réimporte sans perte, dans le même projet ou dans un autre : étiquettes, modules (un nom qui contient une virgule est écrit entre guillemets), parent et « bloqué par » visent les tickets du fichier. L'option « Mettre à jour les tickets existants » est décochée par défaut. Cochée, elle ne change que les cellules remplies (une colonne absente ou vide garde la valeur du ticket), ne touche jamais aux tickets d'un autre projet (une clé `EAE-…` importée dans `MEM` devient un nouveau ticket) et fait une sauvegarde de la base juste avant.
 - **Sauvegarde complète (.zip)** en un clic ou en ligne de commande (base, wiki, sets de QCM, copies, pièces jointes, agenda), sauvegardes de la base restaurables en un clic, export JSON des projets (Travail).
-- **API REST** `/api/v1` avec jetons personnels (voir *Réglages › Jetons d'API*). Pour modifier une description sans écraser celle d'un autre, renvoie `description_version` (lu dans le ticket) avec la nouvelle `description` : la réponse est 409 si elle a changé entre-temps.
+- **API REST** `/api/v1` avec jetons personnels (voir *Réglages › Jetons d'API*, ou *Jetons d'API* dans le menu de l'espace). Pour modifier une description sans écraser celle d'un autre, renvoie `description_version` (lu dans le ticket) avec la nouvelle `description` : la réponse est 409 si elle a changé entre-temps.
 
 ## Commandes
 
@@ -199,16 +217,21 @@ uv run hangar rebuild-docs          # recrée les tickets du projet EAE d'après
 uv run hangar agenda-import planning.ics  # importe l'emploi du temps (.ics) ; --user identifiant, --mode weeks|future|merge
 uv run hangar mail-send             # envoie la file d'e-mails, les rappels de l'agenda et les envois programmés maintenant
 uv run hangar wiki-import [<dossier|url git>] [--remplacer] [--images]   # importe un coffre Obsidian (cours) dans le wiki ; --images enregistre aussi les images hébergées ailleurs
+uv run hangar wiki-coffre "C:\chemin\du\coffre"   # utilise ce coffre Obsidian à chaque lancement (sans dossier : affiche le coffre ; --defaut : data/vault)
 uv run hangar wiki-indexer-pdf      # lit le texte de tous les PDF du wiki (recherche)
 uv run hangar qcm-verifier          # vérifie les fichiers de QCM et de langue
 uv run hangar qcm-rappels           # envoie maintenant les rappels de révision dus (notifications)
 uv run hangar connexions-debloquer  # lève les blocages de connexion
+uv run hangar ia-fournisseurs       # liste les fournisseurs d'IA configurés (celui utilisé par défaut)
 uv run hangar ia-ajouter ollama     # ajoute un fournisseur d'IA (anthropic, ollama, lmstudio, vllm, openrouter, mistral…)
 uv run hangar ia-tester             # teste la connexion aux fournisseurs d'IA
+uv run hangar ia-demander "…"       # pose une question au modèle configuré
 uv run hangar ia-usage              # dépense et jetons de l'IA ce mois-ci
+uv run hangar ia-travaux            # fait les travaux d'IA en attente et récupère les lots terminés
 uv run hangar mail-test adresse@ex.fr  # e-mail de test
 uv run hangar backup                # sauvegarde de la base seule dans data/backups/
 uv run hangar backup --complet --vers E:\Sauvegardes --garder 10   # sauvegarde complète (.zip) ailleurs, garde les 10 dernières ; --sans-secrets
+uv run hangar restore copie.db      # remplace la base par une sauvegarde .db (vérifiée, état actuel sauvegardé avant ; Hangar arrêté)
 uv run hangar reset                 # efface la base (sauvegarde avant, pièces jointes mises de côté dans data/backups ; wiki gardé)
 uv run hangar create-admin          # crée ou répare un compte administrateur
 uv run hangar --data /chemin run    # utiliser un autre dossier de données
@@ -217,28 +240,30 @@ uv run python -m unittest discover -s tests   # tests (lancés aussi par GitHub 
 
 ## Où sont les données ?
 
-Tout est dans `hangar/data/` :
+Tout est dans le dossier **`data/` à la racine du dépôt** (`GestionProjet\data\`, à côté de `lancer.bat`) ; le chemin exact s'affiche au lancement (« → Données : … ») et dans *Réglages › Espace*. Le dossier `GestionProjet\hangar\` ne contient que le code.
 
-- `hangar.db` : la base SQLite (projets, tickets, pages, comptes…)
+- `hangar.db` : la base SQLite (projets, tickets, pages, comptes…), avec ses fichiers `hangar.db-wal` et `hangar.db-shm` pendant que Hangar tourne
 - `uploads/` : les pièces jointes
 - `backups/` : les sauvegardes
 - `outbox/` : les e-mails en mode « boîte d'envoi locale »
 - `agenda/` : les fichiers `.ics` importés (un dossier par utilisateur)
-- `vault/` : le coffre du wiki (pages `.md`, images, PDF, sets de QCM `.json`) — ou le dossier indiqué par `HANGAR_VAULT`
+- `vault/` : le coffre du wiki (pages `.md`, images, PDF, sets de QCM `.json`, corbeille `.trash/`) — ou le dossier choisi avec `hangar wiki-coffre` (retenu dans `coffre.txt`) ou indiqué par `HANGAR_VAULT`
 - `wiki_versions/` : l'historique des pages du wiki (un dossier par page ; `<date>-<auteur>.md` = version gardée avant une restauration, une mise à la corbeille, un import ou l'IA, ainsi que toutes les versions d'avant cette mise à jour ; `<date>_<auteur>.md` = version d'écriture, éclaircie avec le temps)
 - `qcm_perso/` : les sets de l'espace personnel de chaque compte
 - `copies/` : les photos des copies corrigées par l'IA
 - `secret.key` : la clé de session (générée automatiquement)
 - `vapid_prive.pem` : la clé des notifications (sans elle, chaque appareil doit se réabonner)
+- `journal/` : le journal des erreurs (`hangar.log`) et, au démarrage sans fenêtre, ce qu'afficherait la console
+- `serveur.json` : la version lancée (pour prévenir quand une mise à jour attend une relance)
 
-Pour transférer Hangar sur une autre machine : fais une sauvegarde complète en cochant « Inclure le mot de passe des e-mails et les clés d'API », installe Hangar sur la nouvelle machine, puis restaure-la (voir ci-dessous). Tu peux aussi copier le dossier `hangar/` entier, données comprises, et le coffre s'il est ailleurs.
+Pour transférer Hangar sur une autre machine : fais une sauvegarde complète en cochant « Inclure le mot de passe des e-mails et les clés d'API », installe Hangar sur la nouvelle machine, puis restaure-la (voir ci-dessous). Tu peux aussi, **Hangar arrêté** (fenêtre fermée), copier tout le dossier `GestionProjet`, ou au moins son dossier `data/`, et le coffre s'il est ailleurs. Ne copie jamais `hangar.db` seul pendant que Hangar tourne : les derniers changements sont encore dans `hangar.db-wal`. Pour une copie de la base à chaud, passe par *Réglages › Sauvegardes* ou `uv run hangar backup`.
 
 ### Sauvegarder et restaurer
 
 - **Sauvegarde complète (.zip)** (Réglages › Sauvegardes › « Tout télécharger (.zip) » ou « Créer une sauvegarde complète », ou `uv run hangar backup --complet`). Elle contient la base, le coffre du wiki (même s'il est ailleurs avec `HANGAR_VAULT`), `wiki_versions/`, `qcm_perso/`, `copies/`, `uploads/`, `agenda/` et `vapid_prive.pem`. Elle ne contient pas `backups/`, `outbox/` ni `secret.key` (la perdre oblige seulement à se reconnecter). Un fichier `LISEZMOI.txt` dans l'archive en décrit le contenu.
-- **Sauvegarde de la base (.db)** : la base seule. Elle se restaure en un clic sur la page, mais sans le wiki, les sets de QCM ni les fichiers.
+- **Sauvegarde de la base (.db)** : la base seule. Elle se restaure en un clic sur la page, mais sans le wiki, les sets de QCM ni les fichiers. Avant de remplacer ta base, Hangar vérifie que le fichier est une base Hangar intacte et sauvegarde l'état actuel. Une sauvegarde faite avec une version plus ancienne de Hangar est mise à jour aussitôt : pas besoin de redémarrer. Tu es ensuite déconnecté (les comptes sont ceux de la sauvegarde). Pour une copie venue d'un autre PC, dépose le fichier `.db` dans `data/backups/` (il apparaît dans la liste) ou utilise `uv run hangar restore copie.db`, Hangar arrêté.
 - **Secrets** : la base contient en clair le mot de passe SMTP et les clés d'API de l'IA. Les téléchargements depuis la page les retirent par défaut ; coche la case pour les garder si tu changes de machine. Les copies gardées dans `data/backups/` et celles de `hangar backup` les contiennent (option `--sans-secrets`). Pour ne pas enregistrer le mot de passe SMTP dans la base, laisse le champ vide et définis la variable d'environnement `HANGAR_SMTP_PASSWORD`, comme `ANTHROPIC_API_KEY` pour l'IA.
-- **Sauvegarde automatique sous Windows** : Planificateur de tâches › Créer une tâche de base › Quotidienne › Démarrer un programme. Programme : `uv` (ou son chemin complet, ex. `C:\Users\<toi>\.local\bin\uv.exe`). Arguments : `run hangar backup --complet --vers "D:\OneDrive\Hangar" --garder 14`. Commencer dans : le dossier `hangar`. Le code de sortie vaut 1 si la sauvegarde a échoué (clé débranchée, disque plein) et 2 si des fichiers verrouillés manquent dans l'archive.
+- **Sauvegarde automatique sous Windows** : Planificateur de tâches › Créer une tâche de base › Quotidienne › Démarrer un programme. Programme : `uv` (ou son chemin complet, ex. `C:\Users\<toi>\.local\bin\uv.exe`). Arguments : `run hangar backup --complet --vers "D:\OneDrive\Hangar" --garder 14`. Commencer dans : le dossier `GestionProjet`. Le code de sortie vaut 1 si la sauvegarde a échoué (clé débranchée, disque plein) et 2 si des fichiers verrouillés manquent dans l'archive.
 - **Restaurer une sauvegarde complète** : arrête Hangar. Décompresse le .zip dans `data/` en remplaçant les fichiers existants ; supprime d'abord `hangar.db-wal` et `hangar.db-shm` s'ils existent. Si `HANGAR_VAULT` pointe ailleurs, copie le contenu de `vault/` dans ton coffre. Relance Hangar. Si la copie était sans secrets, ressaisis le mot de passe SMTP et les clés d'API.
 - **Export JSON des projets (Travail)** : fichier lisible avec les projets, les tickets (assignés, étiquettes et modules compris), les pages et les commentaires, que l'import JSON d'un projet sait relire. Ce n'est pas une sauvegarde : ni agenda, ni QCM, ni wiki.
 - `demo --force` et `reset` sauvegardent la base avant d'effacer et mettent `uploads/`, `qcm_perso/`, `copies/` et `agenda/` de côté dans `data/backups/hangar_<date>_fichiers/`. Pour revenir en arrière, restaure la sauvegarde puis remets ces dossiers dans `data/`. Le coffre du wiki et son historique ne sont jamais effacés.
@@ -246,33 +271,41 @@ Pour transférer Hangar sur une autre machine : fais une sauvegarde complète en
 ## Structure du code
 
 ```
-hangar/
+GestionProjet/
 ├── pyproject.toml          dépendances (uv)
-├── hangar/
-│   ├── __init__.py         application Flask, sécurité (CSRF), aides de gabarits
+├── lancer.bat, lancer.sh   lancement en double-clic (Windows) ou en terminal (Linux/macOS)
+├── scripts/                Windows : démarrage avec la session, arrêt de ce démarrage, mise à jour (.bat + .ps1)
+├── hangar/                 le code (aucune donnée ici)
+│   ├── __init__.py         application Flask, sécurité (CSRF), mise à niveau de la base, aides de gabarits
 │   ├── web.py              en-têtes de sécurité (CSP), cache des fichiers statiques, feuille d'icônes, compression
 │   ├── cli.py              ligne de commande
+│   ├── lancement.py        version lancée, journal des erreurs (data/journal), mise à jour en attente
 │   ├── models.py           modèle de données (SQLAlchemy)
 │   ├── services.py         logique métier : tickets, historique, notifications
 │   ├── issue_query.py      filtres, tris, regroupements, calendrier, Gantt
 │   ├── texte.py            recherche et tri à la française (accents, apostrophes, ligatures ; « École » avant « Zèbre »)
 │   ├── ics.py              lecture des fichiers .ics (format de l'école et iCalendar standard)
+│   ├── agenda.py           agenda : imports (le dernier fait foi), tâches, rappels, vues semaine / mois
 │   ├── digest.py           résumé quotidien par e-mail (chaque module y ajoute sa section)
+│   ├── mailer.py           e-mails : file d'envoi, SMTP ou .eml, envois planifiés, fil d'arrière-plan
+│   ├── bilan.py            bilans d'avancement (calcul, Markdown, Word)
 │   ├── workgraph.py        initiatives : avancement, santé, graphe
-│   ├── wiki/               wiki (port de Revision : vault, render, latex, historique, texte_pdf…)
+│   ├── wiki/               wiki (port de Revision : vault, render, latex, historique, corbeille, texte_pdf…)
 │   ├── qcm/                QCM et révision espacée (port de Revision : quiz, fsrs, langues, planning…)
 │   ├── ai/                 assistant IA : fournisseurs (Claude, compatibles OpenAI), panneau, outils, fonctions
-│   ├── agenda.py           agenda : imports (le dernier fait foi), tâches, rappels, vues semaine / mois
+│   ├── appareils.py        jetons d'appareil (appli Android)
+│   ├── blocage_connexion.py  blocage après des mots de passe faux
 │   ├── importer.py         import/export Excel, CSV, JSON, Word
 │   ├── charts.py           graphiques SVG générés en Python
 │   ├── securite.py         garde-fous communs : couleurs, adresses locales, fichiers servis, images externes
-│   ├── sauvegarde.py       sauvegardes complètes (.zip), copies sans secrets, rotation
-│   ├── seed.py             données de démonstration
+│   ├── sauvegarde.py       sauvegardes complètes (.zip), copies sans secrets, vérification avant restauration
+│   ├── seed.py, seed_documents.py, seed_data/   données de démonstration du projet EAE
 │   ├── views/              routes (une par domaine : tickets, cycles, pages, équipe, API…)
 │   ├── templates/          gabarits Jinja
-│   └── static/             CSS et JavaScript (sans dépendance)
-├── tests/                  tests de l'agenda (uv run python -m unittest discover -s tests)
-└── data/                   base et fichiers (créé au premier lancement)
+│   └── static/             CSS et JavaScript ; bibliothèques embarquées (KaTeX, Mermaid, highlight.js,
+│                           CodeMirror, pdf.js) dans static/vendor et static/wiki/vendor : aucun CDN
+├── tests/                  tests unittest de toutes les sections (uv run python -m unittest discover -s tests)
+└── data/                   tes données : base, coffre, sauvegardes… (créé au premier lancement)
 ```
 
 Pour les développeurs : dans les gabarits, écris `url_for('static', filename=…)` sans `?v=` : l'empreinte du fichier est ajoutée toute seule. Un bloc `<script>` écrit dans un gabarit porte `nonce="{{ csp_nonce() }}"`. Pas d'attribut `onclick=` ni de lien `javascript:` : utilise `data-imprimer`, `data-retour`, `data-confirm` ou `data-confirm-msg`.

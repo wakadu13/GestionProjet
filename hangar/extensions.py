@@ -31,3 +31,20 @@ def _sqlite_pragmas(dbapi_conn, _record):
         dbapi_conn.create_function("plier", 1, plier, deterministic=True)
         dbapi_conn.create_function("contient_plie", 2, contient_sql, deterministic=True)
         dbapi_conn.create_collation(COLLATION_FR, comparer)
+
+
+def vider_journal() -> bool:
+    """Recopie le journal WAL (``hangar.db-wal``) dans ``hangar.db`` et le vide : le fichier ``hangar.db`` seul
+    contient alors tout, même si Hangar est fermé brutalement ensuite (fenêtre fermée sous Windows). Appelé
+    après chaque sauvegarde, régulièrement par le fil d'arrière-plan et à l'arrêt. Renvoie False si des
+    lectures en cours l'en ont empêché (il sera refait au prochain passage). Ne lève jamais."""
+    import logging
+
+    from sqlalchemy import text
+    try:
+        with db.engine.connect() as con:
+            occupe = con.execute(text("PRAGMA wal_checkpoint(TRUNCATE)")).fetchone()
+        return not (occupe and occupe[0])
+    except Exception:  # noqa: BLE001 - base verrouillée, hors application : on réessaiera
+        logging.getLogger(__name__).warning("Journal de la base non vidé", exc_info=True)
+        return False

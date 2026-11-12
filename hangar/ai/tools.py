@@ -647,17 +647,15 @@ def _do_ajout_wiki(a, user):
         old, _ = lire_note(path)
     except OSError as e:
         raise ActionError(FICHIER_INACCESSIBLE, 409) from e
-    try:  # historique des versions du wiki, s'il existe
-        from ..wiki import historique  # type: ignore
+    from ..wiki import historique
+    from ..wiki import vault as wiki_vault_module
+    try:  # l'ancienne version d'abord : sans elle, on ne touche pas à la page
         historique.sauvegarder(Path(note.path).as_posix(), old, user.username)
-    except Exception:  # noqa: BLE001
-        pass
+    except (OSError, ValueError) as e:
+        raise ActionError("Impossible de garder l’ancienne version de la page dans l’historique : "
+                          "la page n’a pas été modifiée. Réessaie dans un moment.", 409) from e
     path.write_text(_insert_block(old, p.get("contenu") or "", p.get("position")), encoding="utf-8", newline="\n")
-    try:
-        from ..wiki import vault as wiki_vault_module  # type: ignore
-        getattr(wiki_vault_module, "invalider", lambda: None)()
-    except Exception:  # noqa: BLE001
-        pass
+    wiki_vault_module.invalider()
     return {"message": f"Bloc ajouté à « {note.title} ».", "url": p.get("url")}
 
 

@@ -5,7 +5,9 @@
   superficiel, puis copie de son dossier ``vault/``), sans ``.obsidian``, ``.trash`` ni ``.git`` ;
   ``hangar wiki-import --images`` (avec ou sans source) télécharge en plus dans le coffre les images
   hébergées sur d'autres sites, et réécrit les liens des pages en ``![[image.png]]`` ;
-- ``hangar wiki-indexer-pdf`` : lit d'un coup le texte de tous les PDF du coffre (recherche).
+- ``hangar wiki-indexer-pdf`` : lit d'un coup le texte de tous les PDF du coffre (recherche) ;
+- ``hangar wiki-coffre [<dossier> | --defaut]`` : affiche, mémorise (dans data/coffre.txt) ou oublie le dossier du
+  coffre ; vaut pour tous les lancements, lancer.bat compris (la variable HANGAR_VAULT reste prioritaire).
 """
 from __future__ import annotations
 
@@ -85,6 +87,35 @@ def cmd_wiki_indexer_pdf(args):
     print(f"✓ Texte de {n} PDF lu (les autres étaient déjà à jour).")
 
 
+def cmd_wiki_coffre(args):
+    import os
+    from pathlib import Path
+
+    from .. import BASE_DIR
+    from . import coffre
+    data = Path(args.data or os.environ.get("HANGAR_DATA") or BASE_DIR / "data").resolve()
+    if args.dossier or args.defaut:
+        data.mkdir(parents=True, exist_ok=True)
+        try:
+            retenu = coffre.memoriser(data, None if args.defaut else args.dossier)
+        except (OSError, ValueError) as exc:
+            print(f"✗ {exc}")
+            if isinstance(exc, FileNotFoundError):
+                print("  Vérifie le chemin (copie-le depuis la barre d'adresse de l'Explorateur), et que le disque "
+                      "ou la clé est branché. Mets-le entre guillemets s'il contient des espaces.")
+            sys.exit(1)
+        print(f"✓ Coffre du wiki : {retenu}" if retenu else "✓ Coffre du wiki : dossier par défaut (data/vault).")
+        print("  Retenu pour tous les lancements (lancer.bat compris). Relance Hangar s'il tourne déjà.")
+    dossier, origine = coffre.choisir(data)
+    if not (args.dossier or args.defaut):
+        print(f"Coffre du wiki : {dossier} ({coffre.ORIGINES[origine]})")
+    if origine == coffre.VARIABLE:
+        print("  ! La variable HANGAR_VAULT est définie : c'est elle qui compte tant qu'elle existe.")
+    if origine != coffre.DEFAUT and not dossier.is_dir():
+        print("  ! Ce dossier est introuvable : le wiki affichera un avertissement au lieu de tes pages.")
+        sys.exit(1)
+
+
 def register(sub) -> dict:
     """Ajoute les sous-commandes du wiki à l'analyseur ; retourne {nom: fonction(args)}."""
     wi = sub.add_parser("wiki-import", help="importer un coffre Obsidian (dossier local ou dépôt git) dans le wiki")
@@ -95,4 +126,8 @@ def register(sub) -> dict:
     wi.add_argument("--images", action="store_true",
                     help="télécharger dans le wiki les images hébergées sur d'autres sites et mettre à jour les pages")
     sub.add_parser("wiki-indexer-pdf", help="lire le texte de tous les PDF du wiki (recherche)")
-    return {"wiki-import": cmd_wiki_import, "wiki-indexer-pdf": cmd_wiki_indexer_pdf}
+    wc = sub.add_parser("wiki-coffre", help="afficher ou choisir le dossier du coffre du wiki (ton coffre Obsidian)")
+    wc.add_argument("dossier", nargs="?", default="", help="dossier du coffre à utiliser à chaque lancement")
+    wc.add_argument("--defaut", action="store_true", help="revenir au dossier par défaut (data/vault)")
+    return {"wiki-import": cmd_wiki_import, "wiki-indexer-pdf": cmd_wiki_indexer_pdf,
+            "wiki-coffre": cmd_wiki_coffre}

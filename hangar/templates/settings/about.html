@@ -5,19 +5,25 @@
 {% block content %}
 <div class="settings">
   <div class="settings-body">
-    <div class="flex gap-12 mb"><span class="auth-logo" style="margin:0"><span class="lg">{{ icon('plane', 20) }}</span></span><div><h2>Hangar {{ version }}</h2><div class="muted">Gestion de projet et d’équipe, 100 % locale — inspirée de Plane.</div></div></div>
+    <div class="flex gap-12 mb"><span class="auth-logo" style="margin:0"><span class="lg">{{ icon('plane', 20) }}</span></span><div><h2 data-version>Hangar {{ version_lancee }}</h2><div class="muted">Agenda, cours, QCM, assistant IA et gestion de projet, 100 % en local.</div></div></div>
+    {% if mise_a_jour %}
+    <div class="danger-zone mb" style="border-color:var(--warning);background:var(--warning-bg)" data-mise-a-jour>
+      <p style="margin:0">{{ icon('alert', 14) }} Une mise à jour est installée ({{ version_disque }}), mais c’est encore la version {{ version_lancee }} qui tourne. Ferme la fenêtre de Hangar (ou redémarre l’ordinateur s’il démarre avec ta session), puis relance-le.</p>
+    </div>
+    {% endif %}
     <div class="panel panel-b md">
-      <h3>Fonctionnalités</h3>
+      <h3>Les six sections</h3>
       <ul>
-        <li><b>Tickets</b> : états personnalisables, priorités, assignés multiples, étiquettes, dates, estimations, sous-tickets, relations (bloque / bloqué par / lié / doublon), liens, pièces jointes, commentaires avec réactions et mentions, historique complet, temps passé.</li>
-        <li><b>Vues</b> : liste, tableau kanban, tableur avec actions groupées, calendrier, Gantt — filtres, regroupements, tris, vues enregistrées.</li>
-        <li><b>Cycles</b> (sprints) avec burndown, <b>modules</b>, <b>intake</b> (triage des demandes), <b>pages</b> (wiki markdown, modèles, versions, import Word).</li>
-        <li><b>Équipe</b> : rôles, profils, charge de travail hebdomadaire, absences, analytique personnalisée.</li>
-        <li><b>Notifications</b>, favoris, pense-bêtes, palette de commandes (Ctrl+K), raccourcis clavier, thème sombre.</li>
-        <li><b>Données</b> : import/export Excel, CSV, JSON, Markdown, iCalendar ; sauvegardes ; API REST avec jetons.</li>
+        <li><b>Agenda</b> : emploi du temps importé (.ics), tâches et rappels, résumé du jour par e-mail.</li>
+        <li><b>Travail</b> : projets et tickets (états, priorités, assignés, étiquettes, sous-tickets, relations), vues liste, kanban, tableur, calendrier et Gantt, cycles, modules, pages, intake, équipe, bilans, initiatives.</li>
+        <li><b>Wiki</b> : tes cours en Markdown, compatibles Obsidian (liens <code>[[…]]</code>, formules, schémas, PDF annotés), historique des versions, corbeille, lecture hors ligne.</li>
+        <li><b>QCM</b> : révisions espacées (FSRS), sets du coffre ou personnels, mode hors ligne et appli Android.</li>
+        <li><b>IA</b> : assistant (Claude ou fournisseur compatible OpenAI), tuteur sur une page, « Demander au wiki », génération de QCM et de fiches, correction de copies.</li>
+        <li><b>Réglages</b> : profil, espace, jetons d’API, e-mails automatiques, sauvegardes.</li>
       </ul>
       <h3>Technique</h3>
       <p>Python · Flask · SQLAlchemy · SQLite. Aucune ressource externe : l’application fonctionne hors connexion.</p>
+      {% if version_commit %}<p class="muted small">Code lancé : <code>{{ version_commit }}</code>{% if version_date %} du {{ version_date }}{% endif %}.</p>{% endif %}
     </div>
   </div>
 </div>

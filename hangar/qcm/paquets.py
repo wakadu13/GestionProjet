@@ -17,7 +17,7 @@ from datetime import date
 from pathlib import PurePosixPath
 
 from . import langues, quiz
-from .coffre import DOSSIER_QCM, INVALID_NAME_RE, invalider, racine
+from .coffre import DOSSIER_QCM, INVALID_NAME_RE, invalider, racine_ecriture
 
 
 def slugify(value):
@@ -50,7 +50,7 @@ def slug(texte):
 
 def chemin_libre(dossier, titre, defaut):
     """QCM/<dossier>/<titre en minuscules>.json, avec « -2 », « -3 »… si le nom est pris."""
-    root = racine()
+    root = _racine_ecriture()
     base = (slug(titre) or defaut)[:60]
     for i in range(1, 1000):
         rel = PurePosixPath(DOSSIER_QCM, dossier, f"{base}.json" if i == 1 else f"{base}-{i}.json")
@@ -59,8 +59,15 @@ def chemin_libre(dossier, titre, defaut):
     raise PaquetInvalide("Aucun nom de fichier libre.")
 
 
+def _racine_ecriture():
+    try:
+        return racine_ecriture()
+    except ValueError as e:  # coffre introuvable : message montré tel quel, rien n'est créé
+        raise PaquetInvalide(str(e)) from None
+
+
 def enregistrer_json(rel, donnees):
-    root = racine()
+    root = _racine_ecriture()
     cible = root / rel
     if not cible.resolve().is_relative_to(root.resolve()):
         raise PaquetInvalide("Dossier invalide.")

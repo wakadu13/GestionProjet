@@ -351,7 +351,7 @@ class EditionTests(WikiTestCase):
         r = self.post("/supprimer-page/Cours/Fiche")
         self.assertEqual(r.status_code, 302)
         self.assertFalse((self.root / "Cours" / "Fiche.md").exists())
-        self.assertTrue((self.root / ".trash" / "Fiche.md").exists())
+        self.assertTrue((self.root / ".trash" / "Cours" / "Fiche.md").exists())  # chemin d'origine gardé (piste 59)
         self.assertNotIn("cours/fiche", get_vault().notes)
 
 

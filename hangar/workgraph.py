@@ -744,11 +744,9 @@ def ai_context(path: str, args, user) -> dict | None:
     return None
 
 
-try:  # le contrat IA est fourni par hangar.ai ; son absence ne doit pas empêcher le module de fonctionner
-    from . import ai as _ai
-    _ai.register_context(ai_context)
-except Exception:  # pragma: no cover
-    pass
+from . import ai as _ai  # noqa: E402 - contexte du panneau IA (même paquet : toujours présent)
+
+_ai.register_context(ai_context)
 
 
 # ---------------------------------------------------------------------------
