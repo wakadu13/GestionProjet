@@ -68,6 +68,12 @@ def cmd_run(args):
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     from .mailer import start_worker
     start_worker(app)  # envoi des e-mails en file et des e-mails planifiés
+    try:  # travaux de l'IA interrompus par l'arrêt précédent, lots à relever : repris sans attendre une page
+        from .ai import jobs as ai_jobs
+        with app.app_context():
+            ai_jobs.resume(app)
+    except Exception as exc:  # noqa: BLE001 - l'IA ne doit pas empêcher Hangar de démarrer
+        print(f"  ! Reprise des travaux de l’IA impossible : {exc}")
     try:
         if args.debug:
             app.run(host=args.host, port=port, debug=True, use_reloader=False)

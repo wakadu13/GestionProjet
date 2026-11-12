@@ -26,10 +26,31 @@ MAX_SELECTION = 8_000
 MAX_MENTIONS = 6
 HISTORY_MESSAGES = 24
 HISTORY_CHARS = 200_000
+# Page ouverte transmise : Claude en lit beaucoup (≈ 25 000 jetons au plus, soit une dizaine de centimes avec Opus la
+# première fois, puis relue depuis le cache) ; au-delà, des extraits. Éléments « @ » : 30 000 caractères chacun.
+CLAUDE_PAGE_CHARS = 80_000
+MENTION_CHARS = 30_000
 # Modèles compatibles OpenAI (souvent locaux, petite mémoire de contexte) : moins de texte par tour.
 LOCAL_PAGE_CHARS = 12_000
 LOCAL_HISTORY_MESSAGES = 10
 LOCAL_HISTORY_CHARS = 30_000
+
+
+def page_limit(row) -> int:
+    """Caractères de la page ouverte transmis au modèle de ce fournisseur."""
+    return CLAUDE_PAGE_CHARS if row is not None and row.kind == "anthropic" else LOCAL_PAGE_CHARS
+
+
+def cut_page(page: dict, question: str, limit: int) -> dict:
+    """Page trop longue pour le modèle : extraits utiles (ou aperçu de toute la page) et mention pour le modèle.
+    La clé suit les extraits : une autre question sur la même page renvoie d'autres passages."""
+    taille = page.get("size") or len(page.get("text") or "")
+    place_note = len(C.note_extraits(taille, limit)) + 2
+    texte, coupe = C.extraits(page.get("text") or "", question, max(1000, limit - place_note))
+    if not coupe:
+        return page
+    texte = f"{texte}\n\n{C.note_extraits(taille, len(texte))}"  # taille réellement transmise
+    return {**page, "text": texte, "key": C.page_key(page.get("url") or "", texte), "coupee": True, "taille": taille}
 
 # Consigne stable (mise en cache chez Claude) : la date, la page et l'utilisateur vont dans le message.
 SYSTEM = """Tu es l’assistant IA de Hangar, l’application de travail de l’espace « {espace} » : agenda et emploi du \
@@ -113,7 +134,8 @@ def _cut(text: str, limit: int | None) -> str:
 
 
 def build_prompt(text: str, user, *, page: dict | None, selection: str, mentions: list[dict],
-                 previous_page_key: str | None, at: datetime | None = None, max_chars: int | None = None) -> str:
+                 previous_page_key: str | None, at: datetime | None = None, max_chars: int | None = None,
+                 mention_chars: int | None = None) -> str:
     at = at or now()
     role = {"admin": "administrateur", "member": "membre", "guest": "invité"}.get(user.role, user.role)
     ctx = [f"Date et heure : {_day(at)}, {at:%H:%M} (aujourd’hui : {at:%Y-%m-%d})",
@@ -129,7 +151,7 @@ def build_prompt(text: str, user, *, page: dict | None, selection: str, mentions
         ctx.append(f"Texte sélectionné par l’utilisateur dans la page :\n<selection>\n{selection}\n</selection>")
     for m in mentions:
         ctx.append(f"Élément ajouté avec @ : {m['title']} (type : {m['type']}, adresse : {m['url']})\n"
-                   f"<element>\n{_cut(m.get('text') or '(vide)', max_chars)}\n</element>")
+                   f"<element>\n{_cut(m.get('text') or '(vide)', mention_chars or max_chars)}\n</element>")
     return "<contexte>\n" + "\n".join(ctx) + "\n</contexte>\n\n" + text
 
 
@@ -237,8 +259,14 @@ class Turn:
         else:
             self.use_tools = prov.tools_supported(model)
             self.system = system_prompt(self.use_tools)
+            limit = page_limit(self.row)
+            if page and len(page.get("text") or "") > limit:
+                # Question libre : passages qui en parlent ; commande (« Interroge-moi », « Résumer »…) : aperçu
+                # de toute la page.
+                page = cut_page(page, "" if command else text, limit)
             prompt = build_prompt(text, user, page=page, selection=selection, mentions=mentions,
-                                  previous_page_key=last_page_key(conv), max_chars=LOCAL_PAGE_CHARS if local else None)
+                                  previous_page_key=last_page_key(conv), max_chars=limit,
+                                  mention_chars=min(limit, MENTION_CHARS))
         ctx = {"page": chip(page) if self.mode == "chat" else None, "selection": selection if self.mode == "chat" else "",
                "mentions": [{k: m.get(k) for k in ("type", "title", "url", "icon")} for m in mentions]}
         self.user_msg = AIMessage(conversation_id=conv.id, role="user", content=text, prompt=prompt,
@@ -279,10 +307,12 @@ class Turn:
                             "model": core.model_label(self.reply.model), "provider": self.row.name,
                             "tools": self.use_tools})
         buf, round_start, final, sent_actions, warned = "", 0, None, set(), False
+        shown: set = set()
+        agent = core.run_agent(self.messages, tools=self.box.definitions() if self.use_tools else None,
+                               execute=self.box.execute, system=self.system, user=self.user, role=self.role,
+                               feature="wiki" if self.mode == "wiki" else "chat")
         try:
-            for ev in core.run_agent(self.messages, tools=self.box.definitions() if self.use_tools else None,
-                                     execute=self.box.execute, system=self.system, user=self.user, role=self.role,
-                                     feature="wiki" if self.mode == "wiki" else "chat"):
+            for ev in agent:
                 t = ev["type"]
                 if t == "text":
                     buf += ev["text"]
@@ -313,10 +343,15 @@ class Turn:
                         warned = True
                         yield sse("info", {"message": "Ce modèle ne gère pas les outils : réponse faite avec le seul "
                                                       "contexte de la page."})
+                    for w in [w for r in ev.get("results") or [ev["result"]] for w in r.warnings]:
+                        if w not in shown:  # ex. demande plus grosse que la mémoire d'Ollama
+                            shown.add(w)
+                            yield sse("info", {"message": w})
         except AIError as e:
             yield self._fail(e.message, e.code, buf)
             return
         except GeneratorExit:
+            agent.close()  # compte tout de suite l'usage de la réponse arrêtée (voir core._run)
             self._interrupted(buf)
             raise
         except Exception:  # noqa: BLE001

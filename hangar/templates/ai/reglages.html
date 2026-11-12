@@ -45,8 +45,9 @@
           {% if p.model_vision %}<div class="ai-kv"><span>Vision</span><b class="mono">{{ p.model_vision }}</b></div>{% endif %}
           <div class="ai-kv"><span>Rôles</span><b>{% for r in p.role_list %}<span class="badge">{{ dict(roles)[r] }}</span> {% endfor %}</b></div>
           {% if current_user.is_admin %}
-          <div class="ai-kv"><span>Clé</span><b>{% if p.key_source == 'base' %}<span class="mono">{{ p.masked_key }}</span> <span class="help">(enregistrée)</span>{% elif p.key_source == 'env' %}<span class="mono">{{ p.masked_key }}</span> <span class="help">(variable {{ p.env_name() }})</span>{% elif p.needs_key %}<span class="danger-text">aucune</span>{% else %}<span class="help">pas nécessaire</span>{% endif %}</b></div>
+          <div class="ai-kv"><span>Clé</span><b>{% if p.key_source == 'base' %}<span class="mono">{{ p.masked_key }}</span> <span class="help">(enregistrée)</span>{% elif p.key_source == 'env' %}<span class="mono">{{ p.masked_key }}</span> <span class="help">(variable {{ p.env_name() }})</span>{% elif p.env_key_withheld() %}<span class="danger-text">aucune</span> <span class="help">(la variable {{ p.env_name() }} ne part que vers {{ p.env_key_withheld() }})</span>{% elif p.needs_key %}<span class="danger-text">aucune</span>{% else %}<span class="help">pas nécessaire</span>{% endif %}</b></div>
           {% if p.monthly_cap %}<div class="ai-kv"><span>Plafond</span><b>{{ '%.2f'|format(p.monthly_cap) }} $ / mois</b></div>{% endif %}
+          {% for note in price_notes.get(p.id, []) %}<div class="ai-price-note">{{ icon('alert', 13) }}<span>{{ note }}</span></div>{% endfor %}
           {% endif %}
           <div class="ai-test-res {% if p.last_test_ok %}ok{% elif p.last_test_ok == false %}ko{% endif %}" data-ai-test-res>{% if p.last_test_at %}{{ icon('check-circle' if p.last_test_ok else 'alert', 13) }} {{ p.last_test_message }} <span class="help">({{ p.last_test_at|ago }})</span>{% endif %}</div>
         </div>
@@ -80,10 +81,11 @@
       <div class="grid-2">
         <div class="field"><label for="ai-cap">Plafond mensuel de dépense (dollars, tous fournisseurs)</label>
           <input class="input" id="ai-cap" name="monthly_cap" inputmode="decimal" value="{{ '%g'|format(s.monthly_cap or 0) }}">
-          <span class="help">0 = pas de plafond. Une fois atteint, l’IA est suspendue jusqu’au mois suivant. Les modèles locaux ne coûtent rien.</span>
+          <span class="help">0 = pas de plafond. Une fois atteint, l’IA est suspendue jusqu’au mois suivant. Les lots en cours réservent leur coût prévu : quand la dépense et ces réserves atteignent le plafond, aucun nouveau lot ne part. Une réponse arrêtée en cours de route compte aussi. Les modèles locaux ne coûtent rien.</span>
         </div>
         <div class="field"><label>Dépense de l’espace ce mois-ci</label>
           <div class="ai-cap-box"><b>{{ '%.2f'|format(usage.total) }} $</b>{% if s.monthly_cap %} sur {{ '%.2f'|format(s.monthly_cap) }} ${% set pct = [100, (100 * usage.total / s.monthly_cap)|round|int]|min %}{{ ui.progress(pct, 'accent') }}{% endif %}</div>
+          {% if usage.reserved %}<span class="help">En plus : {{ '%.2f'|format(usage.reserved) }} $ réservés pour {{ usage.lots }} lot{{ 's' if usage.lots > 1 }} en cours (coût prévu, remplacé par le coût réel à leur retour). Ils limitent seulement le dépôt de nouveaux lots.</span>{% endif %}
         </div>
       </div>
       <div class="field"><label for="ai-instr">Consignes ajoutées à l’assistant <span class="muted">(facultatif)</span></label>
@@ -141,7 +143,12 @@
           <li>Dans un terminal, télécharge un modèle : <code>ollama pull llama3.2</code> (léger, 2 Go) ou <code>ollama pull qwen2.5</code> (meilleur pour les outils et le français).</li>
           <li>Ici, ajoute le préréglage <b>Ollama (local)</b> : adresse <code>http://localhost:11434/v1</code>, modèle <code>llama3.2</code> ou <code>qwen2.5</code>, puis « Tester la connexion ».</li>
         </ol>
-        <p class="help">Gratuit et hors ligne ; plus lent et moins précis que Claude. Pour lire des photos, choisis un modèle « vision » (ex. <code>llava</code>, <code>qwen2.5vl</code>) dans le rôle Vision. Pour de longues pages, donne plus de mémoire au modèle : lance Ollama avec <code>OLLAMA_CONTEXT_LENGTH=16384 ollama serve</code>. Si le modèle s’embrouille avec les outils, règle « Appel d’outils » sur « Jamais ». LM Studio, vLLM et llama.cpp fonctionnent de la même façon avec leur propre adresse.</p>
+        <p class="help">Gratuit et hors ligne ; plus lent et moins précis que Claude. Pour lire des photos, choisis un modèle « vision » (ex. <code>llava</code>, <code>qwen2.5vl</code>) dans le rôle Vision. Si le modèle s’embrouille avec les outils, règle « Appel d’outils » sur « Jamais ». LM Studio, vLLM et llama.cpp fonctionnent de la même façon avec leur propre adresse.</p>
+        <p class="help"><b>Mémoire du modèle.</b> Par défaut, Ollama ne garde que 4 096 jetons : avec une page ouverte, l’assistant en demande souvent plus, et Ollama oublie alors le début (consignes, début de la page) sans prévenir. Hangar t’avertit quand c’est le cas. Pour lui donner plus de mémoire (16 384 jetons ou plus, si ton ordinateur a assez de mémoire vive) :</p>
+        <ul class="help">
+          <li>dans l’application Ollama : ouvre ses réglages (<b>Settings</b>) et pousse le curseur <b>Context length</b> ;</li>
+          <li>ou sous Windows : menu Démarrer, « Modifier les variables d’environnement pour votre compte », ajoute la variable <code>OLLAMA_CONTEXT_LENGTH</code> avec la valeur <code>16384</code>, puis quitte Ollama (clic droit sur son icône près de l’horloge, « Quit Ollama ») et relance-le.</li>
+        </ul>
       </div>
       <div class="panel panel-b">
         <h3>{{ icon('sparkle', 15) }} Claude (Anthropic)</h3>

@@ -292,13 +292,35 @@
     function ajouterExpliqueMoi(feedback, q) {
       const b = el("button", "btn btn-sm quiz-expliquer", "✦ Explique-moi");
       b.type = "button";
+      // Boîte de l'explication ; un administrateur peut refaire une explication gardée (bancale ou coupée).
+      const boite = (r) => {
+        const box = el("div", "quiz-explication quiz-explication-claude markdown", r.html);
+        box.prepend(el("p", "muted quiz-explication-source", "✦ Explication de l’IA" + (r.gardee ? "" : " (nouvelle)")));
+        if (r.refaire && r.gardee) {
+          const refaire = el("button", "btn btn-xs btn-ghost quiz-refaire", "↻ Refaire l’explication");
+          refaire.type = "button";
+          refaire.title = "Efface l’explication gardée pour tous et en demande une nouvelle à l’IA";
+          refaire.addEventListener("click", async () => {
+            refaire.disabled = true;
+            refaire.textContent = "L’IA réfléchit…";
+            try {
+              const nouvelle = boite(await options.expliquer(q, true));
+              box.replaceWith(nouvelle);
+              renderMath(nouvelle);
+            } catch (e) {
+              refaire.disabled = false;
+              refaire.textContent = e.message || "Explication impossible pour l'instant.";
+            }
+          });
+          box.appendChild(refaire);
+        }
+        return box;
+      };
       b.addEventListener("click", async () => {
         b.disabled = true;
         b.textContent = "L’IA réfléchit…";
         try {
-          const r = await options.expliquer(q);
-          const box = el("div", "quiz-explication quiz-explication-claude markdown", r.html);
-          box.prepend(el("p", "muted quiz-explication-source", "✦ Explication de l’IA" + (r.gardee ? "" : " (nouvelle)")));
+          const box = boite(await options.expliquer(q));
           b.replaceWith(box);
           renderMath(box);
         } catch (e) {
@@ -365,8 +387,10 @@
       let r = null;
       try { r = await options.corrigerQrc(q, input.value.trim()); } catch (e) { r = null; }
       if (!r || !r.verdict) {
+        // Sans verdict de l'IA (plafond, panne, réponse incomplète) : correction stricte, mais dite comme telle.
         input.classList.add("is-wrong");
-        showFeedback(false, attendu + q.explication);
+        showFeedback(false, '<p class="muted quiz-retour-claude">✦ L’IA n’a pas pu juger ta réponse : correction '
+          + "stricte, d’après le corrigé.</p>" + attendu + q.explication);
         answered(q, false);
         return;
       }
@@ -623,9 +647,9 @@
     return poster(root.dataset.corrigerQrcUrl, { set_id: q.set_id, question_id: q.id, reponse });
   }
 
-  async function expliquer(q) {
+  async function expliquer(q, refaire) {
     try {
-      return await poster(root.dataset.expliquerUrl, { set_id: q.set_id, question_id: q.id });
+      return await poster(root.dataset.expliquerUrl, { set_id: q.set_id, question_id: q.id, refaire: !!refaire });
     } catch (e) {
       throw new Error(e.message || "Explication impossible pour l'instant.");
     }

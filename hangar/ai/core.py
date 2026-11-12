@@ -22,6 +22,8 @@ import io
 import json
 import logging
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, time
 from typing import Any, Callable, Iterable, Iterator
 
@@ -30,7 +32,7 @@ from sqlalchemy import func
 from ..extensions import db
 from ..models import now
 from . import providers as P
-from .models import AIErrorLog, AIProvider, AISettings, AIUsage
+from .models import AIErrorLog, AIJob, AIProvider, AISettings, AIUsage
 from .providers import AIError, Request, Result, ToolCall
 
 log = logging.getLogger(__name__)
@@ -97,9 +99,111 @@ def month_cost(user_id: int | None = None, provider_id: int | None = None, start
     return float(q.scalar() or 0.0)
 
 
-def cap_reached() -> bool:
+def reserved_cost(provider_id: int | None = None) -> float:
+    """Coût réservé par les lots déposés et pas encore revenus (leur coût réel n'est connu qu'au retour) : sans
+    cette réserve, N travaux en lot partiraient tous tant que la dépense connue vaut 0."""
+    q = AIJob.query.filter_by(status="batch")
+    if provider_id is not None:
+        q = q.filter_by(provider_id=provider_id)
+    return round(sum(float(j.options.get("reserve") or 0) for j in q), 6)
+
+
+def cap_reached(reserves: bool = False) -> bool:
+    """Plafond mensuel des réglages atteint par la dépense du mois. `reserves` : compter aussi les lots en cours,
+    seulement pour décider du dépôt d'un nouveau lot (voir check_batch_cap) ; les autres appels (panneau, tuteur,
+    explications…) ne sont pas bloqués par une réserve, qui n'est qu'une estimation."""
     cap = AISettings.get().monthly_cap or 0
-    return cap > 0 and month_cost() >= cap
+    return cap > 0 and month_cost() + (reserved_cost() if reserves else 0) >= cap
+
+
+def check_batch_cap(row: AIProvider | None = None) -> None:
+    """Avant de déposer un lot : lève AIError si la dépense du mois et les réserves des lots en cours atteignent le
+    plafond des réglages (ou celui du fournisseur `row`)."""
+    def refus(reserve: float):
+        if not reserve:
+            return AIError("Plafond mensuel de l’IA atteint : réessaie le mois prochain ou relève le plafond dans "
+                           "les réglages de l’IA.", "plafond", 429)
+        return AIError(f"Plafond mensuel presque atteint : des lots en cours réservent {reserve:.2f} $ jusqu’à leur "
+                       "retour (sous 24 heures). Lance ce travail sans lot, ou réessaie à leur retour.", "plafond", 429)
+
+    cap = AISettings.get().monthly_cap or 0
+    if cap > 0 and month_cost() + reserved_cost() >= cap:
+        raise refus(reserved_cost() if month_cost() < cap else 0)
+    if row is not None and row.monthly_cap:
+        spent = month_cost(provider_id=row.id)
+        if spent + reserved_cost(row.id) >= row.monthly_cap:
+            raise refus(reserved_cost(row.id) if spent < row.monthly_cap else 0)
+
+
+def _pdf_tokens(data_b64: str) -> int:
+    """Jetons d'un PDF envoyé à Claude, au plus large : environ 3 500 par page (texte et image de la page)."""
+    raw = base64.b64decode(data_b64 or "")
+    try:
+        from pypdf import PdfReader
+        return 3500 * max(1, len(PdfReader(io.BytesIO(raw)).pages))
+    except Exception:  # noqa: BLE001 - PDF illisible ici : estimation d'après sa taille
+        return max(3500, len(raw) // 200)
+
+
+def estimate_input_tokens(req: Request) -> int:
+    """Ordre de grandeur (plutôt haut) des jetons d'entrée d'une requête : texte, images, PDF, outils."""
+    chars, tokens = len(req.system or ""), 0
+    for m in req.messages:
+        c = m.get("content")
+        if isinstance(c, str):
+            chars += len(c)
+        for p in c if isinstance(c, list) else ():
+            t = p.get("type")
+            if t == "text":
+                chars += len(p.get("text") or "")
+            elif t == "image":
+                tokens += 1600
+            elif t == "document":
+                if "text" in p:
+                    chars += len(p["text"])
+                else:
+                    tokens += _pdf_tokens(p.get("data") or "")
+        if m.get("result") is not None:
+            chars += len(m["result"].text or "")
+        chars += sum(len(str(r.get("content") or "")) for r in m.get("results") or [])
+    if req.tools:
+        chars += len(json.dumps(req.tools, ensure_ascii=False))
+    return tokens + chars // 3
+
+
+RESERVE_MIN_OUTPUT = 16_000  # jetons de sortie réservés au moins pour un lot (réflexion comprise)
+
+
+def estimate_request_cost(row: AIProvider, req: Request, batch: bool = False) -> float:
+    """Coût prévu, plutôt large, d'une requête : entrée estimée d'après sa taille (déjà comptée large), sortie de
+    l'ordre de l'entrée (une page de cours réécrite, un QCM tiré d'un cours), au moins RESERVE_MIN_OUTPUT jetons et
+    au plus le plafond max_tokens. Compter tout le plafond (128 000 jetons pour un PDF) réserverait plus d'un dollar
+    pour un PDF d'une page : quatre lots suffiraient à atteindre le plafond par défaut."""
+    inp = estimate_input_tokens(req)
+    limit = req.max_tokens or (CLAUDE_MAX_TOKENS if row.kind == "anthropic" else 0)
+    out = max(RESERVE_MIN_OUTPUT, inp)
+    if limit:
+        out = min(limit, out)
+    res = Result(model=req.model, kind=row.kind, usage=P.Usage(input_tokens=inp, output_tokens=out))
+    return estimate_cost(row, res, batch)
+
+
+def price_notes(row: AIProvider) -> list[str]:
+    """Avertissements des réglages quand le coût d'un fournisseur ne peut pas être calculé exactement."""
+    if row.kind == "anthropic":
+        notes = []
+        for m in dict.fromkeys(x for x in (row.model, row.model_fast, row.model_vision) if x):
+            if not P.claude_price_known(m):
+                pin, pout, _ = P.claude_price(m)
+                famille = P.claude_family(m).capitalize()
+                base = f"des modèles {famille}" if famille else "de Claude"
+                notes.append(f"Tarif inconnu pour « {m} » : coût estimé au tarif le plus cher {base} "
+                             f"({pin:g} $ / {pout:g} $ par million de jetons), pour que le plafond mensuel le compte.")
+        return notes
+    if not row.is_local and not (row.price_input or row.price_output):
+        return ["Tarif inconnu : ce service est sans doute payant, mais ses appels sont comptés 0 $, donc le plafond "
+                "mensuel ne le limite pas. Indique ses prix dans « Réglages avancés »."]
+    return []
 
 
 def estimate_cost(row: AIProvider, res: Result, batch: bool = False) -> float:
@@ -109,10 +213,7 @@ def estimate_cost(row: AIProvider, res: Result, batch: bool = False) -> float:
                                     "cache_read_tokens": u.cache_read_tokens, "cache_write_tokens": u.cache_write_tokens}]
         total = 0.0
         for it in entries:
-            price = P.claude_price(it.get("model") or res.model) or P.claude_price(res.model)
-            if not price:
-                continue
-            pin, pout, pread = price
+            pin, pout, pread = P.claude_price(it.get("model") or res.model)
             inp, cr, cw = it.get("input_tokens", 0), it.get("cache_read_tokens", 0), it.get("cache_write_tokens", 0)
             if (it.get("model") or res.model).startswith("claude-haiku-5-5") and inp + cr + cw > 100_000:
                 pin, pout, pread = 0.50, 2.50, 0.05  # Haiku 5.5 : tarif des longs prompts
@@ -361,7 +462,9 @@ def prepare(messages, *, system: str | None = None, role: str = "chat", model: s
     req = Request(messages=msgs, model=mdl, system=system, max_tokens=max_tokens or
                   (CLAUDE_MAX_TOKENS if row.kind == "anthropic" else None), effort=eff if eff in EFFORTS else "medium",
                   json_schema=json_schema, tools=tools or None, cache_system=cache_system,
-                  cache_messages=cache_messages, timeout=timeout)
+                  cache_messages=cache_messages, timeout=timeout,
+                  # Rôle « rapide » (réponses courtes) : réflexion coupée quand le modèle l'accepte (Haiku 5.5).
+                  thinking=False if role == "rapide" else None)
     return row, prov, req
 
 
@@ -409,9 +512,32 @@ def generate(messages, *, system: str | None = None, role: str = "chat", model: 
             result = _last(_run(prov, row, req, user=user, feature=feature))
         if isinstance(result, AIError):
             raise result
+    _retenir_avertissements(result.warnings)
     if result.refusal and not allow_refusal:
         raise AIError("Le modèle a refusé cette demande.", "refus", 422)
     return result
+
+
+_AVERTISSEMENTS: ContextVar[list | None] = ContextVar("ai_avertissements", default=None)
+
+
+@contextmanager
+def avertissements():
+    """Recueille les avertissements des appels faits dans le bloc (ex. demande plus grosse que la mémoire d'Ollama,
+    qui en a oublié le début) : les demandes courtes (tuteur, « Explique-moi »…) ne renvoient que le texte.
+    ``with core.avertissements() as av: …`` ; ``av`` : liste des messages, sans doublon."""
+    av: list[str] = []
+    jeton = _AVERTISSEMENTS.set(av)
+    try:
+        yield av
+    finally:
+        _AVERTISSEMENTS.reset(jeton)
+
+
+def _retenir_avertissements(warnings) -> None:
+    av = _AVERTISSEMENTS.get()
+    if av is not None:
+        av.extend(w for w in warnings if w not in av)
 
 
 def _last(events: Iterator[dict]):
@@ -428,9 +554,15 @@ def _last(events: Iterator[dict]):
 
 
 def _run(prov: P.Provider, row: AIProvider, req: Request, *, user=None, feature: str = "chat") -> Iterator[dict]:
+    events = prov.stream(req)
+    done = False
     try:
-        for ev in prov.stream(req):
+        for ev in events:
+            if ev["type"] == "usage":  # tentative abandonnée par le fournisseur (nouvel essai), facturée quand même
+                record_usage(row, ev["result"], user, feature)
+                continue
             if ev["type"] == "done":
+                done = True
                 res: Result = ev["result"]
                 res.provider, res.provider_id = row.name, row.id
                 record_usage(row, res, user, feature)
@@ -444,6 +576,15 @@ def _run(prov: P.Provider, row: AIProvider, req: Request, *, user=None, feature:
     except AIError as e:
         record_error(row, req.model, feature, user, e)
         raise
+    finally:
+        if not done:
+            # Flux arrêté avant la fin (bouton « Arrêter », coupure, erreur) : l'entrée et la sortie déjà produite
+            # sont facturées ; on les compte pour que le plafond mensuel les voie.
+            events.close()
+            part = prov.partial
+            prov.partial = None
+            if part is not None and (part.usage.input_tokens or part.usage.output_tokens):
+                record_usage(row, part, user, feature)
 
 
 # ---------------------------------------------------------------------------
@@ -467,11 +608,15 @@ def run_agent(messages: list, *, tools: list, execute: Callable[[ToolCall], tupl
     for rnd in range(max_rounds):
         res = None
         kw.setdefault("cache_messages", True)
-        for ev in generate(msgs, system=system, role=role, tools=tools, stream=True, user=user, feature=feature, **kw):
-            if ev["type"] == "done":
-                res = ev["result"]
-            else:
-                yield ev
+        events = generate(msgs, system=system, role=role, tools=tools, stream=True, user=user, feature=feature, **kw)
+        try:
+            for ev in events:
+                if ev["type"] == "done":
+                    res = ev["result"]
+                else:
+                    yield ev
+        finally:
+            events.close()  # arrêt en plein flux : l'usage partiel est compté tout de suite (voir _run)
         results.append(res)
         if res.text:
             texts.append(res.text)

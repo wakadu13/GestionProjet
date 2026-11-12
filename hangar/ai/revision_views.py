@@ -15,6 +15,7 @@ from flask import (
     abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for,
 )
 from flask_login import current_user, login_required
+from markupsafe import escape
 
 from ..extensions import db
 from ..models import now
@@ -24,6 +25,8 @@ from .providers import AIError
 from .views import bp
 
 MAX_PHOTOS = 4
+PLAFOND_TRAVAUX = ("Plafond mensuel de l’IA atteint : réessaie le mois prochain ou relève le plafond dans les réglages "
+                   "de l’IA.")
 TAILLE_MAX_PHOTO = 15 * 1024 * 1024
 COTE_MAX = 1568   # au-delà, l'API réduit l'image de toute façon
 GARDER_COPIES = 30
@@ -54,6 +57,12 @@ def _html(texte: str) -> str:
     """Markdown d'une réponse -> HTML (moteur du wiki : formules, encadrés, liens [[…]])."""
     from ..qcm.rendu import rendre
     return rendre(texte)
+
+
+def _avertissement(av: list[str]) -> tuple[str, str]:
+    """(texte, html) des avertissements recueillis par core.avertissements(), ex. une demande plus grosse que la
+    mémoire d'Ollama, qui a pu en oublier le début : montrés au-dessus de la réponse, jamais gardés avec elle."""
+    return " ".join(av), "".join(f'<p class="small warning-text">{escape(a)}</p>' for a in av)
 
 
 def _vault():
@@ -92,7 +101,9 @@ def _question(set_id, question_id):
 @bp.route("/qcm/expliquer/", methods=["POST"])
 @login_required
 def expliquer():
-    """« Explique-moi » sur une question de QCM : explication par l'IA, gardée (une seule fois par question)."""
+    """« Explique-moi » sur une question de QCM : explication par l'IA, gardée (une seule fois par question, pour
+    tous les comptes). Une explication coupée par le plafond de longueur n'est pas gardée ; un administrateur peut
+    refaire une explication gardée (« refaire » : l'ancienne est effacée)."""
     from ..qcm.models import Explication
 
     data = _json_body()
@@ -102,21 +113,26 @@ def expliquer():
     qset, question = _question(set_id, question_id)
     if question is None:
         return jsonify(ok=False, error="question inconnue"), 404
+    admin = bool(current_user.is_admin)
     existante = Explication.query.filter_by(set_id=set_id, question_id=question_id).first()
-    if existante is not None:
-        return jsonify(html=_html(existante.texte), modele=existante.modele, gardee=True)
+    if existante is not None and not (admin and data.get("refaire")):
+        return jsonify(html=_html(existante.texte), modele=existante.modele, gardee=True, refaire=admin)
     if not _dispo():
         return _sans_ia()
     try:
-        texte, usage, modele = demandes.expliquer(qset, question, user=current_user)
+        with core.avertissements() as av:
+            texte, usage, modele = demandes.expliquer(qset, question, user=current_user)
     except AIError as e:
         return _erreur(e)
-    e = Explication.query.filter_by(set_id=set_id, question_id=question_id).first() or \
-        Explication(set_id=set_id, question_id=question_id)
-    e.texte, e.modele, e.jetons_entree, e.jetons_sortie = texte, modele, usage[0], usage[1]
-    db.session.add(e)
-    db.session.commit()
-    return jsonify(html=_html(texte), modele=modele, gardee=False)
+    if not demandes.est_coupee(texte):  # coupée : montrée cette fois-ci, la prochaine demande refera l'appel
+        e = Explication.query.filter_by(set_id=set_id, question_id=question_id).first() or \
+            Explication(set_id=set_id, question_id=question_id)
+        e.texte, e.modele, e.jetons_entree, e.jetons_sortie = texte, modele, usage[0], usage[1]
+        db.session.add(e)
+        db.session.commit()
+    avertissement, html_avertissement = _avertissement(av)
+    return jsonify(html=html_avertissement + _html(texte), modele=modele, gardee=False, refaire=admin,
+                   avertissement=avertissement)
 
 
 @bp.route("/qcm/corriger-qrc/", methods=["POST"])
@@ -134,10 +150,12 @@ def corriger_qrc():
     if core.cap_reached():
         return jsonify(ok=False, error="Plafond mensuel de l’IA atteint : correction stricte."), 429
     try:
-        verdict, retour, _usage, modele = demandes.corriger_qrc(qset, question, reponse, user=current_user)
+        with core.avertissements() as av:
+            verdict, retour, _usage, modele = demandes.corriger_qrc(qset, question, reponse, user=current_user)
     except AIError as e:
         return _erreur(e)
-    return jsonify(verdict=verdict, retour=retour, correct=verdict == "juste", modele=modele)
+    return jsonify(verdict=verdict, retour=retour, correct=verdict == "juste", modele=modele,
+                   avertissement=_avertissement(av)[0])
 
 
 @bp.route("/qcm/cartes-de-la-page/", methods=["POST"])
@@ -192,6 +210,9 @@ def generer_qcm():
         return redirect(url_for("ai.reglages"))
     genre = request.form.get("genre")
     retour = redirect(url_for("qcm.importer") + "#generer")
+    if core.cap_reached():  # vérifié dès le dépôt (les réserves des lots en cours : voir travaux._enqueue)
+        flash(PLAFOND_TRAVAUX, "error")
+        return retour
 
     if genre == "qcm":
         cle = request.form.get("page", "").strip().removesuffix(".md")
@@ -214,10 +235,14 @@ def generer_qcm():
         elif len(texte) > travaux.MAX_TEXTE_COLLE:
             flash("Texte trop long (300 000 caractères au plus) : génère le QCM d’une partie à la fois.", "error")
             return retour
-        travaux.demander_qcm(note=note, texte="" if note else texte, nombre=nombre,
-                             categorie=travaux.dossier_valide(categorie) or "",
-                             titre=request.form.get("titre", "").strip()[:120], user=current_user,
-                             publier=request.form.get("publier") == "1", lot=request.form.get("lot") == "1")
+        try:  # en lot : refusé si les lots en cours réservent déjà le reste du plafond
+            travaux.demander_qcm(note=note, texte="" if note else texte, nombre=nombre,
+                                 categorie=travaux.dossier_valide(categorie) or "",
+                                 titre=request.form.get("titre", "").strip()[:120], user=current_user,
+                                 publier=request.form.get("publier") == "1", lot=request.form.get("lot") == "1")
+        except AIError as e:
+            flash(e.message, "error")
+            return retour
         flash(f"L’IA écrit {nombre} questions sur « {note.title if note else 'le texte collé'} ».", "success")
     elif genre == "variantes":
         from ..qcm.models import QuizProgress
@@ -248,10 +273,14 @@ def generer_qcm():
         if erreur:
             flash(erreur, "error")
             return retour
-        travaux.demander_vocabulaire(mots="\n".join(x.strip() for x in lignes)[:20_000], user=current_user,
-                                     publier=request.form.get("publier") == "1", lot=request.form.get("lot") == "1",
-                                     langue=options["langue"], types=options["types"], dossier=options["dossier"],
-                                     titre=options["titre"])
+        try:
+            travaux.demander_vocabulaire(mots="\n".join(x.strip() for x in lignes)[:20_000], user=current_user,
+                                         publier=request.form.get("publier") == "1", lot=request.form.get("lot") == "1",
+                                         langue=options["langue"], types=options["types"], dossier=options["dossier"],
+                                         titre=options["titre"])
+        except AIError as e:
+            flash(e.message, "error")
+            return retour
         flash(f"L’IA prépare un paquet de {len(lignes)} mot{'s' if len(lignes) > 1 else ''} en "
               f"{options['langue'].lower()}.", "success")
     else:
@@ -323,19 +352,26 @@ def tuteur():
     precedents = (AITutorExchange.query.filter_by(user_id=current_user.id, page=note.key)
                   .order_by(AITutorExchange.id.desc()).limit(demandes.HISTORIQUE_TUTEUR).all())[::-1]
     try:
-        cours = _texte_page(vault, note)
+        page_texte = _texte_page(vault, note)
     except OSError:
         return jsonify(ok=False, error=_page_inaccessible()), 409
     try:
-        texte, usage, modele = demandes.tuteur(note, cours, question, [(e.question, e.reponse) for e in precedents],
-                                               user=current_user)
+        with core.avertissements() as av:
+            texte, usage, modele = demandes.tuteur(note, page_texte, question,
+                                                   [(e.question, e.reponse) for e in precedents], user=current_user)
     except AIError as e:
         return _erreur(e)
     db.session.add(AITutorExchange(user_id=current_user.id, page=note.key, question=question[:demandes.MAX_CHARS_QUESTION],
                                    reponse=texte, modele=modele, jetons_entree=usage[0], jetons_sortie=usage[1],
                                    cree_le=now()))
     db.session.commit()
-    return jsonify(html=_html(texte), modele=modele)
+    html = _html(texte)
+    coupee = len(page_texte) > demandes.budget_cours("rapide")  # moins pour un modèle local
+    if coupee:
+        html = ('<p class="muted small">Page longue : le tuteur n’en a lu qu’une partie, choisie d’après ta question.'
+                '</p>' + html)
+    avertissement, html_avertissement = _avertissement(av)
+    return jsonify(html=html_avertissement + html, modele=modele, coupee=coupee, avertissement=avertissement)
 
 
 def echange_html(e: AITutorExchange) -> dict:
@@ -372,8 +408,10 @@ def demander():
     # Les questions précédentes aident à retrouver les pages d'une question de suite (« et pourquoi ? »).
     sources = recherche.rassembler(vault, question, [e.question for e in precedents[-1:]])
     try:
-        texte, usage, modele = demandes.demander_wiki(question, sources, [(e.question, e.reponse) for e in precedents],
-                                                      user=current_user)
+        with core.avertissements() as av:
+            texte, usage, modele = demandes.demander_wiki(question, sources,
+                                                          [(e.question, e.reponse) for e in precedents],
+                                                          user=current_user)
     except AIError as e:
         return _erreur(e)
     e = AITutorExchange(user_id=current_user.id, page=AITutorExchange.PAGE_WIKI,
@@ -383,7 +421,9 @@ def demander():
     db.session.add(e)
     db.session.commit()
     rendu = echange_html(e)
-    return jsonify(html=rendu["html"], sources=rendu["sources"], modele=modele)
+    avertissement, html_avertissement = _avertissement(av)
+    return jsonify(html=html_avertissement + rendu["html"], sources=rendu["sources"], modele=modele,
+                   avertissement=avertissement)
 
 
 # ---------------------------------------------------------------------------
@@ -446,8 +486,9 @@ def copie():
     except OSError:
         return jsonify(ok=False, error=_page_inaccessible()), 409
     try:
-        texte, usage, modele = demandes.corriger_copie(photos, enonce, cours, note.title if note else "",
-                                                       user=current_user)
+        with core.avertissements() as av:
+            texte, usage, modele = demandes.corriger_copie(photos, enonce, cours, note.title if note else "",
+                                                           user=current_user)
     except AIError as e:
         return _erreur(e)
     c = AICopie(user_id=current_user.id, enonce=enonce, page=note.key if note else "", photos=len(photos),
@@ -461,7 +502,10 @@ def copie():
     for ancienne in mes.offset(GARDER_COPIES).all():
         _supprimer_copie(ancienne)
     db.session.commit()
-    return jsonify(ok=True, bloc=render_template("ai/_copie.html", b=_bloc_copie(c), ouvert=True))
+    avertissement, html_avertissement = _avertissement(av)
+    bloc = _bloc_copie(c)
+    bloc["html"] = html_avertissement + bloc["html"]
+    return jsonify(ok=True, bloc=render_template("ai/_copie.html", b=bloc, ouvert=True), avertissement=avertissement)
 
 
 @bp.route("/copie/photo/<int:pk>/<int:n>")
@@ -503,16 +547,38 @@ def transformations():
     vault = _vault()
     if request.method == "POST":
         f = request.form
-        if not _dispo() and not (f.get("supprimer") or f.get("publier")):
+        envoi = request.files.get("fichier")
+        nouveau = bool(f.get("fiche") or f.get("pdf") or (envoi is not None and envoi.filename))
+        if jid := f.get("annuler", type=int):
+            try:
+                annule = jobs.annuler(db.session.get(AIJob, jid) or abort(404))
+            except AIError as e:
+                flash(e.message, "error")
+            else:
+                flash("Travail annulé." if annule else "Ce travail n’est plus en cours : rien à annuler.",
+                      "success" if annule else "info")
+        elif not _dispo() and not (f.get("supprimer") or f.get("publier")):
             flash("Aucun fournisseur d’IA : ajoute-en un dans les réglages.", "error")
+        elif nouveau and core.cap_reached():
+            flash(PLAFOND_TRAVAUX, "error")
         elif jid := f.get("relancer", type=int):
-            travaux.relancer(db.session.get(AIJob, jid) or abort(404))
-            flash("Travail relancé.", "success")
+            if travaux.relancer(db.session.get(AIJob, jid) or abort(404)):
+                flash("Travail relancé.", "success")
+            else:
+                flash("Ce travail n’est pas en échec : rien à relancer.", "info")
         elif f.get("verifier_lots"):
+            avant = [j.id for j in AIJob.query.filter_by(status="batch")]
             n = jobs.check_batches()
             jobs.start_worker()
-            flash(f"{n} travail{'aux' if n > 1 else ''} récupéré{'s' if n > 1 else ''}." if n
-                  else "Les lots ne sont pas encore traités : reviens plus tard.", "success" if n else "info")
+            echecs = AIJob.query.filter(AIJob.id.in_(avant), AIJob.status == "error").count() if avant else 0
+            if echecs:
+                flash(f"{echecs} lot{'s' if echecs > 1 else ''} en échec : lis le message du travail, puis "
+                      "relance-le si besoin.", "error")
+            if n > echecs:
+                flash(f"{n - echecs} travail{'aux' if n - echecs > 1 else ''} récupéré{'s' if n - echecs > 1 else ''}.",
+                      "success")
+            elif not echecs:
+                flash("Les lots ne sont pas encore traités : reviens plus tard.", "info")
         elif jid := f.get("publier", type=int):
             job = db.session.get(AIJob, jid) or abort(404)
             try:
@@ -560,9 +626,13 @@ def transformations():
                 flash(f"{pdf.name} est déjà en cours de transformation.", "info")
             else:
                 lot = f.get("lot") == "1"
-                travaux.demander_pdf(pdf, current_user, lot=lot)
-                flash(f"Transformation de {pdf.name} " + ("déposée dans un lot (résultat sous 24 h)." if lot else "lancée."),
-                      "success")
+                try:
+                    travaux.demander_pdf(pdf, current_user, lot=lot)
+                except AIError as e:
+                    flash(e.message, "error")
+                else:
+                    flash(f"Transformation de {pdf.name} "
+                          + ("déposée dans un lot (résultat sous 24 h)." if lot else "lancée."), "success")
         return redirect(url_for("ai.transformations"))
 
     try:

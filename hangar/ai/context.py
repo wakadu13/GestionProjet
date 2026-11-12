@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
+import re
+from collections import Counter
 from datetime import date, datetime, time, timedelta
 
 from flask import current_app, url_for
@@ -26,7 +29,9 @@ from ..utils import can, fmt_date, visible_projects
 
 log = logging.getLogger(__name__)
 
-MAX_CONTEXT_CHARS = 30_000
+# Texte gardé d'une page (garde-fou mémoire). La part transmise au modèle dépend du fournisseur (chat.page_limit) :
+# au-delà, ce sont des extraits (passages utiles à la question, ou aperçu de toute la page), signalés comme tels.
+MAX_CONTEXT_CHARS = 400_000
 MAX_ITEMS = 60
 _MENTION_SOURCES: list = []
 
@@ -76,12 +81,157 @@ def resolve(path: str, user, query: dict | None = None) -> dict | None:
             out = {"type": str(r.get("type") or "page"), "title": str(r.get("title") or "Page"),
                    "text": str(r.get("text") or ""), "url": str(r.get("url") or path),
                    "icon": str(r.get("icon") or _ICONS.get(str(r.get("type")), "page"))}
-            if len(out["text"]) > MAX_CONTEXT_CHARS:
-                out["text"] = out["text"][:MAX_CONTEXT_CHARS] + "\n\n[… page tronquée : elle est trop longue pour être " \
-                                                               "transmise en entier.]"
-            out["key"] = hashlib.sha1((out["url"] + "\n" + out["text"]).encode("utf-8")).hexdigest()[:16]
+            out["size"] = len(out["text"])  # taille d'origine (la page peut être coupée ensuite)
+            out["text"] = out["text"][:MAX_CONTEXT_CHARS]
+            out["key"] = page_key(out["url"], out["text"])
             return out
     return None
+
+
+def page_key(url: str, text: str) -> str:
+    return hashlib.sha1((url + "\n" + text).encode("utf-8")).hexdigest()[:16]
+
+
+def _apercu(texte: str, budget: int, morceaux: int = 8) -> str:
+    """Aperçu réparti sur toute la page : le début de `morceaux` tranches régulières, coupées à une fin de
+    paragraphe ou de ligne (un quiz ou un résumé porte ainsi sur tout le cours, pas sur son seul début)."""
+    part = max(1, budget // morceaux - 10)
+    pas = len(texte) / morceaux
+    sortie = []
+    for i in range(morceaux):
+        debut = int(i * pas)
+        if i:  # reprendre au début d'un paragraphe ou d'une ligne
+            for sep in ("\n\n", "\n"):
+                j = texte.find(sep, debut, debut + part // 2)
+                if j >= 0:
+                    debut = j + len(sep)
+                    break
+        bout = texte[debut:debut + part]
+        coupe = max(bout.rfind("\n\n"), bout.rfind("\n"))
+        if coupe > part // 2:
+            bout = bout[:coupe]
+        sortie.append(bout.strip())
+    return "\n\n[…]\n\n".join(b for b in sortie if b)
+
+
+_SEPARATEUR_RE = re.compile(r"\n(?:[ \t\r]*\n)+")
+_TITRE_RE = re.compile(r"(#{1,6})[ \t]")
+_NOMBRE_RE = re.compile(r"\d+(?:[.,]\d+)*")
+TAILLE_BLOC = 2000  # un paragraphe plus long est découpé (le budget se remplit alors au plus près)
+MARQUE_COUPURE = "\n\n[…]\n\n"
+
+
+def _blocs(texte: str, taille: int = TAILLE_BLOC) -> list[tuple[int, int]]:
+    """Paragraphes de la page, en positions (début, fin) ; un paragraphe très long est découpé à une fin de ligne
+    ou de phrase."""
+    blocs, debut = [], 0
+    for m in [*_SEPARATEUR_RE.finditer(texte), None]:
+        fin = m.start() if m else len(texte)
+        while fin - debut > taille:
+            coupe = texte.rfind("\n", debut + taille // 2, debut + taille)
+            if coupe < 0:
+                coupe = texte.rfind(". ", debut + taille // 2, debut + taille)
+                coupe = coupe + 1 if coupe >= 0 else debut + taille
+            if texte[debut:coupe].strip():
+                blocs.append((debut, coupe))
+            debut = coupe
+        if texte[debut:fin].strip():
+            blocs.append((debut, fin))
+        debut = m.end() if m else len(texte)
+    return blocs
+
+
+def extraits(texte: str, question: str, budget: int) -> tuple[str, bool]:
+    """(texte transmis, coupé ?) : la page entière si elle tient dans `budget` caractères ; sinon des extraits qui
+    remplissent le budget, choisis dans cet ordre :
+    1. les paragraphes qui parlent le plus de la question (mots-clés et numéros, comme « chapitre 12 » ; un mot rare
+       dans la page compte plus, un titre compte triple) ;
+    2. la suite des sections dont le titre correspond (le texte du chapitre 12, pas seulement son titre) ;
+    3. le reste de la page, au plus près de ces passages.
+    Sans mot-clé trouvé dans la page : un aperçu de toute la page. « […] » marque chaque coupure."""
+    if len(texte) <= budget:
+        return texte, False
+    from ..wiki.demander import mots_cles
+    from ..wiki.vault import fold
+
+    mots = mots_cles(question or "")
+    nombres = list(dict.fromkeys(_NOMBRE_RE.findall(question or "")))[:10]
+    blocs = _blocs(texte, min(TAILLE_BLOC, max(200, budget // 4)))  # le passage le plus utile tient toujours
+    replie = fold(texte)
+    niveaux = [len(t.group(1)) if (t := _TITRE_RE.match(texte, a)) else 0 for a, _ in blocs]
+    comptes = []  # par paragraphe : {terme de la question : occurrences}
+    for (a, b), niveau in zip(blocs, niveaux):
+        c = {m: k for m in mots if (k := replie.count(m, a, b))}
+        if nombres and (niveau or c):  # un numéro seul compte dans un titre, ou à côté d'un mot-clé
+            jetons = _NOMBRE_RE.findall(replie, a, b)
+            c.update({x: k for x in nombres if (k := jetons.count(x))})
+        comptes.append(c)
+    n = len(blocs)
+    frequence = Counter(t for c in comptes for t in c)
+    if not frequence:
+        return _apercu(texte, budget), True
+    poids = {t: math.log(1 + n / (1 + f)) for t, f in frequence.items()}
+    scores = [(3 if niveau else 1) * sum(poids[t] * (1 + math.log(k)) for t, k in c.items())
+              for c, niveau in zip(comptes, niveaux)]
+    # Passages retenus : ceux qui parlent vraiment de la question, pas tous les « Chapitre N » pour « chapitre 12 ».
+    seuil = max(scores) / 4
+    trouves = sorted((i for i in range(n) if scores[i] and scores[i] >= seuil), key=lambda i: (-scores[i], i))
+    rang: dict[int, tuple] = {i: (0, -scores[i], i) for i in trouves}
+    for i in (i for i in trouves if niveaux[i]):
+        j = i + 1
+        while j < n and not (niveaux[j] and niveaux[j] <= niveaux[i]):
+            j += 1
+        if blocs[j - 1][1] - blocs[i][0] <= len(texte) // 2:  # pas pour le titre de toute la page
+            for k in range(i + 1, j):
+                rang.setdefault(k, (1, -scores[i], k))
+    ancres, distance = set(trouves), [n] * n
+    for sens in (range(n), range(n - 1, -1, -1)):
+        proche = None
+        for i in sens:
+            if i in ancres:
+                proche = i
+            if proche is not None:
+                distance[i] = min(distance[i], abs(i - proche))
+    choisis, total, coupe = [], 0, None
+    for i in sorted(range(n), key=lambda i: rang.get(i, (2, distance[i], i))):
+        a, b = blocs[i]
+        place = budget - total - len(MARQUE_COUPURE)
+        if b - a <= place:
+            choisis.append(i)
+            total += b - a + len(MARQUE_COUPURE)
+        elif i not in rang:
+            # Contexte autour des passages : le paragraphe qui ne tient plus est coupé, et le remplissage s'arrête
+            # (sinon les petits titres lointains combleraient la place, un par un).
+            if place >= 200:
+                fin = max(texte.rfind("\n", a, a + place), texte.rfind(". ", a, a + place) + 1)
+                blocs[i] = (a, fin if fin > a + place // 2 else a + place)
+                choisis.append(i)
+                coupe = i
+            break
+    if not choisis:  # même le passage le plus utile dépasse le budget : son début
+        i = min(range(n), key=lambda i: rang.get(i, (2, distance[i], i)))
+        blocs[i] = (blocs[i][0], blocs[i][0] + max(0, budget - 20))
+        choisis, coupe = [i], i
+    suites: list[list[int]] = []  # paragraphes qui se suivent : recopiés tels quels, séparateurs compris
+    for i in sorted(choisis):
+        if suites and suites[-1][1] == i - 1 and coupe != i - 1:
+            suites[-1][1] = i
+        else:
+            suites.append([i, i])
+    sortie = MARQUE_COUPURE.join(texte[blocs[a][0]:blocs[b][1]].strip("\n") for a, b in suites)
+    if suites and suites[0][0] > 0:
+        sortie = "[…]\n\n" + sortie
+    if suites and (suites[-1][1] < n - 1 or coupe == n - 1):
+        sortie += "\n\n[…]"
+    return sortie[:budget], True
+
+
+def note_extraits(taille: int, transmis: int) -> str:
+    """Mention ajoutée pour le modèle quand il ne reçoit que des extraits d'une page."""
+    n = lambda x: f"{x:,}".replace(",", " ")  # noqa: E731
+    return (f"[Page longue : seuls des extraits sont transmis (environ {n(transmis)} caractères sur {n(taille)}). "
+            "Si la réponse n’y est pas, dis que tu ne l’as pas trouvée dans ces extraits, sans affirmer que la page "
+            "n’en parle pas.]")
 
 
 _ICONS = {"agenda": "calendar", "calendrier": "calendar", "taches": "list-check", "tache": "list-check",

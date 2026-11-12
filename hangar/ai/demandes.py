@@ -20,16 +20,53 @@ MAX_CHARS_COURS = 80_000   # longueur de cours envoyée au modèle (explications
 MAX_CHARS_AMELIORER = 12_000
 MAX_CHARS_QUESTION = 2000
 MAX_CHARS_REPONSE = 2000
-MAX_TOKENS_QRC = 600
-MAX_TOKENS_TUTEUR = 1500
-MAX_TOKENS_COPIE = 6000
+# Plafonds de réponse : larges, car le modèle peut réfléchir avant de répondre et sa réflexion compte dans le plafond
+# (Opus 5.5 réfléchit toujours) ; seuls les jetons réellement produits sont facturés. Revision en avait de plus bas
+# (600, 1 500, 6 000), qui coupaient le verdict d'une réponse rédigée ou le bilan d'une copie.
+MAX_TOKENS_QRC = 2000
+MAX_TOKENS_EXPLICATION = 4000
+MAX_TOKENS_TUTEUR = 4000
+MAX_TOKENS_COPIE = 16000
 HISTORIQUE_TUTEUR = 6       # derniers échanges rejoués
+MENTION_COUPEE = "\n\n*(Réponse coupée : la limite de longueur a été atteinte.)*"
 
 Echec = AIError  # nom de Revision
 
 
 def _usage(r):
     return (r.usage.input_tokens + r.usage.cache_read_tokens + r.usage.cache_write_tokens, r.usage.output_tokens)
+
+
+def _texte(r) -> str:
+    """Texte de la réponse, avec la mention « réponse coupée » quand le plafond de longueur l'a arrêtée."""
+    return r.text + MENTION_COUPEE if r.truncated and r.text else r.text
+
+
+def est_coupee(texte: str) -> bool:
+    """Vrai pour une réponse arrêtée par le plafond de longueur (à ne pas garder une fois pour toutes)."""
+    return (texte or "").endswith(MENTION_COUPEE)
+
+
+def extraits_cours(texte: str, question: str, budget: int = MAX_CHARS_COURS) -> tuple[str, bool]:
+    """Cours trop long : les passages qui parlent de la question, au lieu de son seul début ; (texte, coupé ?)."""
+    from .context import extraits
+    return extraits(texte or "", question, budget)
+
+
+def budget_cours(role: str, budget: int = MAX_CHARS_COURS) -> int:
+    """Caractères de cours envoyés au modèle de ce rôle : moins pour un modèle compatible OpenAI (souvent local, à
+    petite mémoire : Ollama garde 4 096 jetons par défaut et oublie le reste sans prévenir), comme pour la page
+    ouverte dans le panneau."""
+    from .chat import page_limit
+    from .core import pick
+    try:
+        return min(budget, page_limit(pick(role)))
+    except AIError:  # aucun fournisseur, plafond : l'appel lui-même le dira
+        return budget
+
+
+NOTE_EXTRAITS = ("(Seuls des extraits de ce cours, choisis d’après la question, sont fournis : il est trop long pour "
+                 "être envoyé en entier. Si la réponse n’y est pas, dis-le sans affirmer que le cours n’en parle pas.)")
 
 
 def _messages(contenu, historique=()):
@@ -50,8 +87,10 @@ def sans_cadre(texte: str) -> str:
     return (texte or "").strip()
 
 
-def cours_du_set(qset):
-    """(note, texte du cours) de la page dont le set a été généré, ou (None, "")."""
+def cours_du_set(qset, question=None, role="rapide"):
+    """(note, texte du cours) de la page dont le set a été généré, ou (None, ""). Un cours trop long pour le modèle
+    du rôle est réduit aux passages qui parlent de la question (énoncé, choix, réponses), avec une mention pour le
+    modèle."""
     if not getattr(qset, "source_page", ""):
         return None, ""
     try:
@@ -60,9 +99,15 @@ def cours_du_set(qset):
         note = vault.notes.get(qset.source_page.lower())
         if note is None:
             return None, ""
-        return note, lire_note(vault.root / note.path)[0][:MAX_CHARS_COURS]  # page « ANSI » comprise
+        texte = lire_note(vault.root / note.path)[0]  # page « ANSI » comprise
     except Exception:  # noqa: BLE001 - wiki indisponible
         return None, ""
+    sujet = ""
+    if question is not None:
+        sujet = " ".join(str(x) for x in [question.enonce, question.consigne, *(question.choix or []),
+                                          *(question.reponses_texte or []), question.verso] if x)
+    texte, coupe = extraits_cours(texte, sujet, budget_cours(role))
+    return note, (f"{NOTE_EXTRAITS}\n\n{texte}" if coupe else texte)
 
 
 CHAMPS_QUESTION = ("type", "question", "choix", "reponses", "reponses_texte", "consigne", "verso", "explication")
@@ -91,8 +136,9 @@ Réponds uniquement par le texte corrigé, sans commentaire ni bloc de code auto
 
 def expliquer(qset, question, user=None):
     """Explication d'une question (rôle « rapide »), d'après la page du cours quand le set en vient.
-    Renvoie (texte Markdown, (jetons entrée, sortie), modèle)."""
-    note, contexte = cours_du_set(qset)
+    Renvoie (texte Markdown, (jetons entrée, sortie), modèle) ; une explication coupée par le plafond de longueur
+    se termine par la mention « réponse coupée » (voir est_coupee : elle ne doit pas être gardée)."""
+    note, contexte = cours_du_set(qset, question)
     lignes = [f"Question ({question.type}) : {question.enonce}"]
     if question.consigne:
         lignes.append(f"Consigne : {question.consigne}")
@@ -109,11 +155,11 @@ def expliquer(qset, question, user=None):
     if contexte:
         contenu.append({"type": "text", "text": f"Cours « {note.title} » :\n\n{contexte}"})
     contenu.append({"type": "text", "text": "\n".join(lignes) + ("\n\nAucun cours fourni." if not contexte else "")})
-    r = generate(_messages(contenu), system=CONSIGNE_EXPLICATION, role="rapide", max_tokens=1500, effort="low",
-                 user=user, feature="expliquer")
+    r = generate(_messages(contenu), system=CONSIGNE_EXPLICATION, role="rapide", max_tokens=MAX_TOKENS_EXPLICATION,
+                 effort="low", user=user, feature="expliquer")
     if not r.text:
         raise Echec("L’IA n’a renvoyé aucune explication.")
-    return r.text, _usage(r), r.model
+    return _texte(r), _usage(r), r.model
 
 
 def ameliorer(texte, user=None):
@@ -167,7 +213,7 @@ def corriger_question(qset, question, commentaires, user=None):
     à l'import d'un set (lève Echec sinon). Appelée par la page des signalements des QCM."""
     from ..qcm import quiz
 
-    note, contexte = cours_du_set(qset)
+    note, contexte = cours_du_set(qset, question, role="chat")
     contenu = []
     if contexte:
         contenu.append({"type": "text", "text": f"Cours « {note.title} » :\n\n{contexte}"})
@@ -215,8 +261,15 @@ def corriger_qrc(qset, question, reponse, user=None):
     if question.explication:
         lignes.append(f"Explication du corrigé : {question.explication}")
     lignes.append(f"Réponse de l'étudiant : {reponse[:MAX_CHARS_REPONSE]}")
-    r = generate(_messages([{"type": "text", "text": "\n".join(lignes)}]), system=CONSIGNE_QRC, role="rapide",
-                 json_schema=SCHEMA_QRC, max_tokens=MAX_TOKENS_QRC, effort="low", user=user, feature="qrc")
+    for plafond in (MAX_TOKENS_QRC, 2 * MAX_TOKENS_QRC):
+        try:
+            r = generate(_messages([{"type": "text", "text": "\n".join(lignes)}]), system=CONSIGNE_QRC, role="rapide",
+                         json_schema=SCHEMA_QRC, max_tokens=plafond, effort="low", user=user, feature="qrc")
+            break
+        except AIError as e:
+            # Verdict coupé (le modèle a beaucoup réfléchi) : un seul nouvel essai, avec un plafond double.
+            if e.code != "trop_long" or plafond != MAX_TOKENS_QRC:
+                raise
     data = r.data or {}
     verdict = data.get("verdict") if data.get("verdict") in ("juste", "partiel", "faux") else "faux"
     return verdict, str(data.get("retour", "")).strip(), _usage(r), r.model
@@ -232,13 +285,20 @@ pas. Tutoie l'étudiant ; pas de formule de politesse."""
 
 def tuteur(note, page_texte, question, historique=(), user=None):
     """Réponse du tuteur (rôle « rapide ») à une question sur une page : (texte Markdown, usage, modèle).
-    La page va dans la consigne système (stable, mise en cache pendant les échanges)."""
-    systeme = f"{CONSIGNE_TUTEUR}\n\nPage « {note.title} » :\n\n{page_texte[:MAX_CHARS_COURS]}"
+    La page va dans la consigne système (stable, mise en cache pendant les échanges). Une page trop longue pour le
+    modèle est réduite à des extraits choisis d'après la question (et les questions précédentes), qui remplissent
+    sa part de la page, en le disant au modèle."""
+    sujet = " ".join([question, *(q for q, _ in list(historique)[-2:])])
+    texte, coupe = extraits_cours(page_texte, sujet, budget_cours("rapide"))
+    if coupe:
+        systeme = f"{CONSIGNE_TUTEUR}\n\nExtraits de la page « {note.title} » {NOTE_EXTRAITS}\n\n{texte}"
+    else:
+        systeme = f"{CONSIGNE_TUTEUR}\n\nPage « {note.title} » :\n\n{texte}"
     r = generate(_messages(question[:MAX_CHARS_QUESTION], historique), system=systeme, role="rapide",
                  max_tokens=MAX_TOKENS_TUTEUR, effort="low", user=user, feature="tuteur")
     if not r.text:
         raise Echec("L’IA n’a renvoyé aucune réponse.")
-    return r.text, _usage(r), r.model
+    return _texte(r), _usage(r), r.model
 
 
 CONSIGNE_WIKI = """Tu réponds à un étudiant à partir de son wiki de cours : des extraits numérotés de ses pages et \
@@ -261,7 +321,7 @@ def demander_wiki(question, sources, historique=(), user=None):
                  max_tokens=MAX_TOKENS_TUTEUR, effort="low", user=user, feature="wiki")
     if not r.text:
         raise Echec("L’IA n’a renvoyé aucune réponse.")
-    return r.text, _usage(r), r.model
+    return _texte(r), _usage(r), r.model
 
 
 # -- Copie photographiée --------------------------------------------------------------------------
@@ -288,7 +348,8 @@ def corriger_copie(images, enonce="", cours="", titre_cours="", user=None):
     Renvoie (texte Markdown, usage, modèle)."""
     systeme = CONSIGNE_COPIE
     if cours:
-        systeme += f"\n\nCours de référence « {titre_cours} » :\n\n{cours[:MAX_CHARS_COURS // 2]}"
+        texte, coupe = extraits_cours(cours, enonce, budget_cours("vision", MAX_CHARS_COURS // 2))
+        systeme += f"\n\nCours de référence « {titre_cours} »" + (f" {NOTE_EXTRAITS}" if coupe else " :") + f"\n\n{texte}"
     texte = (f"Énoncé de l'exercice :\n{enonce[:MAX_CHARS_QUESTION * 2]}" if enonce.strip()
              else "Pas d'énoncé fourni : déduis-le de la copie si possible.")
     r = generate(_messages([{"type": "text", "text": texte}]), system=systeme, role="vision",
@@ -296,4 +357,4 @@ def corriger_copie(images, enonce="", cours="", titre_cours="", user=None):
                  user=user, feature="copie")
     if not r.text:
         raise Echec("L’IA n’a renvoyé aucune correction.")
-    return r.text, _usage(r), r.model
+    return _texte(r), _usage(r), r.model

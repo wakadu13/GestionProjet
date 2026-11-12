@@ -125,6 +125,7 @@ html.ai-fullpage .ai-panel { display: none !important; }
 .ai-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 210px; }
 .ai-chip .ic { flex: none; }
 .ai-chip.page { background: var(--accent-bg); color: var(--accent-text); }
+.ai-chip > span.ai-chip-cut { flex: none; opacity: .8; font-weight: 600; }
 .ai-chip.off { background: transparent; border: 1px dashed var(--border); color: var(--text-3); cursor: pointer; padding-right: 7px; }
 .ai-chip.mode { background: color-mix(in srgb, #8b5cf6 14%, transparent); color: #7c3aed; }
 :root[data-theme="dark"] .ai-chip.mode { color: #c4b5fd; }
@@ -201,6 +202,8 @@ html.ai-fullpage .ai-panel { display: none !important; }
 .ai-test-res:empty { display: none; }
 .ai-test-res.ok { color: var(--success); }
 .ai-test-res.ko { color: var(--danger); }
+.ai-price-note { grid-column: 1 / -1; font-size: 12.5px; color: var(--warning); display: flex; align-items: flex-start; gap: 6px; }
+.ai-price-note .ic { flex: none; margin-top: 2px; }
 .ai-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
 .ai-preset { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; text-align: left; min-width: 0; transition: border-color .12s, background .12s; }
 .ai-preset:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--bg-2); }

@@ -21,7 +21,8 @@ from flask import url_for
 from ..extensions import db
 from ..models import now
 from . import jobs
-from .demandes import MAX_CHARS_COURS, QUESTION_SCHEMA, question_en_json, sans_cadre
+from .demandes import (NOTE_EXTRAITS, QUESTION_SCHEMA, budget_cours, extraits_cours, question_en_json,
+                       sans_cadre)
 from .models import AIJob
 from .providers import AIError
 
@@ -245,6 +246,13 @@ def _json(ai_call, trop_long: str):
 # ---------------------------------------------------------------------------
 
 def _enqueue(kind, payload, user, title, lot=False, url=None):
+    from .core import cap_reached, check_batch_cap
+
+    if lot:  # lots en cours compris : sinon N travaux en lot partiraient tous avant le premier retour
+        check_batch_cap()
+    elif cap_reached():
+        raise Echec("Plafond mensuel de l’IA atteint : réessaie le mois prochain ou relève le plafond dans les "
+                    "réglages de l’IA.", "plafond", 429)
     job = jobs.enqueue(kind, payload, user=user, feature={"page": "transformation"}.get(kind, kind), title=title,
                        batch=lot, start=False)
     if url:
@@ -313,12 +321,19 @@ def en_cours(kind=None, source=None) -> bool:
     return any((source is None or j.payload.get("source") == source) for j in q)
 
 
-def relancer(job: AIJob) -> None:
-    if job.status == "error":
-        job.status, job.message, job.started_at, job.finished_at = "pending", "", None, None
-        job.calls, job.result, job.batch_id = [], None, ""
-        db.session.commit()
-        jobs.start_worker()
+def relancer(job: AIJob) -> bool:
+    """Relance un travail en échec (ou annulé), depuis le début ; False s'il n'y a rien à relancer."""
+    if job.status != "error":
+        return False
+    job.status, job.message, job.started_at, job.finished_at = "pending", "", None, None
+    job.calls, job.result, job.batch_id = [], None, ""
+    opts = job.options
+    for k in ("reserve", "batch_at", "batch_call", "files"):
+        opts.pop(k, None)
+    job.options = opts
+    db.session.commit()
+    jobs.start_worker()
+    return True
 
 
 def transformer_cours(results, user=None, lot=False) -> int:
@@ -331,11 +346,15 @@ def transformer_cours(results, user=None, lot=False) -> int:
     for r in results:
         if not getattr(r, "ok", False):
             continue
-        if getattr(r, "source_latex", ""):
-            demander_latex(r.name, r.source_latex, r.path, user, lot=lot)
-        elif r.path.lower().endswith(".pdf") and (pdf := vault.attachments.get(r.path.lower())) is not None:
-            demander_pdf(pdf, user, lot=lot)
-        else:
+        try:
+            if getattr(r, "source_latex", ""):
+                demander_latex(r.name, r.source_latex, r.path, user, lot=lot)
+            elif r.path.lower().endswith(".pdf") and (pdf := vault.attachments.get(r.path.lower())) is not None:
+                demander_pdf(pdf, user, lot=lot)
+            else:
+                continue
+        except AIError as e:  # plafond mensuel atteint : le fichier est importé, sans transformation
+            r.message += f" · transformation par l’IA non lancée : {e.message}"
             continue
         r.message += " · transformation par l’IA " + ("dans un lot (sous 24 h)" if lot else "lancée")
         r.claude = suivi
@@ -462,8 +481,9 @@ def _travail_variantes(job, ai):
         vault = _vault()
         note = vault.notes.get(qset.source_page.lower())
         if note is not None:
-            textes.append(f"Cours « {note.title} » :\n\n"
-                          f"{_texte(vault.root / note.path)[:MAX_CHARS_COURS]}")
+            sujet = " ".join(str(x) for q in questions for x in (q.enonce, *(q.choix or []), *(q.reponses_texte or [])) if x)
+            cours, coupe = extraits_cours(_texte(vault.root / note.path), sujet, budget_cours("chat"))
+            textes.append(f"Cours « {note.title} »" + (f" {NOTE_EXTRAITS}" if coupe else " :") + f"\n\n{cours}")
     n = len(questions)
     texte = "Questions ratées :\n" + json.dumps([question_en_json(q) for q in questions], ensure_ascii=False, indent=1)
     texte += f"\n\nÉcris {n} variante{'s' if n > 1 else ''} : une par question, dans le même ordre."

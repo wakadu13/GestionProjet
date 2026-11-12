@@ -57,9 +57,12 @@ def cmd_add(args):
         if p.kind != "anthropic" and not p.base_url:
             print("✗ Indique l’adresse du serveur avec --url (ex. http://localhost:11434/v1).")
             sys.exit(1)
+        p.api_key_env_origin = P.origin(p.base_url, p.kind)  # la clé de la variable ne suit pas une autre adresse
         db.session.add(p)
         db.session.commit()
         print(f"✓ Fournisseur [{p.id}] {p.name} ajouté (modèle {p.model}). Test : hangar ia-tester {p.id}")
+        if avis := P.key_withheld_message(p):
+            print(f"! {avis}")
 
 
 def cmd_test(args):
