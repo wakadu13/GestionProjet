@@ -231,6 +231,9 @@ def cmd_run(args):
             ai_jobs.resume(app)
     except Exception as exc:  # noqa: BLE001 - l'IA ne doit pas empêcher Hangar de démarrer
         print(f"  ! Reprise des travaux de l’IA impossible : {exc}")
+    # Sortie redirigée vers un fichier (démarrage sans fenêtre : data\journal\console.log) : elle est mise en
+    # mémoire tampon ; on l'écrit avant que le serveur ne prenne la main, pour que l'adresse s'y lise tout de suite.
+    sys.stdout.flush()
     try:
         if args.debug:
             app.run(host=args.host, port=port, debug=True, use_reloader=False)
