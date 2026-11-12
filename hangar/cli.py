@@ -58,14 +58,38 @@ def avertissement_reseau(app, host: str) -> str | None:
             "    chacun dans Mon profil, ou un administrateur dans Équipe (réinitialiser le mot de passe).\n")
 
 
+def message_coffre(app) -> str:
+    """Ligne « Coffre du wiki » du démarrage, avec un avertissement si le coffre choisi est introuvable."""
+    from .wiki import coffre
+    dossier, origine = app.config["WIKI_DIR"], app.config.get("WIKI_ORIGINE", coffre.DEFAUT)
+    ligne = f"  → Coffre du wiki : {dossier}" + (f" ({coffre.ORIGINES[origine]})" if origine != coffre.DEFAUT else "")
+    if coffre.introuvable(app.config):
+        ligne += ("\n\n  ⚠ Ce dossier est INTROUVABLE (disque ou clé débranché, faute de frappe ?). Le wiki affichera\n"
+                  "    un avertissement au lieu de tes cours, et les sets de QCM du coffre manqueront.\n"
+                  "    Rebranche le disque puis relance, ou choisis le bon dossier :\n"
+                  "    uv run hangar wiki-coffre \"C:\\chemin\\du\\coffre\"\n")
+    return ligne
+
+
+def _dossier_donnees(args):
+    from pathlib import Path
+
+    from . import BASE_DIR
+    return Path(args.data or os.environ.get("HANGAR_DATA") or BASE_DIR / "data").resolve()
+
+
 def cmd_run(args):
-    from . import create_app
+    from . import create_app, lancement
     port = args.port
     if _port_busy(port):
         if _is_hangar(port):
             url = f"http://127.0.0.1:{port}"
             print(f"\n  ✈️  Hangar tourne déjà sur {url} — ouverture du navigateur.")
-            print("  (Pour l’arrêter : Ctrl+C dans le terminal où il a été lancé.)\n")
+            alerte = lancement.avertissement_version(_dossier_donnees(args))
+            if alerte:
+                print(alerte)
+            print("  (Pour l’arrêter : ferme sa fenêtre, ou Ctrl+C dedans. S’il démarre avec ta session Windows :\n"
+                  "   scripts\\ne-plus-demarrer-avec-windows.bat, ou redémarre l’ordinateur après une mise à jour.)\n")
             if not args.no_browser:
                 webbrowser.open(url)
             return
@@ -76,14 +100,18 @@ def cmd_run(args):
         print(f"  ! Le port {port} est utilisé par un autre programme : Hangar utilise le port {free}.")
         port = free
     app = create_app(args.data)
+    journal = lancement.ouvrir_journal(app.config["DATA_DIR"])
+    lancement.noter_lancement(app.config["DATA_DIR"], port)
     url = f"http://127.0.0.1:{port}"
-    print("\n  ✈️  Hangar — gestion de projet locale")
+    print(f"\n  ✈️  Hangar {lancement.description(lancement.code_au_demarrage())} — gestion de projet locale")
     print(f"  → Ouvre {url} dans ton navigateur")
     if args.host in ("0.0.0.0", "::"):
         ip = _lan_ip()
         if ip:
             print(f"  → Sur le réseau local : http://{ip}:{port}")
     print(f"  → Données : {app.config['DATA_DIR']}")
+    print(message_coffre(app))
+    print(f"  → Journal des erreurs : {journal}")
     alerte = avertissement_reseau(app, args.host)
     if alerte:
         print(alerte)
@@ -106,6 +134,12 @@ def cmd_run(args):
             serve(app, host=args.host, port=port, threads=8, ident="Hangar")
     except KeyboardInterrupt:
         print("\n  Hangar arrêté.")
+    finally:
+        from .extensions import db, vider_journal
+        with app.app_context():
+            vider_journal()  # hangar.db complet à lui seul après l'arrêt (copie sur une clé…)
+            db.session.remove()
+            db.engine.dispose()  # dernière connexion fermée : SQLite retire hangar.db-wal et -shm
 
 
 def _confirmer(question: str) -> bool:
@@ -289,6 +323,35 @@ def cmd_backup(args):
         sys.exit(2)
 
 
+def cmd_restore(args):
+    """Remplace la base par une sauvegarde (.db), après vérification et sauvegarde de sécurité."""
+    from pathlib import Path
+
+    from . import create_app, sauvegarde
+    from .views.settings import restaurer_base
+    fichier = Path(args.fichier).expanduser()
+    if not fichier.is_file():
+        print(f"✗ Fichier introuvable : {fichier}")
+        sys.exit(1)
+    probleme = sauvegarde.verifier_base(fichier)
+    if probleme:
+        print(f"✗ Restauration refusée : {probleme}. Ta base actuelle n’a pas été touchée.")
+        sys.exit(1)
+    if _port_busy(5000) and _is_hangar(5000):
+        print("✗ Hangar est en train de tourner. Arrête-le d’abord (ferme sa fenêtre), "
+              "ou restaure depuis Réglages › Sauvegardes.")
+        sys.exit(1)
+    app = create_app(args.data)
+    if not args.yes and not _confirmer(f"Remplacer la base actuelle par {fichier.name} ? "
+                                       "Une sauvegarde de l’état actuel est faite avant."):
+        return
+    with app.app_context():
+        changements = restaurer_base(str(fichier))
+    print(f"✓ Base restaurée depuis {fichier}.")
+    if changements:
+        print("  Elle venait d’une version plus ancienne de Hangar : elle a été mise à jour.")
+
+
 def cmd_create_admin(args):
     from . import create_app
     from .extensions import db
@@ -315,7 +378,7 @@ def cmd_mail_send(args):
     from .agenda import run_jobs
     from .mailer import run_scheduled, send_pending
     app = create_app(args.data)
-    with app.app_context():
+    with app.test_request_context("/"):  # adresses des tickets dans les bilans (url_for), comme dans l'appli
         force = {"reminders", "digest", "bilan"} if args.force else set()
         res = run_scheduled(force=force)
         ag = run_jobs()
@@ -379,7 +442,7 @@ def _utf8_output() -> None:
 def main(argv=None):
     _utf8_output()
     parser = argparse.ArgumentParser(prog="hangar", description="Hangar : agenda, cours, QCM, assistant IA et gestion de projet, en local.")
-    parser.add_argument("--data", help="dossier des données (défaut : ./data)")
+    parser.add_argument("--data", help="dossier des données (défaut : data/ à la racine du dépôt)")
     sub = parser.add_subparsers(dest="cmd")
 
     run = sub.add_parser("run", help="lancer le serveur (par défaut)")
@@ -419,6 +482,10 @@ def main(argv=None):
     mt = sub.add_parser("mail-test", help="envoyer un e-mail de test")
     mt.add_argument("address")
 
+    rs = sub.add_parser("restore", help="remplacer la base par une sauvegarde .db (sauvegarde de l’état actuel avant)")
+    rs.add_argument("fichier", help="fichier .db (par ex. une sauvegarde copiée depuis un autre PC)")
+    rs.add_argument("--yes", action="store_true", help="ne pas demander de confirmation")
+
     ca = sub.add_parser("create-admin", help="créer ou réparer un compte administrateur")
     ca.add_argument("--username")
 
@@ -436,7 +503,7 @@ def main(argv=None):
         if args.cmd is None:
             args.cmd, args.host, args.port, args.debug, args.no_browser = "run", "127.0.0.1", 5000, False, False
     {"run": cmd_run, "demo": cmd_demo, "reset": cmd_reset, "backup": cmd_backup, "rebuild-docs": cmd_rebuild_docs,
-     "create-admin": cmd_create_admin, "mail-send": cmd_mail_send, "mail-test": cmd_mail_test,
+     "create-admin": cmd_create_admin, "restore": cmd_restore, "mail-send": cmd_mail_send, "mail-test": cmd_mail_test,
      "agenda-import": cmd_agenda_import, **extra}[args.cmd](args)
 
 

@@ -41,6 +41,19 @@ jobs:
       - name: Tests unitaires
         run: uv run python -m unittest discover -s tests -v
 
+      # Scripts Windows (démarrage avec la session, mise à jour) : au moins lisibles par PowerShell 5.1.
+      - name: Scripts PowerShell (syntaxe)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $erreurs = 0
+          foreach ($f in Get-ChildItem scripts\*.ps1) {
+            $err = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$err) | Out-Null
+            if ($err) { $err | ForEach-Object { Write-Host "$($f.Name) : $_" }; $erreurs++ }
+          }
+          if ($erreurs) { exit 1 }
+
       # Les commandes affichent des symboles (✓ ✗ →) : elles doivent marcher quand leur sortie est
       # redirigée vers un fichier (encodage cp1252 par défaut sous Windows), sans PYTHONUTF8.
       - name: Commandes avec sortie redirigée

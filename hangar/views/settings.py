@@ -6,7 +6,8 @@ from datetime import datetime
 
 from flask import (Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file,
                    url_for)
-from flask_login import current_user, login_required
+from flask import has_request_context
+from flask_login import current_user, login_required, logout_user
 
 from .. import sauvegarde
 from ..extensions import db
@@ -83,6 +84,8 @@ def password():
 def workspace():
     require_admin()
     ws = Workspace.get()
+    if request.method == "POST" and request.form.get("action") == "coffre":
+        return _changer_coffre()
     if request.method == "POST":
         ws.name = (request.form.get("name") or ws.name).strip()[:120]
         ws.emoji = (request.form.get("emoji") or ws.emoji).strip()[:16]
@@ -98,7 +101,48 @@ def workspace():
                                   os.walk(current_app.config["UPLOAD_DIR"]) for f in fs)),
         "data_dir": current_app.config["DATA_DIR"],
     }
-    return render_template("settings/workspace.html", ws=ws, stats=stats)
+    from ..wiki import coffre
+    origine = current_app.config.get("WIKI_ORIGINE", coffre.DEFAUT)
+    vault = {"dossier": current_app.config["WIKI_DIR"], "origine": origine, "texte": coffre.ORIGINES.get(origine, ""),
+             "introuvable": coffre.introuvable(current_app.config), "local": _requete_locale()}
+    return render_template("settings/workspace.html", ws=ws, stats=stats, vault=vault)
+
+
+def _requete_locale() -> bool:
+    """La page est ouverte sur l'ordinateur où tourne Hangar (pas depuis un autre poste du réseau)."""
+    from ..blocage_connexion import ip_client  # derrière un proxy : l'adresse du vrai visiteur
+    return ip_client() in ("127.0.0.1", "::1", "localhost")
+
+
+def _changer_coffre():
+    """Choisit le dossier du coffre du wiki (mémorisé dans data/coffre.txt), sans redémarrer. Seulement depuis
+    l'ordinateur de Hangar : un dossier choisi devient lisible par tous les comptes dans le wiki."""
+    from ..wiki import coffre
+    if not _requete_locale():
+        flash("Le coffre ne se change que depuis l’ordinateur où tourne Hangar.", "error")
+        return redirect(url_for("settings.workspace"))
+    data = current_app.config["DATA_DIR"]
+    defaut = bool(request.form.get("defaut"))
+    try:
+        retenu = coffre.memoriser(data, None if defaut else request.form.get("dossier", ""))
+    except FileNotFoundError:
+        flash("Ce dossier n’existe pas. Copie son chemin depuis la barre d’adresse de l’Explorateur, et vérifie "
+              "que le disque ou la clé est branché.", "error")
+        return redirect(url_for("settings.workspace") + "#coffre")
+    except (OSError, ValueError) as exc:
+        flash(f"Dossier refusé : {exc}", "error")
+        return redirect(url_for("settings.workspace") + "#coffre")
+    dossier, origine = coffre.choisir(data)
+    coffre.appliquer(current_app, dossier, origine)
+    if origine == coffre.VARIABLE:
+        flash("Choix enregistré, mais la variable HANGAR_VAULT est définie et passe avant : retire-la pour qu’il "
+              "s’applique.", "info")
+    elif retenu:
+        flash(f"Le wiki utilise maintenant le coffre {retenu}. Ce choix est gardé pour les prochains lancements.",
+              "success")
+    else:
+        flash("Le wiki utilise de nouveau le dossier par défaut (data/vault).", "success")
+    return redirect(url_for("settings.workspace") + "#coffre")
 
 
 @bp.route("/tokens", methods=["GET", "POST"])
@@ -130,6 +174,36 @@ def _db_path():
 
 # Copie de la base seule : gardée ici sous ce nom pour les commandes (cli.py) qui l'importent.
 make_backup = sauvegarde.make_backup
+
+
+def restaurer_base(chemin: str) -> list[str]:
+    """Remplace la base par la sauvegarde ``chemin`` (déjà vérifiée par ``sauvegarde.verifier_base``), après
+    une sauvegarde de sécurité de l'état actuel, puis la met au niveau du code sans redémarrer (sauvegarde
+    d'une version plus ancienne : tables et colonnes ajoutées depuis). La session en cours est fermée : son
+    numéro de compte peut désigner quelqu'un d'autre dans la base restaurée. Renvoie les changements de
+    structure appliqués (vide si la sauvegarde était déjà au niveau)."""
+    from .. import migrer_schema
+    from ..models import Workspace as _Workspace
+    make_backup()  # filet de sécurité
+    db.session.remove()
+    db.engine.dispose()
+    src = sqlite3.connect(chemin)
+    dst = sqlite3.connect(_db_path())
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    db.engine.dispose()
+    changements = migrer_schema()
+    _Workspace.get()
+    from ..extensions import vider_journal
+    vider_journal()
+    current_app.config.pop("_HAS_USERS", None)  # la base restaurée peut n'avoir aucun compte
+    if has_request_context():
+        logout_user()
+    return changements
 
 
 def _nom_sauvegarde(name: str | None) -> str | None:
@@ -183,16 +257,15 @@ def backup():
             path = os.path.join(folder, name)
             if not (name.endswith(".db") and os.path.exists(path)):
                 abort(404)
-            make_backup()  # filet de sécurité
-            db.session.remove()
-            db.engine.dispose()
-            src = sqlite3.connect(path)
-            dst = sqlite3.connect(_db_path())
-            with dst:
-                src.backup(dst)
-            src.close()
-            dst.close()
+            probleme = sauvegarde.verifier_base(path)
+            if probleme:
+                flash(f"Restauration refusée : {probleme}. Ta base actuelle n’a pas été touchée.", "error")
+                return redirect(url_for("settings.backup"))
+            changements = restaurer_base(path)
             flash(f"Base restaurée depuis {name}. Une sauvegarde de l’état précédent a été créée.", "success")
+            if changements:
+                flash("Cette sauvegarde venait d’une version plus ancienne de Hangar : elle a été mise à jour "
+                      "automatiquement, pas besoin de redémarrer.", "info")
             cote = sauvegarde.dossier_fichiers(path)
             if cote.is_dir():
                 flash(f"Les fichiers mis de côté avec cette sauvegarde (pièces jointes, sets perso…) sont dans "
@@ -264,4 +337,16 @@ def export_json():
 @bp.route("/about")
 @login_required
 def about():
-    return render_template("settings/about.html", now=now(), shutil=shutil)
+    from .. import lancement
+    lance, disque = lancement.code_au_demarrage(), lancement.code_sur_le_disque()
+    date = ""
+    if lance.get("date"):
+        try:
+            date = datetime.fromisoformat(lance["date"]).strftime("%d/%m/%Y")
+        except ValueError:
+            pass
+    return render_template("settings/about.html", now=now(), shutil=shutil,
+                           version_lancee=lancement.description(lance), version_disque=lancement.description(disque),
+                           version_commit=(lance.get("commit") or "")[:12], version_date=date,
+                           mise_a_jour=bool(lance.get("commit") and disque.get("commit")
+                                            and lance["commit"] != disque["commit"]))

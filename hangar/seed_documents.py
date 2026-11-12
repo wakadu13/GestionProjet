@@ -26,7 +26,7 @@ from .services import add_relation, ensure_member, log_activity
 from .utils import parse_date
 
 DATA_FILE = Path(__file__).resolve().parent / "seed_data" / "tickets_documents.json"
-ROOT = Path(__file__).resolve().parent.parent.parent  # dossier « Projet Pluri »
+ROOT = Path(__file__).resolve().parent.parent.parent  # dossier qui contient le dépôt (ex-« Projet Pluri »)
 
 MODULES = [
     ("Cadrage & organisation", "Finalité, périmètre, fiche de cadrage, organisation de l’équipe et rituels.", "#3f76ff"),
@@ -261,8 +261,8 @@ def load_documents(project: Project, actor: User, data: dict | None = None, atta
         f"{report['relations']} dépendances")
     if report["missing_docs"]:
         absents = sorted(set(report["missing_docs"]))
-        say(f"  ! {len(absents)} document(s) source non joint(s) : les fichiers du dossier « Projet Pluri » "
-            f"ne sont pas dans le dépôt (cherchés dans {ROOT}). Les tickets sont créés quand même ; pour joindre "
-            f"les documents, place ce dossier à côté de hangar/ puis relance « hangar rebuild-docs ». "
-            f"Exemples : {', '.join(absents[:3])}")
+        say(f"  ! {len(absents)} document(s) source non joint(s) : les documents du projet ne sont pas dans le dépôt. "
+            f"Les tickets sont créés quand même. Pour les joindre, copie le contenu du dossier « Projet Pluri » "
+            f"(sous-dossiers « Avancement projet », « fichier généré »…) dans le dossier qui contient le dépôt, {ROOT}, "
+            f"puis relance « hangar rebuild-docs ». Par exemple, Hangar cherche : {ROOT / absents[0]}")
     return report

@@ -1,0 +1,31 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Coffre introuvable · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Coffre introuvable') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow" data-coffre-introuvable>
+  <div class="wiki-doc-icon">{{ icon('alert', 34, stroke=1.4) }}</div>
+  <h1 class="wiki-doc-title">Ton coffre est introuvable</h1>
+  <div class="callout" data-callout="warning">
+    <div class="callout-title">Hangar ne trouve pas le dossier de tes cours</div>
+    <div class="callout-content">
+      <p>Dossier attendu : <code>{{ dossier }}</code> <span class="muted small">({{ origine }})</span></p>
+      <p>Tes pages n’ont pas disparu : le dossier n’est simplement pas là. Le plus souvent, c’est une clé USB ou un
+        disque débranché, un dossier OneDrive pas encore synchronisé, ou une faute de frappe dans le chemin.</p>
+      <p>Hangar n’ouvre pas de wiki vide à la place : des notes créées ailleurs seraient invisibles pour Obsidian.</p>
+    </div>
+  </div>
+  <h2>Pour réparer</h2>
+  <ul>
+    <li>Rebranche le disque ou attends la synchronisation, puis <a href="{{ request.path }}">recharge la page</a>.</li>
+    {% if current_user.is_admin %}
+    <li>Ou choisis un autre dossier dans <a href="{{ url_for('settings.workspace') }}#coffre">Réglages › Espace</a>.</li>
+    {% else %}
+    <li>Ou demande à un administrateur de choisir le bon dossier dans Réglages › Espace.</li>
+    {% endif %}
+    <li>En ligne de commande : <code>uv run hangar wiki-coffre "C:\chemin\de\ton\coffre"</code>
+      {% if origine_code == 'variable' %}(et retire la variable <code>HANGAR_VAULT</code>, qui passe avant){% endif %}.</li>
+  </ul>
+</div>
+{% endblock %}

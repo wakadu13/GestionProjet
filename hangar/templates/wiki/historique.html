@@ -11,8 +11,12 @@
     <span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">{{ icon('history', 14) }} Historique</span>
   </div>
   <div class="header-actions">
+    {% if absente %}
+    <a class="btn btn-sm" href="{{ note.url }}">{{ icon('arrow-left', 14) }} Corbeille</a>
+    {% else %}
     <a class="btn btn-sm" href="{{ note.url }}">{{ icon('arrow-left', 14) }} Retour à la page</a>
     {% if can_edit %}<a class="btn btn-sm btn-primary" href="{{ url_for('wiki.edit', path=note.key) }}">{{ icon('edit', 14) }} Modifier</a>{% endif %}
+    {% endif %}
   </div>
 </div>
 {% endblock %}
@@ -25,7 +29,11 @@
     un import ou une page modifiée par l'assistant IA garde toujours sa propre version ; après « ✦ Améliorer »,
     l'enregistrement suivant garde aussi le texte d'avant l'IA. Au plus {{ max_versions }} versions par page :
     au-delà, les plus anciennes partent, sauf la toute première.</p>
+  {% if absente %}
+  <div class="callout" data-callout="warning" data-page-absente><div class="callout-title">Cette page n’existe plus dans le coffre (supprimée ou renommée hors du wiki). Ses versions sont en lecture seule : choisis-en une pour recréer la page.</div></div>
+  {% else %}
   <p class="muted">Choisis une version pour voir ce qui a changé depuis, et la restaurer au besoin.</p>
+  {% endif %}
   {% if not versions %}
   <div class="callout" data-callout="info"><div class="callout-title">Aucune version précédente : la page n'a pas encore été modifiée depuis le wiki.</div></div>
   {% else %}
@@ -39,19 +47,33 @@
       {% endfor %}
     </div>
     <section class="wiki-hist-diff">
+      {% if absente %}
+      <h2>Version du {{ choisie.date.strftime('%d/%m/%Y à %H:%M') }}</h2>
+      <pre class="wiki-diff">{{ contenu_version }}</pre>
+      {% else %}
       <h2>Du {{ choisie.date.strftime('%d/%m/%Y à %H:%M') }} à aujourd’hui</h2>
-      {% if not diff %}
+      {% endif %}
+      {% if absente %}
+      {% elif not diff %}
       <p class="muted">Aucune différence : cette version est identique à la page actuelle.</p>
       {% else %}
       <p class="muted small"><span class="wiki-diff-legend del">— retiré</span> · <span class="wiki-diff-legend add">+ ajouté</span></p>
       <pre class="wiki-diff">{% for l in diff %}<span class="diff-{{ l.type }}">{{ l.texte }}</span>
 {% endfor %}</pre>
       {% endif %}
+      {% if not absente %}
       <details class="wiki-hist-full">
         <summary>Texte complet de cette version</summary>
         <pre class="wiki-diff">{{ contenu_version }}</pre>
       </details>
-      {% if can_edit %}
+      {% endif %}
+      {% if can_edit and absente %}
+      <form method="post" class="flex gap mt">
+        {{ ui.csrf() }}
+        <input type="hidden" name="v" value="{{ choisie.id }}">
+        <button type="submit" class="btn btn-primary" name="action" value="recreer">{{ icon('refresh', 14) }} Recréer la page avec cette version</button>
+      </form>
+      {% elif can_edit %}
       <form method="post" class="flex gap mt" data-confirm="Remplacer la page actuelle par cette version ? La page actuelle est gardée dans l’historique.">
         {{ ui.csrf() }}
         <input type="hidden" name="v" value="{{ choisie.id }}">

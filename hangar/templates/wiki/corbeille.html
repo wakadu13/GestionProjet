@@ -1,0 +1,42 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Corbeille · Wiki{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs([], 'Corbeille') }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow" data-corbeille>
+  <h1 class="wiki-doc-title">Corbeille du wiki</h1>
+  <p class="muted">Les pages mises à la corbeille restent dans le dossier <code>.trash</code> du coffre (comme dans Obsidian). Remets-en une à sa place d’un clic.</p>
+  {% if jetees %}
+  <div class="panel wiki-list">
+    {% for p in jetees %}
+    <div class="wiki-row">
+      {{ icon('trash', 16) }}
+      <span class="grow ellipsis"><b>{{ p.titre }}</b>{% if p.dossier %} <span class="muted small">{{ p.dossier }}</span>{% endif %}</span>
+      <span class="muted small nowrap">{{ p.date|ago }}</span>
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('wiki.historique', path=p.origine.removesuffix('.md')) }}" title="Versions gardées de cette page">{{ icon('history', 14) }}</a>
+      {% if can_edit %}
+      {% if p.occupee %}
+      <span class="muted small" title="Une autre page porte maintenant ce nom : renomme-la d’abord">Nom déjà pris</span>
+      {% else %}
+      <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="rel" value="{{ p.rel }}"><button class="btn btn-sm">{{ icon('refresh', 14) }} Remettre en place</button></form>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  {{ ui.empty('trash', 'La corbeille est vide', 'Les pages que tu mets à la corbeille apparaîtront ici.') }}
+  {% endif %}
+
+  {% if historique %}
+  <div class="section-title"><h2>Pages dont il reste l’historique</h2><span class="count">{{ historique|length }}</span></div>
+  <p class="muted small">Supprimées hors du wiki, ou corbeille vidée : leur texte est encore dans l’historique. Ouvre une version pour recréer la page.</p>
+  <div class="panel wiki-list">
+    {% for p in historique %}
+    <a class="wiki-row" href="{{ url_for('wiki.historique', path=p.cle) }}">{{ icon('history', 16) }}<span class="grow ellipsis"><b>{{ p.titre }}</b> <span class="muted small">{{ p.cle.rsplit('/', 1)[0] if '/' in p.cle else '' }}</span></span><span class="muted small nowrap">{{ p.versions }} version{{ 's' if p.versions > 1 }} · {{ p.derniere|ago }}</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

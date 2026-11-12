@@ -62,6 +62,7 @@
     <a class="sb-link {% if ep in ('wiki.tags', 'wiki.tag') %}active{% endif %}" href="{{ url_for('wiki.tags') }}">{{ icon('hash') }} Tags</a>
     <a class="sb-link {% if ep == 'wiki.graphe' %}active{% endif %}" href="{{ url_for('wiki.graphe') }}">{{ icon('wiki-graph') }} Graphe</a>
     <a class="sb-link {% if ep in ('wiki.historique_global', 'wiki.historique') %}active{% endif %}" href="{{ url_for('wiki.historique_global') }}">{{ icon('history') }} Historique</a>
+    <a class="sb-link {% if ep == 'wiki.corbeille' %}active{% endif %}" href="{{ url_for('wiki.corbeille') }}">{{ icon('trash') }} Corbeille</a>
     {% if sb.can_edit %}
     <a class="sb-link {% if ep == 'wiki.importer' %}active{% endif %}" href="{{ url_for('wiki.importer') }}">{{ icon('upload') }} Importer</a>
     <a class="sb-link {% if ep == 'wiki.latex' %}active{% endif %}" href="{{ url_for('wiki.latex') }}">{{ icon('wiki-sigma') }} Cours LaTeX</a>

@@ -24,6 +24,25 @@
       <div class="stat"><div class="v">{{ stats.uploads }}</div><div class="l">Pièces jointes</div></div>
     </div>
     <div class="panel panel-b small"><span class="muted">Dossier des données :</span> <code>{{ stats.data_dir }}</code></div>
+    <h2 class="mt-lg" id="coffre">Coffre du wiki</h2>
+    <p class="help">Le dossier de tes cours (tes pages .md, PDF, images et sets de QCM). Ce peut être ton coffre Obsidian : Hangar et Obsidian lisent alors les mêmes fichiers.</p>
+    <div class="panel panel-b md" data-coffre>
+      <p><span class="muted">Coffre :</span> <code>{{ vault.dossier }}</code> <span class="muted small">({{ vault.texte }})</span></p>
+      {% if vault.introuvable %}
+      <div class="danger-zone mb">{{ icon('alert', 14) }} Ce dossier est introuvable : rebranche le disque ou la clé, ou choisis le bon dossier ci-dessous. En attendant, le wiki affiche un avertissement au lieu de tes cours.</div>
+      {% endif %}
+      {% if vault.local %}
+      <form method="post" class="flex wrap gap">
+        {{ ui.csrf() }}<input type="hidden" name="action" value="coffre">
+        <input class="input grow" name="dossier" placeholder="C:\Users\moi\Documents\Obsidian\Cours" value="{{ vault.dossier if vault.origine == 'reglage' else '' }}" aria-label="Dossier du coffre">
+        <button class="btn btn-primary">Utiliser ce dossier</button>
+        {% if vault.origine == 'reglage' %}<button class="btn" name="defaut" value="1">Revenir au dossier par défaut</button>{% endif %}
+      </form>
+      <p class="help">Colle le chemin copié depuis la barre d’adresse de l’Explorateur. Le dossier doit déjà exister : Hangar n’y ajoute aucune page. Le choix est gardé pour les prochains lancements (lancer.bat compris).</p>
+      {% else %}
+      <p class="help">Pour changer de coffre, ouvre cette page sur l’ordinateur où tourne Hangar.</p>
+      {% endif %}
+    </div>
     <h2 class="mt-lg">Partager sur le réseau local</h2>
     <div class="panel panel-b md">
       <p>Pour que les autres membres de l’équipe se connectent depuis leur ordinateur sur le même réseau (Wi-Fi, réseau de l’école), lance Hangar avec :</p>

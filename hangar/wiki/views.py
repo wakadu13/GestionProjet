@@ -23,7 +23,7 @@ from .. import ai
 from ..extensions import db
 from ..icons import ICONS
 from ..securite import protect_file
-from . import commun, erreurs, historique, installation, texte_pdf, uploads
+from . import coffre, commun, erreurs, historique, installation, rangement, texte_pdf, uploads
 from . import latex as latex_converter
 from .commun import can_edit, deny, render, wants_json
 from .render import Renderer
@@ -68,10 +68,12 @@ ICONS.setdefault("wiki-list-tree", '<path d="M21 12h-8"/><path d="M21 6H8"/><pat
 
 @bp.record_once
 def _installer(state):
-    """Premier lancement : coffre vide → page d'accueil et guide de la syntaxe."""
+    """Premier lancement : coffre vide → page d'accueil et guide de la syntaxe. Seulement dans le dossier par
+    défaut (data/vault) : un coffre choisi (HANGAR_VAULT, « hangar wiki-coffre ») peut être un coffre Obsidian
+    neuf ou synchronisé, où ces pages n'ont rien à faire."""
     app = state.app
     app.config.setdefault("WIKI_VERIF_INTERVALLE", 2.0)
-    if app.testing:
+    if app.testing or app.config.get("WIKI_ORIGINE", coffre.DEFAUT) != coffre.DEFAUT:
         return
     try:
         installation.amorcer(app.config["WIKI_DIR"])
@@ -104,12 +106,23 @@ def _apres_requete(_exc):
 PUBLICS = {"wiki.service_worker", "wiki.manifeste", "wiki.hors_connexion"}
 
 
+# Pages du blueprint qui ne lisent pas le coffre : ouvertes même quand il est introuvable.
+SANS_COFFRE = {"wiki.palette", "wiki.documentation", "wiki.erreurs"}
+
+
 @bp.before_request
 def _connexion():
     if request.endpoint in PUBLICS:
         return None
     if not current_user.is_authenticated:
         return current_app.login_manager.unauthorized()
+    if request.endpoint not in SANS_COFFRE and coffre.introuvable(current_app.config):
+        # Jamais de wiki vide à la place (ni de dossier créé par une page enregistrée) : on dit pourquoi.
+        if wants_json():
+            return jsonify(ok=False, error=f"Coffre du wiki introuvable : {current_app.config['WIKI_DIR']}"), 503
+        origine = current_app.config.get("WIKI_ORIGINE", coffre.DEFAUT)
+        return render("wiki/coffre_introuvable.html", dossier=current_app.config["WIKI_DIR"],
+                      origine=coffre.ORIGINES.get(origine, ""), origine_code=origine), 503
     return None
 
 
@@ -478,16 +491,81 @@ def supprimer(path):
         flash(FICHIER_INACCESSIBLE, "error")
         return redirect(note.url)
     historique.sauvegarder(note.path.as_posix(), texte, current_user.username)
-    corbeille = vault.root / ".trash"
-    corbeille.mkdir(exist_ok=True)
-    cible = corbeille / note.path.name
-    i = 1
-    while cible.exists():
-        cible = corbeille / f"{note.path.stem} {i}{note.path.suffix}"
-        i += 1
-    source.replace(cible)
-    flash(f"« {note.title} » est dans la corbeille du coffre (.trash).", "success")
+    try:
+        rangement.jeter(vault, note)
+    except OSError:
+        flash(FICHIER_INACCESSIBLE, "error")
+        return redirect(note.url)
+    flash(f"« {note.title} » est dans la corbeille : tu peux la remettre en place depuis la page Corbeille du wiki.",
+          "success")
     return redirect(url_for("wiki.home"))
+
+
+@bp.route("/corbeille/", methods=["GET", "POST"])
+def corbeille():
+    """Pages mises à la corbeille (remises en place d'un clic) et pages dont il ne reste que l'historique."""
+    vault = get_vault()
+    if request.method == "POST":
+        if not can_edit():
+            deny()
+        rel = request.form.get("rel", "")
+        try:
+            cle = rangement.restaurer(vault, rel)
+        except FileExistsError as exc:
+            flash(f"Une page « {str(exc).removesuffix('.md')} » existe déjà : renomme-la d'abord, puis recommence.",
+                  "error")
+        except FileNotFoundError:
+            flash("Cette page n'est plus dans la corbeille.", "error")
+        except OSError:
+            flash(FICHIER_INACCESSIBLE, "error")
+        else:
+            flash("Page remise en place.", "success")
+            return redirect(url_for("wiki.page", path=cle))
+        return redirect(url_for("wiki.corbeille"))
+    return render("wiki/corbeille.html", vault=vault, **rangement.contenu(vault))
+
+
+@bp.route("/renommer-page/<path:path>", methods=["GET", "POST"])
+def renommer(path):
+    """Renommer ou déplacer une page : liens [[…]], favoris, récents, historique et QCM liés suivent."""
+    if not can_edit():
+        deny()
+    vault = get_vault()
+    note = vault.notes.get(path.lower().removesuffix(".md"))
+    if note is None:
+        abort(404)
+    nom = request.form.get("name", note.name).strip()
+    dossier = request.form.get("folder", note.folder).strip().strip("/")
+    error = ""
+    if request.method == "POST":
+        cle = clean_key(f"{dossier}/{nom}") if nom and "/" not in nom and "\\" not in nom else None
+        if cle is None:
+            error = 'Le nom ne doit pas contenir les caractères / \\ : * ? " < > | # ^ [ ]'
+        elif commun.est_qcm(cle):
+            error = "Le dossier QCM est réservé aux sets de questions : choisis un autre dossier."
+        elif cle == note.key:
+            return redirect(note.url)
+        elif cle.lower() != note.key.lower() and (cle.lower() in vault.notes or (vault.root / f"{cle}.md").exists()):
+            error = "Une page porte déjà ce nom à cet endroit : choisis-en un autre."
+        else:
+            try:
+                bilan = rangement.renommer(vault, note, cle, current_user.username)
+            except OSError:
+                error = FICHIER_INACCESSIBLE
+            else:
+                message = "Page renommée."
+                if bilan.liens:
+                    message += (f" {bilan.liens} lien(s) mis à jour dans {len(bilan.pages)} autre(s) page(s)"
+                                if bilan.pages else f" {bilan.liens} lien(s) mis à jour dans la page")
+                    message += " ; leur ancien texte reste dans l'historique."
+                flash(message, "success")
+                if bilan.illisibles:
+                    flash("Ces pages citent la page mais n'ont pas pu être mises à jour (fichier verrouillé ?) : "
+                          + ", ".join(bilan.illisibles[:5]), "error")
+                return redirect(url_for("wiki.page", path=bilan.cle))
+    citee_par = sorted(vault.backlinks.get(note.key.lower(), ()), key=lambda n: n.title.lower())
+    return render("wiki/renommer.html", vault=vault, note=note, name=nom, folder=dossier, error=error,
+                  folders=_dossiers(vault), citee_par=citee_par, crumbs=fil_ariane(note.folders))
 
 
 # ---------------------------------------------------------------------------
@@ -674,7 +752,7 @@ def historique_global():
     versions = []
     for v in historique.recentes(60):
         note = vault.notes.get(v["page"].lower().removesuffix(".md"))
-        versions.append({**v, "note": note})
+        versions.append({**v, "note": note, "cle": v["page"].removesuffix(".md")})
     return render("wiki/historique_global.html", vault=vault, versions=versions, recent=vault.recent_notes(20))
 
 
@@ -684,7 +762,7 @@ def historique_page(path):
     vault = get_vault()
     note = vault.notes.get(path.lower().removesuffix(".md"))
     if note is None:
-        abort(404, description="Page introuvable")
+        return _historique_page_absente(vault, path)
     rel = note.path.as_posix()
     fichier = vault.root / note.path
     versions = historique.lister(rel)
@@ -842,6 +920,47 @@ def pdf_annotation():
         fichier.write_text(nouveau, encoding="utf-8", newline="\n")
         return jsonify(ok=True, message=f"Citation ajoutée à « {titre} ».", url=url_for("wiki.page", path=cle))
     return jsonify(ok=False, error="cible inconnue"), 400
+
+
+def _historique_page_absente(vault, path):
+    """Historique d'une page supprimée (ou renommée hors du wiki) : ses versions en lecture seule, et
+    « Recréer la page avec cette version »."""
+    cle = clean_key(path)
+    if cle is None:
+        abort(404, description="Page introuvable")
+    rel = f"{cle}.md"
+    try:
+        versions = historique.lister(rel)
+    except ValueError:
+        versions = []
+    if not versions:
+        abort(404, description="Page introuvable, et aucune version gardée dans l'historique.")
+    if request.method == "POST":
+        if not can_edit():
+            deny()
+        contenu = historique.lire(rel, request.form.get("v", ""))
+        if contenu is None:
+            abort(404, description="Version introuvable")
+        fichier = vault.root / rel
+        if fichier.exists() or cle.lower() in vault.notes:
+            flash("Une page porte de nouveau ce nom : ouvre-la pour restaurer une version depuis son historique.", "error")
+            return redirect(url_for("wiki.page", path=cle))
+        try:
+            fichier.parent.mkdir(parents=True, exist_ok=True)
+            fichier.write_text(contenu, encoding="utf-8", newline="\n")
+        except OSError:
+            flash(FICHIER_INACCESSIBLE, "error")
+            return redirect(url_for("wiki.historique", path=cle))
+        commun.noter_visite(cle, modifiee=True)
+        flash("Page recréée avec cette version.", "success")
+        return redirect(url_for("wiki.page", path=cle))
+    choisie = next((v for v in versions if v["id"] == request.args.get("v")), versions[0])
+    contenu_version = historique.lire(rel, choisie["id"]) or ""
+    dossiers = cle.split("/")[:-1]
+    absente = {"title": cle.rsplit("/", 1)[-1], "key": cle, "url": url_for("wiki.corbeille"), "folders": dossiers}
+    return render("wiki/historique.html", vault=vault, note=absente, absente=True, versions=versions, choisie=choisie,
+                  contenu_version=contenu_version, crumbs=fil_ariane(dossiers), diff=[],
+                  max_versions=historique.MAX_VERSIONS)
 
 
 def lien_wiki(key: str) -> str:

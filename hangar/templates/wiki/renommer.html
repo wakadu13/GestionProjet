@@ -1,0 +1,37 @@
+{% extends "wiki/_base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "wiki/_macros.html" as wk with context %}
+{% block title %}Renommer · {{ note.title }}{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}{{ wk.crumbs(crumbs, note.title) }}</div>{% endblock %}
+{% block content %}
+<div class="wiki wiki-narrow">
+  <h1 class="wiki-doc-title">Renommer ou déplacer « {{ note.title }} »</h1>
+  {% if error %}
+  <div class="callout" data-callout="danger"><div class="callout-title">{{ error }}</div></div>
+  {% endif %}
+  <form method="post" class="panel panel-b wiki-form">
+    {{ ui.csrf() }}
+    <div class="field">
+      <label for="name">Nouveau nom</label>
+      <input class="input" type="text" id="name" name="name" value="{{ name }}" required autofocus>
+    </div>
+    <div class="field">
+      <label for="folder">Collection (dossier)</label>
+      <input class="input" type="text" id="folder" name="folder" value="{{ folder }}" list="rename-folders" placeholder="(racine du wiki)" autocomplete="off">
+      <datalist id="rename-folders">{% for f in folders %}<option value="{{ f }}">{% endfor %}</datalist>
+      <span class="help">Choisis un dossier existant ou tape un nouveau nom : il sera créé.</span>
+    </div>
+    <div class="flex gap">
+      <button type="submit" class="btn btn-primary">{{ icon('check', 14) }} Renommer</button>
+      <a class="btn" href="{{ note.url }}">Annuler</a>
+    </div>
+  </form>
+  <p class="muted small mt">Suivent la page : son historique, les favoris et « Récents », les questions posées au tuteur et les QCM générés d’après elle.
+  {% if citee_par %}Les liens des {{ citee_par|length }} page{{ 's' if citee_par|length > 1 }} qui la citent seront mis à jour (leur ancien texte reste dans l’historique) :{% else %}Aucune autre page ne la cite.{% endif %}</p>
+  {% if citee_par %}
+  <div class="panel wiki-list">
+    {% for n in citee_par %}<a class="wiki-row" href="{{ n.url }}">{{ wk.page_icon(n, 15) }}<span class="grow ellipsis">{{ n.title }}</span><span class="muted small">{{ n.folder }}</span></a>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

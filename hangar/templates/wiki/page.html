@@ -42,7 +42,8 @@
         {% endif %}
         {% if can_edit %}
         <div class="menu-sep"></div>
-        <form method="post" action="{{ url_for('wiki.supprimer', path=note.key) }}" data-confirm="Mettre « {{ note.title }} » à la corbeille du coffre (.trash) ? Son texte reste dans l’historique.">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Mettre à la corbeille</button></form>
+        <a class="menu-item" href="{{ url_for('wiki.renommer', path=note.key) }}">{{ icon('edit') }} Renommer / déplacer</a>
+        <form method="post" action="{{ url_for('wiki.supprimer', path=note.key) }}" data-confirm="Mettre « {{ note.title }} » à la corbeille ? Tu pourras la remettre en place depuis la page Corbeille du wiki.{% if backlinks %} {{ backlinks|length }} page{{ 's' if backlinks|length > 1 }} y font un lien : {{ 'ces liens deviendront' if backlinks|length > 1 else 'ce lien deviendra' }} « page à créer ».{% endif %}">{{ ui.csrf() }}<button class="menu-item danger">{{ icon('trash') }} Mettre à la corbeille</button></form>
         {% endif %}
       </div>
     </div>

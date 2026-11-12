@@ -99,6 +99,29 @@ def copier_base(destination: str | os.PathLike, sans_secrets: bool = False) -> N
         dst.close()
     if sans_secrets:
         retirer_secrets(destination)
+    from .extensions import vider_journal
+    vider_journal()  # hangar.db seul est alors à jour, lui aussi
+
+
+def verifier_base(chemin: str | os.PathLike) -> str | None:
+    """Vérifie qu'un fichier est une base Hangar intacte avant de la restaurer. Renvoie None si tout va bien,
+    sinon la raison (en français, pour l'utilisateur). Le fichier n'est ouvert qu'en lecture."""
+    try:
+        con = sqlite3.connect(Path(chemin).resolve().as_uri() + "?mode=ro", uri=True)
+    except sqlite3.Error:
+        return "ce fichier ne s’ouvre pas"
+    try:
+        tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "user" not in tables:
+            return "ce fichier n’est pas une base Hangar (aucun compte dedans)"
+        resultat = con.execute("PRAGMA integrity_check").fetchone()
+        if not resultat or resultat[0] != "ok":
+            return "ce fichier est abîmé (copie interrompue, disque défectueux…)"
+    except sqlite3.DatabaseError:
+        return "ce fichier n’est pas une base Hangar lisible"
+    finally:
+        con.close()
+    return None
 
 
 def retirer_secrets(chemin: str | os.PathLike) -> None:

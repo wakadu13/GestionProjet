@@ -24,7 +24,8 @@ MAX_TRACE = 20_000
 RACINE = Path(__file__).resolve().parent.parent.parent  # dossier du projet (au-dessus du paquet hangar)
 
 
-def noter(exc: BaseException | None = None, contexte: str = "", request=None, user=None) -> None:
+def noter(exc: BaseException | None = None, contexte: str = "", request=None, user=None,
+          dans_la_transaction: bool = False) -> None:
     """Enregistre l'exception ``exc`` (sinon celle en cours de traitement).
 
     ``request`` : la requête en erreur (adresse, méthode) ; ``contexte`` : à défaut, ce qui tournait
@@ -34,16 +35,41 @@ def noter(exc: BaseException | None = None, contexte: str = "", request=None, us
             _, exc, _ = sys.exc_info()
         if exc is None:
             return
-        _enregistrer(exc, contexte, request, user)
+        _enregistrer(exc, contexte, request, user, dans_la_transaction)
     except Exception:  # noqa: BLE001
         log.exception("Erreur impossible à enregistrer")
 
 
-def _enregistrer(exc, contexte, request, user):
+def signaler(contexte: str, exc: BaseException | None = None, journal: logging.Logger | None = None,
+             dans_la_transaction: bool = False) -> None:
+    """Garde-fou qui ne doit pas casser la page ou le fil (on continue avec une solution de repli), mais sans
+    avaler l'erreur en silence : elle est écrite dans le journal (avec sa trace) ET notée sur ``/erreurs/``.
+
+    À appeler dans un ``except`` : ``exc`` par défaut est l'exception en cours. Ne lève jamais.
+    ``dans_la_transaction`` : le travail continue et a peut-être déjà écrit dans la base (SQLite n'accepte alors
+    pas d'autre écriture en parallèle) ; l'erreur est ajoutée à sa transaction, enregistrée avec elle."""
+    try:
+        if exc is None:
+            _, exc, _ = sys.exc_info()
+        if exc is None:
+            return
+        cible = journal
+        if cible is None:
+            try:
+                from flask import current_app
+                cible = current_app.logger
+            except RuntimeError:  # hors application
+                cible = log
+        cible.error("%s", contexte, exc_info=(type(exc), exc, exc.__traceback__))
+    except Exception:  # noqa: BLE001
+        pass
+    noter(exc, contexte=contexte, dans_la_transaction=dans_la_transaction)
+
+
+def _enregistrer(exc, contexte, request, user, dans_la_transaction=False):
     from sqlalchemy.orm import Session
 
     from ..extensions import db
-    from .models import ErreurServeur
 
     type_ = type(exc)
     pile = traceback.extract_tb(exc.__traceback__)
@@ -62,23 +88,33 @@ def _enregistrer(exc, contexte, request, user):
         except Exception:  # noqa: BLE001
             user = None
     qui = getattr(user, "username", "") or ""
-    maintenant = now()
+    if dans_la_transaction:
+        with db.session.begin_nested():  # point de reprise : un échec ici n'annule pas le travail en cours
+            _ecrire(db.session, empreinte, type_, message, lieu, chemin, methode, qui, trace)
+        return
     with Session(db.engine) as s:
-        e = s.query(ErreurServeur).filter_by(empreinte=empreinte).first()
-        if e is None:
-            s.add(ErreurServeur(empreinte=empreinte, type=type_.__name__[:200], message=message, lieu=lieu[:500],
-                                chemin=chemin, methode=methode, utilisateur=qui[:150], trace=trace, nombre=1,
-                                premiere=maintenant, derniere=maintenant, reglee=False))
-            s.flush()
-            anciennes = [pk for (pk,) in s.query(ErreurServeur.id).order_by(ErreurServeur.derniere.desc())
-                         .offset(MAX_ERREURS).all()]
-            if anciennes:
-                s.query(ErreurServeur).filter(ErreurServeur.id.in_(anciennes)).delete(synchronize_session=False)
-        else:
-            e.nombre = (e.nombre or 0) + 1
-            e.derniere, e.chemin, e.methode, e.utilisateur, e.trace, e.reglee = (
-                maintenant, chemin, methode, qui[:150], trace, False)
+        _ecrire(s, empreinte, type_, message, lieu, chemin, methode, qui, trace)
         s.commit()
+
+
+def _ecrire(s, empreinte, type_, message, lieu, chemin, methode, qui, trace):
+    from .models import ErreurServeur
+
+    maintenant = now()
+    e = s.query(ErreurServeur).filter_by(empreinte=empreinte).first()
+    if e is None:
+        s.add(ErreurServeur(empreinte=empreinte, type=type_.__name__[:200], message=message, lieu=lieu[:500],
+                            chemin=chemin, methode=methode, utilisateur=qui[:150], trace=trace, nombre=1,
+                            premiere=maintenant, derniere=maintenant, reglee=False))
+        s.flush()
+        anciennes = [pk for (pk,) in s.query(ErreurServeur.id).order_by(ErreurServeur.derniere.desc())
+                     .offset(MAX_ERREURS).all()]
+        if anciennes:
+            s.query(ErreurServeur).filter(ErreurServeur.id.in_(anciennes)).delete(synchronize_session=False)
+    else:
+        e.nombre = (e.nombre or 0) + 1
+        e.derniere, e.chemin, e.methode, e.utilisateur, e.trace, e.reglee = (
+            maintenant, chemin, methode, qui[:150], trace, False)
 
 
 def _lieu(pile) -> str:

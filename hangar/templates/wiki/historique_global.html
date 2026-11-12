@@ -7,14 +7,14 @@
 <div class="wiki wiki-two">
   <div class="wiki-two-main">
     <h1 class="wiki-doc-title">Historique du wiki</h1>
-    <p class="muted">Les versions précédentes gardées à chaque modification d’une page (éditeur, import, restauration).</p>
+    <p class="muted">Les versions précédentes gardées à chaque modification d’une page (éditeur, import, restauration). Une page supprimée se retrouve dans la <a href="{{ url_for('wiki.corbeille') }}">corbeille</a>.</p>
     {% if versions %}
     <div class="panel wiki-list">
       {% for v in versions %}
       {% if v.note %}
       <a class="wiki-row" href="{{ url_for('wiki.historique', path=v.note.key) }}?v={{ v.id }}">{{ wk.page_icon(v.note, 16) }}<span class="grow ellipsis"><b>{{ v.note.title }}</b> <span class="muted small">{{ v.note.folder }}</span></span><span class="muted small nowrap">{% if v.auteur %}{{ v.auteur }} · {% endif %}{{ v.date|ago }}</span></a>
       {% else %}
-      <div class="wiki-row muted">{{ icon('trash', 16) }}<span class="grow ellipsis">{{ v.page }} <span class="small">(page supprimée ou déplacée)</span></span><span class="small nowrap">{{ v.date|ago }}</span></div>
+      <a class="wiki-row muted" href="{{ url_for('wiki.historique', path=v.cle) }}?v={{ v.id }}">{{ icon('trash', 16) }}<span class="grow ellipsis">{{ v.page }} <span class="small">(page supprimée ou déplacée)</span></span><span class="small nowrap">{{ v.date|ago }}</span></a>
       {% endif %}
       {% endfor %}
     </div>
