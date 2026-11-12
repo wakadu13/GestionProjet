@@ -578,3 +578,86 @@ class SourceTests(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Piste 81 (relecture) : planning complet en METHOD:REQUEST, fichier en cours de téléchargement
+# ---------------------------------------------------------------------------
+
+class SourceReviewTests(Base):
+    drop, configure, active = SourceTests.drop, SourceTests.configure, SourceTests.active
+
+    def setUp(self):
+        Base.setUp(self)
+        self.monday = monday_after(date.today())
+        self.at = datetime.combine(self.monday - timedelta(days=2), time(9))
+        self.folder = os.path.join(self.tmp, "Telechargements")
+        os.makedirs(self.folder)
+
+    def full_request_week(self, without=()):
+        """Planning complet de la semaine exporté en METHOD:REQUEST (comme certains logiciels de planning)."""
+        raw = week_file(self.monday).replace(b"METHOD:PUBLISH", b"METHOD:REQUEST")
+        cal = raw.decode()
+        for uid in without:
+            cal = re.sub(r"BEGIN:VEVENT\r\n(?:(?!END:VEVENT).)*?UID:%s\r\n.*?END:VEVENT\r\n" % uid, "", cal, flags=re.S)
+        return cal.encode()
+
+    def test_full_planning_in_request_still_removes(self):
+        A.import_calendar(self.user, week_file(self.monday), "planning.ics", at=self.at)
+        raw = self.full_request_week(without=("1004",))
+        self.assertIn(b"METHOD:REQUEST", raw)
+        self.assertNotIn(b"UID:1004", raw)
+        imp = A.import_calendar(self.user, raw, "planning.ics", "weeks", at=self.at)
+        self.assertEqual((imp.mode, imp.removed), ("weeks", 1))
+        self.assertNotIn("invitation", imp.warnings)
+        self.assertEqual(self.active(), 3)
+
+    def test_full_planning_in_request_from_folder(self):
+        self.configure("folder", self.folder)
+        self.drop("planning.ics", week_file(self.monday))
+        self.assertEqual(A.check_source(self.user, self.at), "imported")
+        self.drop("planning (1).ics", self.full_request_week(without=("1004",)), age=10)
+        self.assertEqual(A.check_source(self.user, self.at + timedelta(minutes=1)), "imported")
+        self.assertEqual(self.active(), 3)
+
+    def test_real_invitations_still_recognised(self):
+        def ev(uid, day, summary):
+            d = datetime.combine(self.monday + timedelta(days=day), time(14))
+            return (uid, d, d + timedelta(hours=1), summary, "")
+        few = ics.parse(make_ics([ev("a", 1, "Réunion de promo")], method="REQUEST"))
+        many = ics.parse(make_ics([ev(f"r{i}", i, "Point d’équipe") for i in range(4)], method="REQUEST"))
+        two_courses = ics.parse(make_ics([ev("c1", 1, "Droit 2 CM"), ev("c2", 2, "Droit 3 CM")], method="CANCEL"))
+        published = ics.parse(make_ics([ev("p", 1, "Réunion de promo")], method="PUBLISH"))
+        self.assertEqual([A.is_invitation(c) for c in (few, many, two_courses, published)],
+                         [True, True, True, False])
+
+    def test_empty_file_being_downloaded_is_skipped_silently(self):
+        self.configure("folder", self.folder)
+        path = self.drop("planning.ics", b"")  # Firefox : fichier final vide pendant le téléchargement
+        self.assertEqual(A.check_source(self.user, self.at), "busy")
+        s = db.session.get(AgendaSettings, self.user.id)
+        self.assertEqual((s.source_error, s.source_seen), ("", ""))
+        self.assertEqual(Notification.query.filter_by(user_id=self.user.id).count(), 0)
+        # Contenu en cours d'écriture (modifié à l'instant) : toujours rien
+        with open(path, "wb") as fh:
+            fh.write(week_file(self.monday))
+        self.assertEqual(A.check_source(self.user, self.at + timedelta(seconds=1)), "busy")
+        # « .part » à côté : encore en cours
+        t = _time.time() - 100
+        os.utime(path, (t, t))
+        open(path + ".part", "wb").close()
+        self.assertEqual(A.check_source(self.user, self.at + timedelta(seconds=2)), "busy")
+        os.remove(path + ".part")
+        # Téléchargement fini : importé au passage suivant, sans notification d'erreur
+        self.assertEqual(A.check_source(self.user, self.at + timedelta(seconds=30)), "imported")
+        self.assertEqual(self.active(), 4)
+        msgs = [n.message for n in Notification.query.filter_by(user_id=self.user.id)]
+        self.assertFalse([m for m in msgs if "lisible" in m], msgs)
+
+    def test_unreadable_file_message_is_plain(self):
+        self.configure("folder", self.folder)
+        self.drop("planning.ics", b"ceci n'est pas un calendrier")
+        self.assertEqual(A.check_source(self.user, self.at), "error")
+        s = db.session.get(AgendaSettings, self.user.id)
+        self.assertEqual(s.source_error, "le fichier planning.ics n’est pas un emploi du temps lisible.")
+        self.assertNotIn("icalendar", s.source_error.lower())

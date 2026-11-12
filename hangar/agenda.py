@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import re
+import time as _clock
 import unicodedata
 from calendar import monthrange
 from dataclasses import dataclass
@@ -231,8 +232,16 @@ def _revive_reminders(ev: AgendaEvent, since: datetime | None, at: datetime) -> 
 
 def is_invitation(cal) -> bool:
     """Message d'agenda (invitation, réponse, annulation : METHOD:REQUEST, REPLY, CANCEL…) plutôt qu'un
-    calendrier publié (METHOD:PUBLISH, ou rien)."""
-    return bool(cal.method) and cal.method != "PUBLISH"
+    calendrier publié (METHOD:PUBLISH, ou rien).
+
+    METHOD seul ne suffit pas : certains logiciels de planning exportent tout l'emploi du temps en
+    METHOD:REQUEST. Un tel fichier n'est traité comme une invitation que s'il en a l'allure : au plus
+    GUARD_MAX_SESSIONS séances, ou aucune séance d'un type de cours de l'école (CM, TD_TP…)."""
+    if not cal.method or cal.method == "PUBLISH":
+        return False
+    if len(cal.events) <= GUARD_MAX_SESSIONS:
+        return True
+    return not any(e.kind in ics.KINDS for e in cal.events)
 
 
 def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics", mode: str = "weeks",
@@ -1279,6 +1288,7 @@ SOURCE_RECHECK_NOTE = timedelta(hours=1)     # dossier inchangé : « dernière 
 SOURCE_MAX_BYTES = 5 * 1024 * 1024
 SOURCE_TIMEOUT = 20
 SOURCE_SILENT_DAYS = 6                       # source muette depuis une semaine : le rappel d'import revient
+SOURCE_SETTLE_SECONDS = 5                    # fichier modifié il y a moins que ça : sans doute en cours d'écriture
 
 
 def calendar_fingerprint(cal) -> str:
@@ -1327,6 +1337,20 @@ def _source_pick_file(folder: str) -> tuple[str, str] | None:
     return path, f"{os.path.basename(path)}|{st.st_mtime_ns}|{st.st_size}"[:300]
 
 
+def _source_file_busy(path: str) -> bool:
+    """Fichier sans doute en cours de téléchargement : vide, modifié à l'instant, ou accompagné de son
+    « .part » (Firefox crée le fichier final vide et écrit dans « planning.ics.part »). Il est relu au
+    passage suivant, sans rien signaler."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    if st.st_size == 0 or os.path.exists(path + ".part"):
+        return True
+    age = _clock.time() - st.st_mtime
+    return 0 <= age < SOURCE_SETTLE_SECONDS
+
+
 def source_url(value: str) -> str:
     """Adresse à lire (webcal:// des liens d'abonnement → https://) ; ValueError si elle n'est pas http(s)."""
     from urllib.parse import urlsplit
@@ -1355,7 +1379,8 @@ def _source_note(user: User, message: str, url: str = "/agenda/imports", at: dat
 
 def check_source(user: User, at: datetime | None = None, force: bool = False) -> str:
     """Lit la source de l'emploi du temps de `user` et importe un nouveau fichier. Retourne ce qui s'est passé :
-    "off" (pas de source), "wait" (pas encore l'heure), "same" (rien de nouveau), "imported", "ignored"
+    "off" (pas de source), "wait" (pas encore l'heure), "busy" (fichier en cours de téléchargement),
+    "same" (rien de nouveau), "imported", "ignored"
     (fichier écarté par le garde-fou) ou "error" (message dans `source_error`)."""
     at = at or now()
     s = settings_of(user)
@@ -1389,6 +1414,10 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
             db.session.commit()
             return "same"
         path, seen = picked
+        if _source_file_busy(path):  # source_seen non noté : relu au prochain passage
+            s.source_error = ""
+            db.session.commit()
+            return "busy"
         if seen == s.source_seen and not force:
             s.source_error = ""
             if s.source_checked_at is None or at - s.source_checked_at >= SOURCE_RECHECK_NOTE:
@@ -1418,7 +1447,7 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
         if not cal.events:
             raise ics.ICSError("aucune séance dans le fichier")
     except ics.ICSError as exc:
-        return fail(f"{filename} n’est pas un emploi du temps lisible ({str(exc).rstrip('.').lower()}).")
+        return fail(f"le fichier {filename} n’est pas un emploi du temps lisible.")
     fp = calendar_fingerprint(cal)
     s.source_error = ""
     s.source_checked_at = at

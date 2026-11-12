@@ -736,6 +736,8 @@ def _flash_source(result: str, s) -> None:
         flash("Nouveau planning trouvé et importé : vois le détail dans l’historique ci-dessous.", "success")
     elif result == "same":
         flash("Source lue : rien de nouveau depuis le dernier import.", "success")
+    elif result == "busy":
+        flash("Le fichier est encore en cours de téléchargement : il sera lu dans quelques secondes.", "info")
     elif result == "ignored":
         flash("Fichier trouvé mais laissé de côté : il ne ressemble pas à ton emploi du temps (voir tes notifications).",
               "info")
