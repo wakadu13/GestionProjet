@@ -129,8 +129,7 @@ def cmd_jobs(args):
 
 
 def cmd_eval(args):
-    from . import core, qualite
-    from .models import AISettings
+    from . import core, kit, qualite
     from .providers import AIError
     app = _app(args)
     with app.test_request_context("/"):
@@ -147,10 +146,10 @@ def cmd_eval(args):
             print(f"\n[{row.id}] {row.name} — {len(cas)} cas")
             prevu = qualite.estimation(row, cas) if qualite.payant(row) else 0.0
             if prevu:
-                cap = AISettings.get().monthly_cap or 0
-                reste = cap - core.month_cost() if cap else None
+                # Même calcul que le kit : réserves des lots en cours déduites, plafond du fournisseur compris.
+                reste = kit.reste_plafond(row)
                 print(f"  Passage payant : environ {prevu:.2f} $"
-                      + (f" (il reste {max(0.0, reste):.2f} $ sous le plafond du mois)." if reste is not None else "."))
+                      + (f" (il reste {reste:.2f} $ sous le plafond du mois)." if reste is not None else "."))
                 if reste is not None and prevu > reste:
                     print("  ✗ Plus que ce qui reste sous le plafond : passage annulé. Relève le plafond ou choisis "
                           "moins de cas (--cas).")

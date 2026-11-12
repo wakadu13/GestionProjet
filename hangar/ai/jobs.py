@@ -270,6 +270,9 @@ def annuler(job: AIJob) -> bool:
             _retirer_fichiers(prov, job)
     job.status, job.message, job.finished_at = "error", ANNULE, now()
     db.session.commit()
+    if job.options.get("kit"):
+        # Les autres travaux du kit ont laissé la notification au dernier : s'il est annulé, le bilan part quand même.
+        notifier(job)
     return True
 
 

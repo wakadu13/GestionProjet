@@ -210,6 +210,11 @@ PAGE = "# {t}\n\nCours sur {t} : définitions, lois et exemples.\n"
 class KitTests(RevisionTestCase):
     def setUp(self):
         super().setUp()
+        self.preparer(self)
+
+    @staticmethod
+    def preparer(self):
+        """Collection Cours/Elec, sets existants et contrôle relié (partagé avec RelectureTests)."""
         for nom in ("00 - Sommaire", "Ohm", "Ohm (Fiche)", "Kirchhoff", "Kirchhoff (IA)", "Puissance"):
             self.ecrire(f"Cours/Elec/{nom}.md", PAGE.format(t=nom))
         self.ecrire("Cours/Elec/Annexe/Tableaux.md", PAGE.format(t="Tableaux"))
@@ -315,3 +320,76 @@ class KitTests(RevisionTestCase):
         job = travaux.demander_fiche(get_vault().notes["cours/elec/kirchhoff"], self.admin, lot=True)
         self.assertTrue(job.options["batch"])
         self.assertEqual(job.payload["page"], "Cours/Elec/Kirchhoff (Fiche).md")
+
+
+# ---------------------------------------------------------------------------
+# Corrections après relecture
+# ---------------------------------------------------------------------------
+
+class RelectureTests(RevisionTestCase):
+    """Défauts relevés par la relecture des pistes 73 et 78."""
+
+    def setUp(self):
+        super().setUp()
+        KitTests.preparer(self)
+
+    def test_annuler_le_dernier_travail_du_kit_envoie_le_bilan(self):
+        self.claude()
+        c = self.login()
+        c.post("/ia/kit/", data={"_csrf": c.token, "dossier": "Cours/Elec", "evenement": self.ev.id, "nombre": "10",
+                                 "fiche": ["Cours/Elec/Kirchhoff"], "qcm": ["Cours/Elec/Ohm"]})
+        self.fake.replies.append(claude_msg(["## Lois\n\n- Nœuds et mailles."]))
+        jobs.run_pending(limit=1)
+        self.assertEqual(Notification.query.count(), 0)  # la fiche attend la fin du kit
+        qcm = AIJob.query.filter_by(kind="qcm").one()
+        self.assertTrue(jobs.annuler(qcm))
+        self.assertEqual([n.message for n in Notification.query],
+                         ["Kit de révision prêt (Elec) : 1 terminé, 1 en échec."])
+
+    def test_ancien_qcm_publie_compte_depuis_le_set(self):
+        self.ecrire("QCM/X/a.json", json.dumps({"titre": "A", "questions": [{"id": str(i)} for i in range(5)]}))
+        modele = json.dumps([{"model": "claude-opus-5-5", "usage": {}, "cost": 0}])
+        ancien = AIJob(kind="qcm", status="done", message="3 questions mal formées écartées.", calls_json=modele)
+        ancien.result = {"page_ecrite": "QCM/X/a.json"}
+        disparu = AIJob(kind="qcm", status="done", message="", calls_json=modele)
+        disparu.result = {"page_ecrite": "QCM/X/supprime.json"}
+        hors = AIJob(kind="qcm", status="done", message="", calls_json=modele)
+        hors.result = {"page_ecrite": "../../etc/passwd"}
+        db.session.add_all([ancien, disparu, hors])
+        db.session.commit()
+        self.assertEqual(_q().compte_questions(ancien), (5, 3))
+        self.assertIsNone(_q().compte_questions(disparu))
+        self.assertIsNone(_q().compte_questions(hors))
+        lignes = _q().ecartees_par_modele()
+        self.assertEqual([(x["sets"], x["gardees"], x["ecartees"]) for x in lignes], [(1, 5, 3)])
+
+    def test_cout_du_kit_au_point_comme_le_reste(self):
+        self.claude()
+        page = self.login().get("/ia/kit/?dossier=Cours/Elec").get_data(as_text=True)
+        self.assertNotIn(".replace('.', ',')", page)
+        self.assertIn("total.toFixed(2) + ' $", page)
+
+    def test_evaluation_compte_reserves_et_plafond_du_fournisseur(self):
+        row = self.claude()
+        AISettings.get().monthly_cap = 50.0
+        en_cours = AIJob(kind="qcm", status="batch", provider_id=row.id)
+        en_cours.options = {"batch": True, "reserve": 49.999}
+        db.session.add(en_cours)
+        db.session.commit()
+        sortie = []
+
+        def lancer():
+            sortie.clear()
+            with mock.patch.object(cli, "_app", return_value=self.app), \
+                    mock.patch("builtins.print", side_effect=lambda *a, **k: sortie.append(" ".join(map(str, a)))), \
+                    self.assertRaises(SystemExit):
+                cli.cmd_eval(SimpleNamespace(data=None, id=None, oui=True, cas=None))
+            self.assertIn("Plus que ce qui reste sous le plafond", "\n".join(sortie))
+            self.assertEqual(self.fake.requests, [])
+
+        lancer()  # réserves d'un lot en cours
+        db.session.delete(en_cours)
+        AISettings.get().monthly_cap = 0
+        row.monthly_cap = 0.001
+        db.session.commit()
+        lancer()  # plafond propre au fournisseur

@@ -80,7 +80,7 @@
         if (c.checked) { n += 1; total += parseFloat((lot && lot.checked) ? c.dataset.coutLot : c.dataset.cout) || 0; }
       });
       var out = f.querySelector('[data-kit-cout]');
-      if (out) out.textContent = total.toFixed(2).replace('.', ',') + ' $ pour ' + n + ' génération' + (n > 1 ? 's' : '');
+      if (out) out.textContent = total.toFixed(2) + ' $ pour ' + n + ' génération' + (n > 1 ? 's' : '');
       var trop = reste !== null && total > reste;
       f.querySelector('[data-kit-trop]').hidden = !trop;
       f.querySelector('[data-kit-go]').disabled = trop || n === 0;

@@ -77,15 +77,37 @@ _ECARTEES_RE = re.compile(r"(\d+) questions? mal formées? écartées?")
 
 def compte_questions(job: AIJob) -> tuple[int, int] | None:
     """(questions gardées, questions écartées) d'un QCM généré, ou None si inconnu. Les travaux d'avant ce suivi
-    n'ont que leur message (« 3 questions mal formées écartées. ») et, s'ils sont encore à relire, leur brouillon."""
+    n'ont que leur message (« 3 questions mal formées écartées. ») et leur brouillon s'ils sont encore à relire, ou
+    le set publié s'il est toujours dans le coffre (un brouillon publié après relecture a perdu son message : ses
+    écartées ne sont plus connues et comptent pour 0)."""
     q = job.options.get("questions")
     if isinstance(q, dict):
         return int(q.get("gardees") or 0), int(q.get("ecartees") or 0)
-    contenu = (job.result or {}).get("contenu") if isinstance(job.result, dict) else None
+    res = job.result if isinstance(job.result, dict) else {}
+    contenu = res.get("contenu")
+    if not isinstance(contenu, dict) and res.get("page_ecrite"):
+        contenu = _set_publie(str(res["page_ecrite"]))
     if not isinstance(contenu, dict):
         return None
     m = _ECARTEES_RE.search(job.message or "")
     return len(contenu.get("questions") or []), int(m.group(1)) if m else 0
+
+
+def _set_publie(chemin: str) -> dict | None:
+    """Set de QCM publié (chemin dans le coffre), ou None s'il a été supprimé, déplacé ou n'est plus lisible."""
+    import json
+
+    from ..qcm.coffre import racine
+
+    try:
+        root = racine().resolve()
+        fichier = (root / chemin).resolve()
+        if not fichier.is_relative_to(root) or not fichier.is_file():
+            return None
+        data = json.loads(fichier.read_bytes().decode("utf-8-sig"))
+    except (OSError, ValueError, RuntimeError):
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("questions"), list) else None
 
 
 def ecartees_par_modele() -> list[dict]:
