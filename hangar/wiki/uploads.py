@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 from . import historique, latex
 from .liens import wiki_url
 from .render import AUDIO_EXTS, IMAGE_EXTS, VIDEO_EXTS
-from .vault import IGNORED_DIRS, INVALID_NAME_RE
+from .vault import IGNORED_DIRS, INVALID_NAME_RE, lire_note
 
 NOTE_EXTS = {".md", ".markdown"}
 LATEX_EXTS = {".tex", ".latex"}
@@ -179,7 +179,8 @@ def import_file(vault, upload, relative, folder="", replace=False, rename=False,
         target.parent.mkdir(parents=True, exist_ok=True)
         if is_note:
             if target.is_file():
-                historique.sauvegarder(path.as_posix(), target.read_text(encoding="utf-8", errors="replace"), auteur)
+                # Texte d'origine exact, même d'une page « ANSI » (plus de « � » dans l'historique).
+                historique.sauvegarder(path.as_posix(), lire_note(target)[0], auteur)
             target.write_text(text, encoding="utf-8", newline="\n")
         else:
             with open(target, "wb") as out:

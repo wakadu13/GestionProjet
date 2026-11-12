@@ -159,9 +159,11 @@ Pièges fréquents :
 
 - **HTML brut** : il est nettoyé (anti-XSS). Pas de `<script>`, `<style>`,
   `onclick`, `style=` : n'en mets pas, écris en Markdown.
-- **Images externes interdites** : `<img src="https://…">` et
-  `![](https://…)` sont supprimés. Télécharge l'image dans `vault/image/` et
-  intègre-la avec `![[nom.png]]`.
+- **Images externes** : `<img src="https://…">` et `![](https://…)` ne sont
+  jamais chargées ; le wiki affiche à leur place un lien « Image externe :
+  légende ↗ ». Télécharge l'image dans `vault/image/` et intègre-la avec
+  `![[nom.png]]` (`hangar wiki-import --images`, ou le bouton de la page
+  Importer, le fait pour tout le coffre).
 - **`#` en début de mot = tag** : écris `n°3` ou `` `#3` `` plutôt que `#3`
   dans le texte, et mets les commandes shell/commentaires dans des blocs de code.
 - **`$` = formule** : pour un prix ou une variable shell hors code, échappe

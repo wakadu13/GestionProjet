@@ -8,8 +8,10 @@ Port de ``wiki/vault.py`` de Revision : seules les dépendances à Django change
 (``settings`` → ``current_app.config``, ``reverse`` → ``url_for``).
 """
 
+import codecs
 import html
 import json
+import logging
 import os
 import posixpath
 import re
@@ -27,6 +29,8 @@ from flask import current_app, has_app_context
 
 from .liens import wiki_url
 
+journal = logging.getLogger(__name__)
+
 IGNORED_DIRS = {".obsidian", ".trash", ".git", "__pycache__"}
 HOME_CANDIDATES = ("index", "home", "accueil", "readme")
 
@@ -37,11 +41,10 @@ COMMENT_RE = re.compile(r"%%.*?%%", re.S)
 # Un tag Obsidian : #mot, #mot-composé, #parent/enfant (pas uniquement des chiffres).
 TAG_RE = re.compile(r"(?<![\w&#/\\(\[\"'=:])#([\w/-]*[^\W\d][\w/-]*|[\w/-]*[-/][\w/-]*)")
 # Blocs de code (``` ou ~~~) et code en ligne, où la syntaxe Obsidian est ignorée.
-CODE_RE = re.compile(
-    r"^[ \t]*(?P<fence>`{3,}|~{3,})[^\n]*\n.*?^[ \t]*(?P=fence)[ \t]*$"
-    r"|(?P<tick>`+)(?:[^`\n]|\n(?![ \t]*\n))+?(?P=tick)(?!`)",
-    re.M | re.S,
-)
+_BLOC_DE_CODE = r"^[ \t]*(?P<fence>`{3,}|~{3,})[^\n]*\n.*?^[ \t]*(?P=fence)[ \t]*$"
+CODE_RE = re.compile(_BLOC_DE_CODE + r"|(?P<tick>`+)(?:[^`\n]|\n(?![ \t]*\n))+?(?P=tick)(?!`)", re.M | re.S)
+# Blocs de code seuls (sans le code en ligne) : ce qui est entre eux commence toujours en début de ligne.
+FENCED_CODE_RE = re.compile(_BLOC_DE_CODE, re.M | re.S)
 
 
 def escape(text):
@@ -76,15 +79,45 @@ def fold(text):
     return text.translate(_FOLD_TABLE)
 
 
-def map_outside_code(text, fn):
-    """Applique ``fn`` aux portions de ``text`` situées hors des blocs de code."""
+def map_outside_code(text, fn, pattern=CODE_RE):
+    """Applique ``fn`` aux portions de ``text`` situées hors des blocs de code (et du code
+    en ligne, sauf avec ``pattern=FENCED_CODE_RE``)."""
     out, pos = [], 0
-    for m in CODE_RE.finditer(text):
+    for m in pattern.finditer(text):
         out.append(fn(text[pos:m.start()]))
         out.append(m.group(0))
         pos = m.end()
     out.append(fn(text[pos:]))
     return "".join(out)
+
+
+def _repli_cp1252(erreur):
+    """Octets qui ne sont pas de l'UTF-8 : lus comme du Windows-1252 (« ANSI » du Bloc-notes)."""
+    return erreur.object[erreur.start:erreur.end].decode("cp1252", errors="replace"), erreur.end
+
+
+codecs.register_error("hangar-cp1252", _repli_cp1252)
+
+
+def decoder(donnees):
+    """Texte d'une note et son encodage d'origine : ``"utf-8"`` (le cas normal), ``"utf-16"``
+    (« Unicode » du Bloc-notes, repéré par son BOM) ou ``"cp1252"`` (« ANSI » d'un vieux
+    Bloc-notes ; dans un fichier mélangé, les passages en UTF-8 restent lus en UTF-8)."""
+    if donnees.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return donnees.decode("utf-16", errors="replace"), "utf-16"
+    try:
+        return donnees.decode("utf-8"), "utf-8"
+    except UnicodeDecodeError:
+        return donnees.decode("utf-8", errors="hangar-cp1252"), "cp1252"
+
+
+def lire_note(chemin):
+    """``(texte, encodage)`` d'une note du coffre, quel que soit son encodage (voir :func:`decoder`), fins de
+    ligne Windows ramenées à « \\n » comme le fait ``Path.read_text`` (même texte, donc mêmes empreintes et
+    mêmes comparaisons qu'avant pour une note en UTF-8).
+    Lève ``OSError`` si le système refuse la lecture (fichier verrouillé, OneDrive hors connexion…)."""
+    texte, encodage = decoder(Path(chemin).read_bytes())
+    return texte.replace("\r\n", "\n").replace("\r", "\n"), encodage
 
 
 def split_frontmatter(text):
@@ -252,17 +285,38 @@ class Vault:
         self._rendered = {}
         # (chemin, date, taille) -> Note : seules les notes modifiées depuis ``previous`` sont relues.
         self._parsed = {}
-        reusable = previous._parsed if previous is not None and previous.root == self.root else {}
+        # Notes que le système refuse de lire (fichier verrouillé par un antivirus, « en ligne
+        # uniquement » avec OneDrive hors connexion…) : ignorées, ou gardées dans leur dernière
+        # version lue (``_gardees``, hors de ``_parsed`` pour être relues au prochain passage).
+        self.illisibles = []
+        self._gardees = {}
+        self.lu_le = time.monotonic()
+        meme_coffre = previous is not None and previous.root == self.root
+        reusable = previous._parsed if meme_coffre else {}
+        anciennes = None
 
         for rel, mtime, size in files:
             path = PurePosixPath(rel)
             if path.suffix.lower() == ".md":
                 note = reusable.get((rel, mtime, size))
                 if note is None:
-                    text = (self.root / path).read_text(encoding="utf-8", errors="replace")
-                    meta, body = split_frontmatter(text.lstrip("﻿").replace("\r\n", "\n"))
-                    note = Note(path, mtime / 1e9, meta, body)
-                self._parsed[(rel, mtime, size)] = note
+                    try:
+                        text, _ = lire_note(self.root / path)
+                    except OSError:
+                        self.illisibles.append(rel)
+                        if anciennes is None:
+                            anciennes = {cle[0]: n for cle, n in reusable.items()}
+                            anciennes.update(previous._gardees if meme_coffre else {})
+                        note = anciennes.get(rel)
+                        if note is None:
+                            continue
+                        self._gardees[rel] = note
+                    else:
+                        meta, body = split_frontmatter(text.lstrip("﻿").replace("\r\n", "\n"))
+                        note = Note(path, mtime / 1e9, meta, body)
+                        self._parsed[(rel, mtime, size)] = note
+                else:
+                    self._parsed[(rel, mtime, size)] = note
                 self.notes[note.key.lower()] = note
                 self._by_name[note.name.lower()].append(note)
                 for alias in note.aliases:
@@ -271,6 +325,9 @@ class Vault:
                 attachment = Attachment(path)
                 self.attachments[rel.lower()] = attachment
                 self._by_name[path.name.lower()].append(attachment)
+        nouvelles = set(self.illisibles) - set(previous.illisibles if meme_coffre else ())
+        if nouvelles:
+            journal.warning("Wiki : lecture refusée par le système pour %s", ", ".join(sorted(nouvelles)))
 
         self.backlinks = defaultdict(set)  # clé de note -> notes qui la citent
         self.attachment_backlinks = defaultdict(set)  # chemin de pièce jointe -> notes qui la citent
@@ -545,10 +602,14 @@ _cache = {"root": None, "signature": None, "vault": None}
 
 
 def get_vault():
-    """Renvoie le coffre, réindexé seulement si un fichier a changé."""
+    """Renvoie le coffre, réindexé seulement si un fichier a changé (ou, tant qu'une note est
+    illisible, au plus toutes les WIKI_VERIF_INTERVALLE secondes, pour la relire dès que possible)."""
     root = Path(current_app.config["WIKI_DIR"])
     signature = signature_coffre(root)
     with _lock:
-        if _cache["vault"] is None or _cache["root"] != root or _cache["signature"] != signature:
+        vault = _cache["vault"]
+        relire = vault is not None and vault.illisibles and (
+            time.monotonic() - vault.lu_le >= float(_config("WIKI_VERIF_INTERVALLE", 2.0)))
+        if vault is None or relire or _cache["root"] != root or _cache["signature"] != signature:
             _cache.update(root=root, signature=signature, vault=Vault(root, signature, previous=_cache["vault"]))
         return _cache["vault"]

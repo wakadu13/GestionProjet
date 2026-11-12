@@ -61,6 +61,18 @@ def _vault():
     return get_vault()
 
 
+def _texte_page(vault, note) -> str:
+    """Texte d'une page du wiki, quel que soit son encodage (« ANSI » du Bloc-notes…), comme dans l'éditeur.
+    Lève ``OSError`` si l'ordinateur refuse de l'ouvrir (fichier verrouillé, OneDrive hors connexion…)."""
+    from ..wiki.vault import lire_note
+    return lire_note(vault.root / note.path)[0]
+
+
+def _page_inaccessible() -> str:
+    from ..wiki.views import FICHIER_INACCESSIBLE
+    return FICHIER_INACCESSIBLE
+
+
 def _json_body() -> dict:
     data = request.get_json(silent=True)
     return data if isinstance(data, dict) else {}
@@ -142,7 +154,11 @@ def cartes_page():
     if note is None:
         flash("Page introuvable.", "error")
         return redirect(url_for("wiki.home"))
-    questions = cartes.extraire((vault.root / note.path).read_text(encoding="utf-8"))
+    try:
+        questions = cartes.extraire(_texte_page(vault, note))
+    except OSError:
+        flash(_page_inaccessible(), "error")
+        return redirect(note.url)
     if not questions:
         flash("Rien à tirer de cette page : ajoute des encadrés à titre (> [!definition] Titre) ou des ==surlignages==.",
               "info")
@@ -307,8 +323,12 @@ def tuteur():
     precedents = (AITutorExchange.query.filter_by(user_id=current_user.id, page=note.key)
                   .order_by(AITutorExchange.id.desc()).limit(demandes.HISTORIQUE_TUTEUR).all())[::-1]
     try:
-        texte, usage, modele = demandes.tuteur(note, (vault.root / note.path).read_text(encoding="utf-8"), question,
-                                               [(e.question, e.reponse) for e in precedents], user=current_user)
+        cours = _texte_page(vault, note)
+    except OSError:
+        return jsonify(ok=False, error=_page_inaccessible()), 409
+    try:
+        texte, usage, modele = demandes.tuteur(note, cours, question, [(e.question, e.reponse) for e in precedents],
+                                               user=current_user)
     except AIError as e:
         return _erreur(e)
     db.session.add(AITutorExchange(user_id=current_user.id, page=note.key, question=question[:demandes.MAX_CHARS_QUESTION],
@@ -421,7 +441,10 @@ def copie():
     note = vault.notes.get(cle.lower()) if cle else None
     if cle and note is None:
         return jsonify(ok=False, error=f"Page inconnue : {cle}"), 400
-    cours = (vault.root / note.path).read_text(encoding="utf-8", errors="replace") if note else ""
+    try:
+        cours = _texte_page(vault, note) if note else ""
+    except OSError:
+        return jsonify(ok=False, error=_page_inaccessible()), 409
     try:
         texte, usage, modele = demandes.corriger_copie(photos, enonce, cours, note.title if note else "",
                                                        user=current_user)

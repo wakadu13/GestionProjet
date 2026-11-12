@@ -164,6 +164,13 @@ dossiers cachés (`.obsidian`, `.trash`) et les autres types de fichiers (HTML, 
 Limites : 5 Mo par note, 100 Mo par pièce jointe. Les images de plus de 2000 pixels de côté sont réduites à
 l'import, sous le même nom.
 
+**Images hébergées sur d'autres sites** (`![légende](https://…)`) : le wiki ne charge jamais rien d'un autre
+site ; il affiche à leur place un lien « Image externe : légende ↗ ». Le bouton **« Enregistrer ces images dans
+le wiki »** de la page d'import (ou `hangar wiki-import --images`) les télécharge une fois dans le dossier
+`image/` du coffre (ou celui réglé dans Obsidian), puis remplace leurs liens par `![[image.png|légende]]` :
+elles s'affichent alors aussi hors ligne. Seules de vraies images (PNG, JPEG, GIF, WebP, BMP, AVIF) de 20 Mo au
+plus sont gardées ; l'ancien texte des pages modifiées reste dans l'historique.
+
 ### Transformer un cours en page avec l'IA
 
 Avec une IA configurée (réglages de l'IA, `/ia/reglages/`), chaque cours importé (PDF ou `.tex`) peut devenir

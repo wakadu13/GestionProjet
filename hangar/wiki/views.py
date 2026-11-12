@@ -26,7 +26,7 @@ from . import commun, erreurs, historique, installation, texte_pdf, uploads
 from . import latex as latex_converter
 from .commun import can_edit, deny, render, wants_json
 from .render import Renderer
-from .vault import Note, clean_key, get_vault, split_frontmatter, toujours_verifier
+from .vault import Note, clean_key, get_vault, lire_note, split_frontmatter, toujours_verifier
 
 bp = Blueprint("wiki", __name__)
 
@@ -42,6 +42,9 @@ INLINE_TYPES = {
 }
 PROPRIETES_CACHEES = {"title", "tags", "tag", "aliases", "alias", "cssclasses", "cssclass", "icon", "emoji",
                       "banner", "cover"}
+# Fichier d'une page que le système refuse d'ouvrir (OSError à la lecture ou à l'écriture).
+FICHIER_INACCESSIBLE = ("L'ordinateur refuse d'ouvrir le fichier de cette page (il est verrouillé par un autre "
+                        "programme, ou pas encore téléchargé par OneDrive). Réessaie dans un moment.")
 
 # Icônes propres au wiki (sans toucher au fichier partagé icons.py)
 ICONS.setdefault("wiki-graph", '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/>'
@@ -193,7 +196,7 @@ def _cartes_de_la_page(vault, note):
     """Cartes qu'on peut tirer de la page (encadrés, surlignages) et set déjà écrit, s'il existe."""
     from . import cartes
     try:
-        texte = (vault.root / note.path).read_text(encoding="utf-8")
+        texte, _ = lire_note(vault.root / note.path)
         nombre = len(cartes.extraire(texte))
         if not nombre:
             return None
@@ -239,7 +242,7 @@ def _note_page(vault, note):
                   fiche=fiche, favori=commun.est_favori(note), mots=mots, lecture=max(1, round(mots / 220)),
                   proprietes=proprietes(note), crumbs=fil_ariane(note.folders), icone=commun.icone(note),
                   qcm_page=_qcm_de_la_page(note), cartes=_cartes_de_la_page(vault, note) if edition else None,
-                  tuteur=_tuteur_de_la_page(note),
+                  tuteur=_tuteur_de_la_page(note), perimee=note.path.as_posix() in vault.illisibles,
                   fiche_en_cours=edition and fiche is None and commun.ai_dispo() and _fiche_en_cours(note))
 
 
@@ -310,6 +313,7 @@ def edit(path):
     file = vault.root / f"{key}.md"
     version = str(file.stat().st_mtime_ns) if file.is_file() else ""
     error = ""
+    encodage = "utf-8"
 
     if request.method == "POST":
         content = request.form.get("content", "").replace("\r\n", "\n")
@@ -321,24 +325,41 @@ def edit(path):
         else:
             if not file.resolve().is_relative_to(vault.root.resolve()):
                 abort(400)
-            file.parent.mkdir(parents=True, exist_ok=True)
-            if file.is_file():
-                ancien = file.read_text(encoding="utf-8")
-                if ancien != content:
-                    historique.sauvegarder(f"{key}.md", ancien, current_user.username)
-            file.write_text(content, encoding="utf-8", newline="\n")
-            commun.noter_visite(key, modifiee=True)
-            if wants_json():
-                # Ctrl+S dans l'éditeur : on reste sur la page, avec la nouvelle version.
-                return jsonify(ok=True, version=str(file.stat().st_mtime_ns), url=url_for("wiki.page", path=key))
-            flash("Page enregistrée.", "success")
+            try:
+                file.parent.mkdir(parents=True, exist_ok=True)
+                if file.is_file():
+                    # Page d'un autre encodage (« ANSI » du Bloc-notes…) : enregistrée en UTF-8, et
+                    # son texte d'origine gardé dans l'historique même s'il n'a pas changé.
+                    ancien, ancien_encodage = lire_note(file)
+                    if ancien != content or ancien_encodage != "utf-8":
+                        historique.sauvegarder(f"{key}.md", ancien, current_user.username)
+                file.write_text(content, encoding="utf-8", newline="\n")
+            except OSError:
+                error = FICHIER_INACCESSIBLE + " Ton texte est toujours dans l'éditeur."
+                if wants_json():
+                    return jsonify(ok=False, error=error), 409
+            else:
+                commun.noter_visite(key, modifiee=True)
+                if wants_json():
+                    # Ctrl+S dans l'éditeur : on reste sur la page, avec la nouvelle version.
+                    return jsonify(ok=True, version=str(file.stat().st_mtime_ns), url=url_for("wiki.page", path=key))
+                flash("Page enregistrée.", "success")
+                return redirect(url_for("wiki.page", path=key))
+    elif file.is_file():
+        try:
+            content, encodage = lire_note(file)
+        except OSError:
+            # Surtout pas d'éditeur vide : l'enregistrer effacerait la page.
+            flash(FICHIER_INACCESSIBLE, "error")
             return redirect(url_for("wiki.page", path=key))
+        content = content.lstrip("﻿")
     else:
-        content = file.read_text(encoding="utf-8").lstrip("﻿") if file.is_file() else ""
+        content = ""
 
     folders = key.split("/")[:-1]
     return render("wiki/edit.html", vault=vault, note=note, key=key, folders=folders, name=key.rsplit("/", 1)[-1],
                   is_new=note is None, content=content, version=version, error=error,
+                  autre_encodage=encodage != "utf-8",
                   crumbs=fil_ariane(folders),
                   link_choices=vault.link_choices(),
                   attachment_choices=vault.attachment_choices(uploads.ATTACHMENT_EXTS),
@@ -442,7 +463,11 @@ def supprimer(path):
     if note is None:
         abort(404)
     source = vault.root / note.path
-    texte = source.read_text(encoding="utf-8", errors="replace")
+    try:
+        texte, _ = lire_note(source)
+    except OSError:
+        flash(FICHIER_INACCESSIBLE, "error")
+        return redirect(note.url)
     historique.sauvegarder(note.path.as_posix(), texte, current_user.username)
     corbeille = vault.root / ".trash"
     corbeille.mkdir(exist_ok=True)
@@ -472,10 +497,13 @@ def importer():
         deny()
     vault = get_vault()
     if request.method != "POST":
+        from . import images_externes as module
+        images, pages = module.inventaire(vault)
         return render("wiki/import.html", vault=vault, folders=_dossiers(vault),
                       folder=request.args.get("dossier", ""),
                       max_note=uploads.MAX_NOTE_SIZE // 1024 // 1024,
-                      max_attachment=uploads.MAX_ATTACHMENT_SIZE // 1024 // 1024)
+                      max_attachment=uploads.MAX_ATTACHMENT_SIZE // 1024 // 1024,
+                      images_externes={"images": images, "pages": pages, "etat": module.etat(vault.root)})
 
     files = [uploads.FichierEnvoye(f) for f in request.files.getlist("fichiers")]
     paths = request.form.getlist("chemins")
@@ -520,6 +548,20 @@ def importer():
     return redirect(url_for("wiki.importer"))
 
 
+@bp.route("/importer/images-externes/", methods=["POST"])
+def images_externes():
+    """Télécharge dans le coffre les images hébergées sur d'autres sites (action volontaire, en
+    arrière-plan) et réécrit les pages qui les citent ; le résultat s'affiche dans la page Importer."""
+    if not can_edit():
+        deny()
+    from . import images_externes as module
+    if module.lancer(current_user.username):
+        flash("Téléchargement des images lancé : le résultat s'affiche ici (recharge la page pour suivre).", "success")
+    else:
+        flash("Le téléchargement des images est déjà en cours.", "info")
+    return redirect(url_for("wiki.importer") + "#images-externes")
+
+
 # ---------------------------------------------------------------------------
 # Parcourir : sommaire, tags, recherche, graphe
 # ---------------------------------------------------------------------------
@@ -544,7 +586,8 @@ def sommaire():
         root = dict(root, folders=[f for f in root["folders"] if f["name"].lower() != commun.DOSSIER_QCM.lower()])
     return render("wiki/sommaire.html", vault=vault, root=root, dossier=dossier,
                   crumbs=fil_ariane(dossier.split("/")[:-1]) if dossier else [],
-                  total=len(vault.notes), recent=vault.recent_notes(8))
+                  total=len(vault.notes), recent=vault.recent_notes(8),
+                  illisibles=vault.illisibles if can_edit() else [])
 
 
 @bp.route("/tags/")
@@ -643,16 +686,24 @@ def historique_page(path):
             contenu = historique.lire(rel, request.form.get("v", ""))
             if contenu is None:
                 abort(404, description="Version introuvable")
-            actuel = fichier.read_text(encoding="utf-8")
-            if actuel != contenu:
-                historique.sauvegarder(rel, actuel, current_user.username)
-                fichier.write_text(contenu, encoding="utf-8", newline="\n")
-                commun.noter_visite(note.key, modifiee=True)
-            flash("Version restaurée ; la version précédente reste dans l'historique.", "success")
+            try:
+                actuel, _ = lire_note(fichier)
+                if actuel != contenu:
+                    historique.sauvegarder(rel, actuel, current_user.username)
+                    fichier.write_text(contenu, encoding="utf-8", newline="\n")
+                    commun.noter_visite(note.key, modifiee=True)
+            except OSError:
+                flash(FICHIER_INACCESSIBLE, "error")
+            else:
+                flash("Version restaurée ; la version précédente reste dans l'historique.", "success")
         return redirect(note.url)
     choisie = next((v for v in versions if v["id"] == request.args.get("v")), versions[0] if versions else None)
     contenu_version = historique.lire(rel, choisie["id"]) if choisie else ""
-    actuel = fichier.read_text(encoding="utf-8") if fichier.is_file() else ""
+    try:
+        actuel = lire_note(fichier)[0] if fichier.is_file() else ""
+    except OSError:
+        flash(FICHIER_INACCESSIBLE, "error")
+        return redirect(note.url)
     return render("wiki/historique.html", vault=vault, note=note, versions=versions, choisie=choisie,
                   contenu_version=contenu_version or "", crumbs=fil_ariane(note.folders),
                   diff=historique.differences(contenu_version or "", actuel) if choisie else [],
@@ -768,7 +819,10 @@ def pdf_annotation():
         fichier = vault.root / (note.path if note is not None else PurePosixPath(f"{cle}.md"))
         citation = f"> [!quote] {source}\n> {texte}\n> — [[{vault.link_for(pdf_)}]]\n"
         if fichier.is_file():
-            ancien = fichier.read_text(encoding="utf-8")
+            try:
+                ancien, _ = lire_note(fichier)
+            except OSError:
+                return jsonify(ok=False, error=FICHIER_INACCESSIBLE), 409
             historique.sauvegarder(fichier.relative_to(vault.root).as_posix(), ancien, current_user.username)
             nouveau = ancien.rstrip("\n") + "\n\n" + citation
             titre = note.title if note is not None else cle.rsplit("/", 1)[-1]

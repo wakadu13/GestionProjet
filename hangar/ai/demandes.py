@@ -55,12 +55,12 @@ def cours_du_set(qset):
     if not getattr(qset, "source_page", ""):
         return None, ""
     try:
-        from ..wiki.vault import get_vault
+        from ..wiki.vault import get_vault, lire_note
         vault = get_vault()
         note = vault.notes.get(qset.source_page.lower())
         if note is None:
             return None, ""
-        return note, (vault.root / note.path).read_text(encoding="utf-8")[:MAX_CHARS_COURS]
+        return note, lire_note(vault.root / note.path)[0][:MAX_CHARS_COURS]  # page « ANSI » comprise
     except Exception:  # noqa: BLE001 - wiki indisponible
         return None, ""
 

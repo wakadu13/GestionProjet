@@ -62,6 +62,9 @@
       <span>·</span><span>{{ mots }} mot{{ 's' if mots > 1 }}</span>
       <span>·</span><span>{{ lecture }} min de lecture</span>
     </div>
+    {% if perimee %}
+    <div class="callout" data-callout="warning" data-perimee><div class="callout-title">L'ordinateur refuse de relire le fichier de cette page pour l'instant (verrouillé par un autre programme, ou pas encore téléchargé par OneDrive) : tu vois sa dernière version lue.</div></div>
+    {% endif %}
 
     <div class="wiki-props">
       {% if note.folders %}

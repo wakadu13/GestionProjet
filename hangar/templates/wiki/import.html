@@ -47,6 +47,40 @@
       <p data-results-text></p>
       <ul class="md-import-list" data-results-list></ul>
     </section>
+    {% set ie = images_externes %}
+    {% if ie.images or ie.etat %}
+    <section id="images-externes" data-images-externes>
+      <div class="section-title"><h2>Images hébergées sur d'autres sites</h2></div>
+      {% if ie.etat and ie.etat.en_cours %}
+      <p>Téléchargement en cours : {{ ie.etat.faites }} image{{ 's' if ie.etat.faites > 1 }} sur {{ ie.etat.total }}… Recharge la page pour suivre.</p>
+      {% else %}
+        {% if ie.etat and ie.etat.erreur %}
+        <div class="callout" data-callout="danger"><div class="callout-title">{{ ie.etat.erreur }}</div></div>
+        {% elif ie.etat and ie.etat.bilan %}{% set b = ie.etat.bilan %}
+        <div class="callout" data-callout="{{ 'success' if not b.echecs else 'warning' }}" data-images-bilan>
+          <div class="callout-title">{% if b.images %}{{ b.telechargees|length }} image{{ 's' if b.telechargees|length > 1 }} enregistrée{{ 's' if b.telechargees|length > 1 }} dans le wiki, {{ b.pages_modifiees|length }} page{{ 's' if b.pages_modifiees|length > 1 }} mise{{ 's' if b.pages_modifiees|length > 1 }} à jour{% else %}Aucune image externe à télécharger{% endif %}</div>
+          {% if b.echecs or b.pages_illisibles %}
+          <div class="callout-content"><ul>
+            {% for url, raison in b.echecs[:20] %}<li><a href="{{ url }}">{{ url }}</a> : {{ raison }}</li>{% endfor %}
+            {% if b.echecs|length > 20 %}<li>… et {{ b.echecs|length - 20 }} autre{{ 's' if b.echecs|length - 20 > 1 }}</li>{% endif %}
+            {% for rel in b.pages_illisibles %}<li><code>{{ rel }}</code> : page illisible, pas mise à jour</li>{% endfor %}
+          </ul></div>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% if ie.images %}
+        <p>{{ ie.images }} image{{ 's' if ie.images > 1 }} de {{ ie.pages }} page{{ 's' if ie.pages > 1 }} {{ 'sont hébergées' if ie.images > 1 else 'est hébergée' }} sur d'autres sites :
+          le wiki ne les charge pas et n'affiche qu'un lien vers elles. Si ces sites les retirent, elles seront perdues.</p>
+        <form method="post" action="{{ url_for('wiki.images_externes') }}">
+          {{ ui.csrf() }}
+          <button type="submit" class="btn">{{ icon('download', 14) }} Enregistrer ces images dans le wiki</button>
+        </form>
+        <p class="muted small">Hangar se connecte une fois aux sites qui hébergent ces images, puis les pages affichent la copie
+          enregistrée (<code>![[image.png]]</code>), aussi hors ligne. L'ancien texte des pages reste dans l'historique.</p>
+        {% endif %}
+      {% endif %}
+    </section>
+    {% endif %}
   </div>
   <aside class="wiki-two-side panel panel-b">
     <h3>Bon à savoir</h3>
@@ -57,7 +91,7 @@
       <li>Les grandes photos (plus de 2000 pixels) sont réduites et recompressées, sous le même nom.</li>
       <li>Un cours en LaTeX (<code>.tex</code>) est converti en page : chapitres, formules, théorèmes en encadrés, tableaux. Les figures TikZ ne sont pas dessinées (leur code est gardé).</li>
       <li>Dans une note, <code>![[cours.pdf]]</code> affiche le lecteur PDF et <code>![[cours.pdf#page=3]]</code> l'ouvre à la page 3.</li>
-      <li>Un coffre complet se copie aussi en ligne de commande : <code>uv run hangar wiki-import &lt;dossier ou adresse git&gt;</code>.</li>
+      <li>Un coffre complet se copie aussi en ligne de commande : <code>uv run hangar wiki-import &lt;dossier ou adresse git&gt;</code> (ajoute <code>--images</code> pour enregistrer aussi les images hébergées sur d'autres sites).</li>
     </ul>
   </aside>
 </div>

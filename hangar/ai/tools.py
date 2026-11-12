@@ -611,8 +611,15 @@ def _do_ajout_wiki(a, user):
     vault, note = C.wiki_note_for(p.get("url") or "")
     if note is None:
         raise ActionError("Page du wiki introuvable (ou wiki indisponible).", 404)
+    from ..wiki.vault import lire_note
+    from ..wiki.views import FICHIER_INACCESSIBLE
+
     path = Path(vault.root) / note.path
-    old = path.read_text(encoding="utf-8")
+    try:
+        # Page « ANSI » du Bloc-notes comprise : réécrite en UTF-8, son texte d'origine part dans l'historique.
+        old, _ = lire_note(path)
+    except OSError as e:
+        raise ActionError(FICHIER_INACCESSIBLE, 409) from e
     try:  # historique des versions du wiki, s'il existe
         from ..wiki import historique  # type: ignore
         historique.sauvegarder(Path(note.path).as_posix(), old, user.username)
