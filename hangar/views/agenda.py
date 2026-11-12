@@ -61,10 +61,19 @@ def _agenda_context():
             "categories": A.categories(current_user),
             "has_email": bool(A._mail().valid_email(current_user.contact_email)),
             "due": len(due), "overdue": sum(1 for t in due if t.due_date < today),
+            "tickets": _nb_tickets_dus(today),  # pastille de « Travail » : (dus, dont en retard)
         }
         return g.agenda_cfg
     return {"A": A, "agenda_cfg": agenda_cfg, "QUICK_OFFSETS": QUICK_OFFSETS, "REMINDER_OFFSETS": REMINDER_OFFSETS,
             "RECURRENCES": RECURRENCES, "TASK_COLORS": TASK_COLORS, "PRIORITY_LABELS": PRIORITY_LABELS}
+
+
+def _nb_tickets_dus(today: date) -> tuple[int, int]:
+    try:
+        from .. import digest
+        return digest.nb_tickets_dus(current_user, today)
+    except Exception:  # noqa: BLE001 - une pastille ne doit jamais faire tomber une page
+        return 0, 0
 
 
 def _payloads(events=(), tasks=()):
@@ -112,7 +121,24 @@ def dashboard():
     events = ev1 + ev2 + d["exams"] + d["changes"] + d["tomorrow_evs"] + [d["current"], d["next"]]
     data, _ = _payloads(events, tasks)
     return render_template("agenda/dashboard.html", data=data, mail=A.mail_status(current_user),
-                           qcm=_qcm_resume(), **d)
+                           qcm=_qcm_resume(), tickets=_tickets_resume(d["today"]), **d)
+
+
+def _tickets_resume(today: date) -> dict | None:
+    """Mes tickets de projet en retard ou à rendre dans les 7 jours, pour le tableau de bord.
+    None si je ne vois aucun projet (le bloc est alors masqué)."""
+    from .. import digest
+    try:
+        t = digest.tickets_a_echeance(current_user, today, horizon=6)
+    except Exception:  # le tableau de bord ne doit jamais tomber à cause d'un module
+        from flask import current_app
+        current_app.logger.exception("Tickets à échéance pour le tableau de bord")
+        return None
+    if t is None:
+        return None
+    a_rendre = t["du_jour"] + t["bientot"]
+    return {"retard": t["retard"], "a_rendre": a_rendre, "liste": (t["retard"] + a_rendre)[:8],
+            "total": len(t["retard"]) + len(a_rendre)}
 
 
 def _qcm_resume():
@@ -454,13 +480,20 @@ def subject_link(eid):
     """Relie la matière d'une séance à une collection du wiki et/ou à une catégorie de QCM."""
     ev = _own_event(eid)
     f = request.form
-    A.set_subject_link(current_user, ev.title,
-                       wiki_path=f.get("wiki_path") if "wiki_path" in f else None,
-                       qcm_category=f.get("qcm_category") if "qcm_category" in f else None)
+    link = A.set_subject_link(current_user, ev.title,
+                              wiki_path=f.get("wiki_path") if "wiki_path" in f else None,
+                              qcm_category=f.get("qcm_category") if "qcm_category" in f else None)
+    notes = []
+    if f.get("qcm_category"):  # matière reliée aux QCM : son prochain contrôle devient la date d'examen
+        db.session.flush()
+        notes = A.sync_exam_objectives(current_user, now(),
+                                       {link.subject: {"old": set(), "moves": {}, "touched": True}})
     db.session.commit()
     if _fetch():
-        return jsonify(ok=True)
+        return jsonify(ok=True, notes=notes)
     flash(f"Liens de « {ev.title} » enregistrés (pour toutes ses séances).", "success")
+    if notes:
+        flash("Révisions de QCM : " + " ".join(notes), "info")
     return redirect(back_url(url_for("agenda.calendar", date=ev.start.date().isoformat())))
 
 
@@ -549,6 +582,8 @@ def import_upload():
               "Vérifie la liste ci-dessous ; si c’est une erreur, annule cet import.", "error")
     if getattr(imp, "guarded_weeks", None):
         flash("Par prudence, des séances n’ont pas été retirées : lis l’avertissement ci-dessous.", "info")
+    if imp.exam_notes:
+        flash("Révisions de QCM : " + " ".join(imp.exam_notes.splitlines()), "info")
     return redirect(url_for("agenda.import_detail", iid=imp.id))
 
 
@@ -587,11 +622,13 @@ def import_detail(iid):
 def import_undo(iid):
     imp = _own_import(iid)
     try:
-        A.undo_import(imp)
+        notes = A.undo_import(imp)
     except ValueError as exc:
         flash(str(exc), "error")
         return redirect(url_for("agenda.import_detail", iid=iid))
     flash("Import annulé : l’emploi du temps est revenu à l’état précédent.", "success")
+    if notes:
+        flash("Révisions de QCM : " + " ".join(notes), "info")
     return redirect(url_for("agenda.imports"))
 
 

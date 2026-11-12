@@ -24,6 +24,13 @@ DEFAULT_STATES = [
 ]
 
 
+def clean_title(value) -> str:
+    """Titre de ticket sur une seule ligne : les retours à la ligne (cellule Excel avec Alt+Entrée, API…) et
+    les espaces en trop deviennent une seule espace. Un retour à la ligne casserait l'objet des e-mails de
+    notification et l'export .ics."""
+    return " ".join(str(value or "").split())[:255]
+
+
 def to_int(v):
     try:
         if v in (None, "", "none", "null"):
@@ -296,7 +303,7 @@ def update_issue(issue: Issue, data: dict, actor: User, log: bool = True) -> lis
             acts.append(log_activity(issue, actor, "updated", field, old, new))
 
     if "title" in data:
-        t = (data.get("title") or "").strip()[:255]
+        t = clean_title(data.get("title"))
         if t and t != issue.title:
             rec("title", issue.title, t)
             issue.title = t
@@ -416,7 +423,7 @@ def update_issue(issue: Issue, data: dict, actor: User, log: bool = True) -> lis
 
 
 def create_issue(project: Project, data: dict, actor: User, intake: bool = False) -> Issue:
-    title = (data.get("title") or "").strip()[:255] or "Sans titre"
+    title = clean_title(data.get("title")) or "Sans titre"
     max_sort = db.session.query(db.func.max(Issue.sort_order)).filter(Issue.project_id == project.id).scalar()
     issue = Issue(sequence_id=project.next_sequence(), title=title, description=data.get("description") or "",
                   priority="none", created_by=actor, sort_order=(max_sort or 0) + 1000, project_id=project.id)

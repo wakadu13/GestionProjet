@@ -61,7 +61,9 @@ class DigestTests(unittest.TestCase):
         self.assertIn("Payer la cotisation", html)          # en retard
         self.assertIn("Rendre la fiche de cadrage", html)   # ticket du jour
         self.assertIn("jeu. 12 nov.", objet)
-        # Envoi à 7 h (réglage par défaut : le matin), une seule fois par jour
+        # Envoi à 7 h (réglage par défaut : le matin), une seule fois par jour. Le résumé n'est actif que pour
+        # un compte qui a déjà ouvert Hangar (préférences de l'agenda créées) : on les crée ici.
+        A.settings_of(self.user)
         self.assertEqual(A.send_daily_programs(datetime(2026, 11, 12, 6, 59)), 0)
         self.assertEqual(A.send_daily_programs(datetime(2026, 11, 12, 7, 1)), 1)
         self.assertEqual(A.send_daily_programs(datetime(2026, 11, 12, 9, 0)), 0)
@@ -70,6 +72,7 @@ class DigestTests(unittest.TestCase):
     def test_no_duplicate_ticket_reminder(self):
         self._project_with_issue(date(2026, 11, 12))
         cfg = MailConfig.get()
+        A.settings_of(self.user)  # agenda ouvert : résumé du matin actif par défaut
         self.assertEqual(mailer.send_reminders(cfg, date(2026, 11, 12)), 0)  # le résumé s'en charge
         s = A.settings_of(self.user)
         s.daily_mode = "off"

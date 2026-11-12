@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from .. import digest
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import (
@@ -28,7 +29,7 @@ def index():
     mine = (IQ.base_query().filter(Issue.project_id.in_(pids), Issue.assignees.any(User.id == me.id)).all()
             if pids else [])
     open_mine = [i for i in mine if not i.is_closed]
-    overdue = sorted([i for i in open_mine if i.is_overdue], key=lambda i: i.target_date)
+    overdue = digest.tickets_a_echeance(me, today, issues=mine)["retard"]  # même règle que l'agenda et le résumé
     upcoming = sorted([i for i in open_mine if i.target_date and i.target_date >= today],
                       key=lambda i: i.target_date)[:12]
     in_progress = [i for i in open_mine if i.state_group == "started"]

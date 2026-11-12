@@ -33,6 +33,8 @@
             {% endfor %}
           </div>
           <label class="switch"><input type="checkbox" name="email_reminders" value="1" {% if current_user.email_reminders is not sameas false %}checked{% endif %}> Rappels quotidiens de mes échéances (en retard, aujourd’hui, demain)</label><input type="hidden" name="email_section" value="1">
+          {% if A.digest_enabled(current_user) %}<p class="help" style="margin:4px 0 0">Remplacé par le résumé quotidien : tes tickets à échéance y figurent déjà. <a href="{{ url_for('agenda.settings') }}">Régler le résumé quotidien</a></p>{% endif %}
+          <p class="help" style="margin:4px 0 0">« Aucun e-mail » arrête tous les e-mails automatiques : notifications, rappels, résumé quotidien et récapitulatifs. Les e-mails que tu demandes toi-même (test, « M’envoyer le résumé maintenant ») partent quand même.</p>
         </div>
       </div>
       <div class="field"><label>Thème</label>

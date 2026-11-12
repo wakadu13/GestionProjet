@@ -43,6 +43,8 @@
       <div class="field mt" style="max-width:220px"><label for="st-dh">Heure d’envoi</label>
         <select class="input" id="st-dh" name="daily_hour">{% for h in range(0, 24) %}<option value="{{ h }}" {% if s.daily_hour == h %}selected{% endif %}>{{ '%02d'|format(h) }}:00</option>{% endfor %}</select>
       </div>
+      {% if current_user.email_prefs == 'off' %}<div class="ag-warn" style="margin-top:10px">{{ icon('alert', 15) }}<span>Tu as choisi « Aucun e-mail » dans <a href="{{ url_for('settings.profile') }}">ton profil</a> : le résumé et les rappels par e-mail ne partent pas.</span></div>{% endif %}
+      <p class="help">Si Hangar est fermé à l’heure choisie : le matin, le résumé part à la première ouverture avant 18 h (après, il n’est plus envoyé) ; la veille au soir, si le résumé n’a pas pu partir, celui du jour part à la première ouverture du lendemain avant 18 h. Le résumé du soir rappelle aussi ce qui reste à faire aujourd’hui.</p>
       <p class="help">Un seul e-mail avec tout ce qu’il y a à faire : cours (horaires, salles), tâches du jour et en retard, tickets de projet à échéance, révisions de QCM, contrôles des 7 jours suivants et changements récents du planning. Rien n’est envoyé les jours sans rien à faire.</p>
       <a class="btn btn-sm" href="{{ url_for('agenda.summary_preview') }}">{{ icon('eye', 14) }} Voir l’aperçu du résumé</a>
     </div>

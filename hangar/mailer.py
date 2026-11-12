@@ -162,7 +162,8 @@ def queue_email(to_address: str, subject: str, html: str, text: str | None = Non
     """Ajoute un message à la file (sans commit : l'appelant valide la transaction).
 
     `expires_at` : au-delà, plus de nouvel essai après un échec passager (par défaut 24 h après la création)."""
-    msg = EmailMessage(to_address=to_address.strip(), subject=subject.strip()[:300], body_html=html,
+    subject = " ".join((subject or "").split())  # un retour à la ligne (vieux titre de ticket) est interdit ici
+    msg = EmailMessage(to_address=to_address.strip(), subject=subject[:300], body_html=html,
                        body_text=text or html_to_text(html), kind=kind, status="queued",
                        to_user_id=to_user.id if to_user else None,
                        created_by_id=created_by.id if created_by else None, reply_to=reply_to,
@@ -178,7 +179,7 @@ def deadline(m: EmailMessage) -> datetime:
 
 def build_mime(m: EmailMessage, cfg: MailConfig) -> MimeMessage:
     mime = MimeMessage()
-    mime["Subject"] = m.subject
+    mime["Subject"] = " ".join((m.subject or "").split())
     mime["From"] = cfg.sender
     mime["To"] = m.to_address
     mime["Date"] = formatdate(localtime=True)
@@ -475,11 +476,18 @@ def on_notification(user: User, actor: User | None, issue: Issue | None, kind: s
 # Envois planifiés
 # ---------------------------------------------------------------------------
 
+def accepte_emails(user: User | None) -> bool:
+    """Ce compte accepte-t-il les e-mails automatiques ? Non s'il est désactivé, sans adresse valide ou s'il a
+    choisi « Aucun e-mail » dans son profil. Ne s'applique pas aux envois demandés à la main (test, aperçu)."""
+    return (user is not None and bool(user.active) and valid_email(user.contact_email)
+            and (user.email_prefs or "instant") != "off")
+
+
 def _recipients(reminders_only=False):
     users = User.query.filter(User.active.is_(True), User.contact_email.isnot(None)).all()
     out = []
     for u in users:
-        if not valid_email(u.contact_email) or (u.email_prefs or "instant") == "off":
+        if not accepte_emails(u):
             continue
         if reminders_only and u.email_reminders is False:
             continue
@@ -630,6 +638,15 @@ def send_bilans(cfg: MailConfig, today: date) -> int:
     return n
 
 
+def weekly_due(at: datetime, weekday: int | None, hour: int | None, last: date | None) -> bool:
+    """Envoi hebdomadaire dû ? Oui dès que le moment prévu de la semaine (jour et heure) est passé et que rien
+    n'est parti depuis : si Hangar était fermé ce jour-là, l'envoi part au premier lancement suivant de la même
+    semaine (jusqu'au dimanche), une seule fois."""
+    monday = at.date() - timedelta(days=at.weekday())
+    moment = datetime.combine(monday + timedelta(days=weekday or 0), datetime.min.time()) + timedelta(hours=hour or 0)
+    return at >= moment and (last is None or last < moment.date())
+
+
 def run_scheduled(app=None, at: datetime | None = None, force: set[str] | frozenset = frozenset()) -> dict:
     """Déclenche les envois planifiés dus (une seule fois par jour / semaine). `force` : jobs à lancer quand même."""
     res = {}
@@ -642,12 +659,12 @@ def run_scheduled(app=None, at: datetime | None = None, force: set[str] | frozen
                                     and cfg.last_reminder_date != today):
             res["reminders"] = send_reminders(cfg, today)
             cfg.last_reminder_date = today
-        if "digest" in force or (auto and cfg.send_digest and today.weekday() == (cfg.digest_weekday or 0)
-                                 and at.hour >= (cfg.reminder_hour or 0) and cfg.last_digest_date != today):
+        if "digest" in force or (auto and cfg.send_digest
+                                 and weekly_due(at, cfg.digest_weekday, cfg.reminder_hour, cfg.last_digest_date)):
             res["digest"] = send_digests(cfg, today)
             cfg.last_digest_date = today
-        if "bilan" in force or (auto and cfg.send_bilan and today.weekday() == (cfg.bilan_weekday or 0)
-                                and at.hour >= (cfg.bilan_hour or 0) and cfg.last_bilan_date != today):
+        if "bilan" in force or (auto and cfg.send_bilan
+                                and weekly_due(at, cfg.bilan_weekday, cfg.bilan_hour, cfg.last_bilan_date)):
             res["bilan"] = send_bilans(cfg, today)
             cfg.last_bilan_date = today
         db.session.commit()

@@ -24,6 +24,7 @@
     <div class="stat"><div class="v">{{ imp.unchanged }}</div><div class="l">{{ icon('check', 13) }} Inchangées</div></div>
   </div>
   {% if imp.warnings %}<div class="ag-warn" style="margin-bottom:16px">{{ icon('alert', 15) }}<span>{{ imp.warnings|nl2br }}</span></div>{% endif %}
+  {% if imp.exam_notes %}<div class="panel panel-b" style="margin-bottom:16px">{{ icon('graduation', 15) }} <b>Révisions de QCM</b><ul style="margin:6px 0 0;padding-left:18px">{% for n in imp.exam_notes.splitlines() %}<li>{{ n }}</li>{% endfor %}</ul></div>{% endif %}
 
   {% if not imp.changed %}
   {{ ui.empty('check-circle', 'Aucun changement', 'Le fichier est identique au planning déjà enregistré.') }}
