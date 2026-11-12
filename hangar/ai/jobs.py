@@ -182,8 +182,14 @@ def notifier(job: AIJob) -> None:
                "error": f"Travail de l’IA en échec : {titre}"}.get(job.status)
     if message is None:
         return
+    if kit := job.options.get("kit"):
+        # Kit de révision : une seule notification, quand son dernier travail se termine (pas 30 d'affilée).
+        message = _message_kit(job, kit)
+        if message is None:
+            return
     try:
-        url = job.options.get("url") or url_for("ai.transformations")
+        url = (url_for("ai.transformations") if job.options.get("kit") else None) or job.options.get("url") \
+            or url_for("ai.transformations")
     except Exception:  # noqa: BLE001 - hors requête
         url = "/transformations/"
     try:
@@ -192,6 +198,28 @@ def notifier(job: AIJob) -> None:
     except Exception:  # noqa: BLE001 - la notification ne doit pas faire échouer le travail
         db.session.rollback()
         log.exception("Notification du travail %s", job.id)
+
+
+def _jobs_du_kit(kit: str) -> list[AIJob]:
+    # L'identifiant du kit (32 caractères hexadécimaux) ne peut pas apparaître ailleurs dans les options.
+    return [j for j in AIJob.query.filter(AIJob.options_json.contains(kit)) if j.options.get("kit") == kit]
+
+
+def _message_kit(job: AIJob, kit: str) -> str | None:
+    """Message de fin d'un kit de révision, ou None tant qu'un de ses travaux est en attente, en cours ou en lot."""
+    lot = _jobs_du_kit(kit)
+    if any(j.id != job.id and j.status in ("pending", "running", "batch") for j in lot):
+        return None
+    statuts = [j.status for j in lot]
+    nom = job.options.get("kit_nom") or "ta collection"
+    morceaux = []
+    if n := statuts.count("draft"):
+        morceaux.append(f"{n} QCM à relire")
+    if n := statuts.count("done"):
+        morceaux.append(f"{n} terminé{'s' if n > 1 else ''}")
+    if n := statuts.count("error"):
+        morceaux.append(f"{n} en échec")
+    return f"Kit de révision prêt ({nom}) : " + ", ".join(morceaux) + "."
 
 
 def run_pending(limit: int | None = None) -> int:

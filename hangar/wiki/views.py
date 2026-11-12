@@ -702,10 +702,12 @@ def sommaire():
         abort(404, description="Dossier introuvable")
     if not dossier:
         root = dict(root, folders=[f for f in root["folders"] if f["name"].lower() != commun.DOSSIER_QCM.lower()])
+    # Kit de révision (fiche et QCM des pages qui n'en ont pas) : pour un dossier, si l'IA est configurée.
+    kit_url = url_for("ai.kit_revision", dossier=dossier) if dossier and can_edit() and commun.ai_dispo() else ""
     return render("wiki/sommaire.html", vault=vault, root=root, dossier=dossier,
                   crumbs=fil_ariane(dossier.split("/")[:-1]) if dossier else [],
                   total=len(vault.notes), recent=vault.recent_notes(8),
-                  illisibles=vault.illisibles if can_edit() else [])
+                  illisibles=vault.illisibles if can_edit() else [], kit_url=kit_url)
 
 
 @bp.route("/tags/")

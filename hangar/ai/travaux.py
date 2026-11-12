@@ -246,7 +246,7 @@ def _json(ai_call, trop_long: str):
 # Demandes (création des travaux)
 # ---------------------------------------------------------------------------
 
-def _enqueue(kind, payload, user, title, lot=False, url=None):
+def _enqueue(kind, payload, user, title, lot=False, url=None, kit=None):
     from .core import cap_reached, check_batch_cap
 
     if lot:  # lots en cours compris : sinon N travaux en lot partiraient tous avant le premier retour
@@ -256,9 +256,12 @@ def _enqueue(kind, payload, user, title, lot=False, url=None):
                     "réglages de l’IA.", "plafond", 429)
     job = jobs.enqueue(kind, payload, user=user, feature={"page": "transformation"}.get(kind, kind), title=title,
                        batch=lot, start=False)
-    if url:
+    if url or kit:
         opts = job.options
-        opts["url"] = url
+        if url:
+            opts["url"] = url
+        if kit:  # kit de révision (identifiant, nom) : une seule notification, quand tout le kit est fini
+            opts["kit"], opts["kit_nom"] = kit
         job.options = opts
         db.session.commit()
     jobs.start_worker()
@@ -280,15 +283,17 @@ def demander_latex(nom_fichier, texte, page, user=None, lot=False) -> AIJob:
 
 
 def demander_qcm(*, note=None, texte="", nombre=20, categorie="", titre="", user=None, publier=False,
-                 lot=False) -> AIJob:
-    """QCM généré d'après une note du wiki (``note``) ou un texte collé."""
+                 lot=False, date_examen=None, kit=None) -> AIJob:
+    """QCM généré d'après une note du wiki (``note``) ou un texte collé. ``date_examen`` (date) : appliquée au set
+    pour le compte demandeur dès sa publication (kit de révision d'un contrôle)."""
     source = note.path.as_posix() if note is not None else "Texte collé"
     if not categorie:
         categorie = (note.path.parent.name if note is not None else "") or CATEGORIE_GENEREE
     return _enqueue("qcm", {"source": source, "texte_source": "" if note is not None else texte,
                             "nombre": nombre, "categorie": categorie, "titre": titre,
-                            "nom": note.title if note is not None else "", "publier": bool(publier)},
-                    user, f"QCM · {note.title if note is not None else 'texte collé'}", lot)
+                            "nom": note.title if note is not None else "", "publier": bool(publier),
+                            **({"date_examen": date_examen.isoformat()} if date_examen else {})},
+                    user, f"QCM · {note.title if note is not None else 'texte collé'}", lot, kit=kit)
 
 
 def demander_vocabulaire(*, mots, langue="Anglais", types=(), dossier="", titre="", user=None, publier=False,
@@ -299,11 +304,17 @@ def demander_vocabulaire(*, mots, langue="Anglais", types=(), dossier="", titre=
                     user, titre or f"Vocabulaire ({langue})", lot)
 
 
-def demander_fiche(note, user=None) -> AIJob:
-    """Fiche de révision d'une page du wiki, écrite à côté (« Page (Fiche).md »)."""
-    page = note.path.with_name(f"{note.path.stem} (Fiche).md").as_posix()
+def chemin_fiche(note) -> str:
+    """« Dossier/Page (Fiche).md » : où va la fiche de révision d'une page."""
+    return note.path.with_name(f"{note.path.stem} (Fiche).md").as_posix()
+
+
+def demander_fiche(note, user=None, lot=False, kit=None) -> AIJob:
+    """Fiche de révision d'une page du wiki, écrite à côté (« Page (Fiche).md ») sans relecture : une page déjà
+    modifiée n'est jamais écrasée (version de l'IA à côté). ``lot`` : dans un lot (moitié prix, sous 24 h)."""
+    page = chemin_fiche(note)
     return _enqueue("fiche", {"source": note.path.as_posix(), "page": page, "empreinte": _empreinte_actuelle(page),
-                              "nom": note.title, "cle": note.key}, user, f"Fiche · {note.title}")
+                              "nom": note.title, "cle": note.key}, user, f"Fiche · {note.title}", lot, kit=kit)
 
 
 def demander_variantes(qset, question_ids, user=None) -> AIJob:
@@ -432,6 +443,13 @@ def _questions_valides(data):
     return questions, ecartees
 
 
+def _compter_questions(job, gardees, ecartees):
+    """Questions gardées et écartées, gardées avec le travail : cumulées par modèle dans les réglages de l'IA."""
+    opts = job.options
+    opts["questions"] = {"gardees": gardees, "ecartees": ecartees}
+    job.options = opts
+
+
 def _avertissement_ecartees(ecartees):
     if not ecartees:
         return None
@@ -461,6 +479,7 @@ def _travail_qcm(job, ai):
     if not p.get("texte_source"):
         set_json["source_page"] = str(p["source"]).removesuffix(".md")
     categorie = dossier_valide(p.get("categorie", "")) or CATEGORIE_GENEREE
+    _compter_questions(job, len(questions), ecartees)
     return _finir_contenu(job, categorie, set_json, _avertissement_ecartees(ecartees))
 
 
@@ -501,6 +520,7 @@ def _travail_variantes(job, ai):
                 "genere_par": _genere_par(r), "questions": questions_json}
     if qset.source_page:
         set_json["source_page"] = qset.source_page
+    _compter_questions(job, len(questions_json), ecartees)
     return _finir_contenu(job, dossier_valide(qset.categorie) or CATEGORIE_GENEREE, set_json,
                           _avertissement_ecartees(ecartees))
 
@@ -530,6 +550,7 @@ def _finir_contenu(job, dossier, contenu, avertissement):
     """Set ou paquet généré : publié tout de suite si demandé, sinon brouillon à relire."""
     if job.payload.get("publier"):
         chemin = _publier_contenu(job.kind, dossier, contenu)
+        _appliquer_date_examen(job, chemin)
         job.message = avertissement or ""
         _lien_resultat(job, chemin)
         return {"page_ecrite": chemin}
@@ -539,6 +560,31 @@ def _finir_contenu(job, dossier, contenu, avertissement):
     opts["url"] = url_for("ai.relire", jid=job.id)
     job.options = opts
     return {"dossier": dossier, "contenu": contenu}
+
+
+def _appliquer_date_examen(job, chemin):
+    """Kit de révision d'un contrôle : la date d'examen demandée devient celle du set publié, pour le compte qui l'a
+    demandé (le planning des révisions vise ce jour). Une date déjà passée n'est pas appliquée."""
+    from datetime import date
+
+    from ..qcm import quiz
+    from ..qcm.models import QuizDeck
+
+    brut = job.payload.get("date_examen")
+    if not brut or not job.user_id or job.kind not in ("qcm", "variantes"):
+        return
+    try:
+        jour = date.fromisoformat(str(brut))
+    except ValueError:
+        return
+    if jour < quiz.jour(quiz.maintenant()):
+        return
+    set_id = chemin.removesuffix(".json")
+    deck = QuizDeck.query.filter_by(user_id=job.user_id, set_id=set_id).first()
+    if deck is None:
+        deck = QuizDeck(user_id=job.user_id, set_id=set_id)
+        db.session.add(deck)
+    deck.date_objectif = jour
 
 
 def _publier_contenu(kind, dossier, contenu):
@@ -559,6 +605,7 @@ def publier(job: AIJob, contenu=None) -> str:
     if job.status != "draft" or not res.get("contenu"):
         raise Echec("Ce travail n'est pas un brouillon.")
     chemin = _publier_contenu(job.kind, res["dossier"], contenu if contenu is not None else res["contenu"])
+    _appliquer_date_examen(job, chemin)
     job.result, job.status, job.message, job.finished_at = {"page_ecrite": chemin}, "done", "", now()
     _lien_resultat(job, chemin)
     db.session.commit()

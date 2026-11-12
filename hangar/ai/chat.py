@@ -232,7 +232,7 @@ def message_dict(m: AIMessage) -> dict:
     return {
         "id": m.id, "role": m.role, "content": m.content, "status": m.status, "error": m.error,
         "html": html, "sources": sources,
-        "feedback": m.feedback or 0, "model": core.model_label(m.model) if m.model else "", "provider": m.provider_name,
+        "feedback": m.feedback or 0, "feedback_note": m.feedback_note or "", "model": core.model_label(m.model) if m.model else "", "provider": m.provider_name,
         "command": m.command, "page": ctx.get("page"), "selection": len(ctx.get("selection") or ""),
         "mentions": ctx.get("mentions") or [], "tools": m.tools,
         "actions": [action_dict(a) for a in m.actions], "created": m.created_at.isoformat() if m.created_at else "",

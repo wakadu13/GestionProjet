@@ -40,6 +40,12 @@
         <p class="help">L’essentiel de la page sur une fiche, écrite à côté : « Page (Fiche) ».</p>
         <button class="btn btn-primary btn-sm" {% if not dispo %}disabled{% endif %}>{{ icon('sparkle', 14) }} Rédiger la fiche</button>
       </form>
+      <form method="get" action="{{ url_for('ai.kit_revision') }}" class="panel panel-b">
+        <h3>{{ icon('graduation', 15) }} Kit de révision d’un contrôle</h3>
+        <div class="field"><label for="tr-kit">Dossier d’une matière</label><input class="input" id="tr-kit" name="dossier" list="tr-dossiers" placeholder="Cours/Matière" required autocomplete="off"></div>
+        <p class="help">Fiche et QCM de chaque page qui n’en a pas encore, en une fois : tu choisis les pages et vois le coût avant de lancer.</p>
+        <button class="btn btn-primary btn-sm" {% if not dispo %}disabled{% endif %}>{{ icon('arrow-right', 14) }} Préparer le kit</button>
+      </form>
     </div>
     <datalist id="tr-pdfs">{% for p in pdfs %}<option value="{{ p }}">{% endfor %}</datalist>
     <datalist id="tr-pages">{% for p in pages %}<option value="{{ p }}">{% endfor %}</datalist>

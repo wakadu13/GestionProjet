@@ -314,9 +314,31 @@
         try {
           await api(tpl(U.feedback, this.mid), 'POST', { value: next });
           $$('[data-fb]', this.foot).forEach((x) => x.classList.toggle('on', +x.dataset.fb === next));
-          if (next) toast(next > 0 ? 'Merci pour ton retour.' : 'Merci : cette réponse est notée comme à améliorer.', 'info');
+          const old = $('.ai-fb-note', this.el);
+          if (old) old.remove();
+          if (next > 0) toast('Merci pour ton retour.', 'info');
+          if (next < 0) this.feedbackNote();
         } catch (e) { toast(e.message, 'error'); }
       }));
+    }
+    // Après un 👎 : court commentaire facultatif, relu dans les réglages de l'IA (« Qualité des réponses »).
+    feedbackNote() {
+      const f = document.createElement('form');
+      f.className = 'ai-fb-note';
+      f.innerHTML = '<input class="input input-sm" name="note" maxlength="500" placeholder="Qu’est-ce qui n’allait pas ? (facultatif)" aria-label="Ce qui n’allait pas"><button class="btn btn-xs" type="submit">Envoyer</button><button class="btn btn-ghost btn-xs" type="button" data-cancel>Passer</button>';
+      this.foot.after(f);
+      const input = $('input', f);
+      input.focus();
+      $('[data-cancel]', f).addEventListener('click', () => { f.remove(); toast('Merci : tu retrouveras cette réponse dans les réglages de l’IA.', 'info'); });
+      f.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const note = input.value.trim();
+        try {
+          await api(tpl(U.feedback, this.mid), 'POST', { value: -1, note });
+          f.remove();
+          toast('Merci : ta remarque est notée dans les réglages de l’IA.', 'info');
+        } catch (e) { toast(e.message, 'error'); }
+      });
     }
     done(d) {
       this.finished = true;
