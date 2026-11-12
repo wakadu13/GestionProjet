@@ -22,7 +22,7 @@
         <div class="field"><label>Capacité hebdomadaire (heures)</label><input class="input" type="number" min="1" max="80" name="capacity_hours" value="{{ current_user.capacity_hours }}"><span class="help">Utilisée pour la charge de travail.</span></div>
       </div>
       <div class="field"><label>Bio</label><textarea class="input" name="bio" rows="3">{{ current_user.bio }}</textarea></div>
-      <div class="field"><label>Couleur d’avatar</label><div class="color-swatches">{% for c in PALETTE %}<label><input type="radio" name="avatar_color" value="{{ c }}" {% if c == current_user.avatar_color %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
+      <div class="field"><label>Couleur d’avatar</label><div class="color-swatches" role="radiogroup" aria-label="Couleur d’avatar">{% for c in PALETTE %}<label title="{{ M.COLOR_NAMES.get(c, c) }}"><input type="radio" aria-label="{{ M.COLOR_NAMES.get(c, c) }}" name="avatar_color" value="{{ c }}" {% if c == current_user.avatar_color %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
       <div class="field"><label>{{ icon('mail', 13) }} Notifications par e-mail</label>
         <div class="panel panel-b" style="background:var(--bg-2)">
           <div class="field"><label>Adresse e-mail (facultative, uniquement pour recevoir des e-mails)</label><input class="input" type="email" name="contact_email" value="{{ current_user.contact_email or '' }}" placeholder="prenom.nom@exemple.fr"><span class="help">La connexion reste par identifiant et mot de passe.</span></div>

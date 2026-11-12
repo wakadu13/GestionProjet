@@ -91,6 +91,13 @@ PALETTE = [
     "#22c55e", "#14b8a6", "#06b6d4", "#0ea5e9", "#6366f1", "#a855f7",
     "#f43f5e", "#84cc16", "#64748b", "#d946ef",
 ]
+# Noms lus par les lecteurs d'écran et affichés au survol des pastilles de couleur
+COLOR_NAMES = {
+    "#3f76ff": "Bleu", "#8b5cf6": "Violet", "#ec4899": "Rose", "#ef4444": "Rouge", "#f97316": "Orange",
+    "#eab308": "Jaune", "#22c55e": "Vert", "#14b8a6": "Vert d’eau", "#06b6d4": "Cyan", "#0ea5e9": "Bleu ciel",
+    "#6366f1": "Indigo", "#a855f7": "Mauve", "#f43f5e": "Framboise", "#84cc16": "Vert pomme",
+    "#64748b": "Gris ardoise", "#d946ef": "Fuchsia",
+}
 
 
 def estimate_label(estimate_type: str, value) -> str:

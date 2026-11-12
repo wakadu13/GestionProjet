@@ -124,6 +124,8 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .crumbs > a, .crumbs > .current { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; }
 .crumbs > a:first-of-type { flex: 0 1 auto; } .crumbs > .current { max-width: 60vw; }
 .crumbs > a > *, .crumbs > .current > * { vertical-align: middle; }
+/* en display:block le « gap » ne joue plus : on rend l'écart de 6 px entre l'icône (ou l'emoji) et le nom */
+.crumbs > a > :first-child, .crumbs > .current > :first-child { margin-right: 6px; }
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .subbar { display: flex; align-items: center; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg); }
 .chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-2); font-size: 12px; }

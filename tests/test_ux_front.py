@@ -240,6 +240,14 @@ class FenetresEtPetitsEcrans(AppCase):
         self.assertEqual(names.get("text-overflow"), "ellipsis")
         self.assertEqual(names.get("min-width"), "0")
 
+    def test_fil_d_ariane_garde_l_ecart_entre_icone_et_nom(self):
+        """En display:block le « gap » de 6 px ne joue plus : la première balise (icône, emoji) garde sa marge."""
+        names = {k: v for d in rules_for(APP_CSS, ".crumbs > a") for k, v in d.items()}
+        self.assertEqual(names.get("display"), "block")
+        for sel in (".crumbs > a > :first-child", ".crumbs > .current > :first-child"):
+            gap = {k: v for d in rules_for(APP_CSS, sel) for k, v in d.items()}
+            self.assertEqual(gap.get("margin-right"), "6px", sel)
+
 
 # ---------------------------------------------------------------------------------------------------------------
 # Piste 33 : contraste (WCAG AA 4,5:1) en thème clair et sombre
@@ -486,6 +494,44 @@ class EtiquettesEtNoms(AppCase):
         orphans = tree.find_all(lambda n: n.tag == "label" and "for" not in n.attrs and n.parent is not None
                                 and "field" in n.parent.classes())
         self.assertTrue(orphans)
+
+
+    def test_aucun_champ_sans_nom(self):
+        """Champs visibles sans nom accessible (ni aria-label, ni title, ni placeholder, ni libellé relié — y compris
+        le « <label>…</label><input> » que app.js relie) : il n'en reste aucun, pastilles de couleur comprises."""
+        def nameless(tree):
+            ids_lies = {n.attrs.get("for") for n in tree.find_all(lambda n: n.tag == "label")}
+            out = []
+            for f in tree.find_all(lambda n: n.tag in ("input", "select", "textarea")):
+                if f.tag == "input" and f.attrs.get("type") in ("hidden", "submit", "button"):
+                    continue
+                if any(f.attrs.get(a) for a in ("aria-label", "aria-labelledby", "title", "placeholder")):
+                    continue
+                if f.attrs.get("id") and f.attrs["id"] in ids_lies:
+                    continue
+                lab = next((a for a in f.ancestors() if a.tag == "label"), None)
+                if lab is not None and (lab.all_text().strip() or lab.attrs.get("title")):
+                    continue
+                prev = f.parent.children[f.parent.children.index(f) - 1] if f.parent.children.index(f) else None
+                if prev is not None and prev.tag == "label" and "for" not in prev.attrs:
+                    continue  # relié au chargement par nameFields (app.js)
+                out.append(f.attrs.get("name"))
+            return out
+
+        c = self.client()
+        tok = re.search(r'name="_csrf" value="([^"]+)"', self.page(c, "/projects/new")).group(1)
+        r = c.post("/projects/new", data={"_csrf": tok, "name": "Essai", "identifier": "ESS", "color": "#3f76ff"})
+        self.assertEqual(r.status_code, 302)
+        for url in ("/settings/profile", "/settings/mail", "/projects/new", "/projects/1/settings"):
+            self.assertEqual(nameless(Tree(self.page(c, url))), [], url)
+        tree = Tree(self.page(c, "/settings/profile"))
+        avatar = [n for n in tree.find_all(lambda n: n.attrs.get("name") == "avatar_color")]
+        self.assertTrue(avatar)
+        self.assertEqual(avatar[0].attrs.get("aria-label"), "Bleu")
+        groupe = avatar[0].parent.parent
+        self.assertEqual((groupe.attrs.get("role"), groupe.attrs.get("aria-label")), ("radiogroup", "Couleur d’avatar"))
+        from hangar import models
+        self.assertTrue(set(models.PALETTE) | set(models.TASK_COLORS) <= set(models.COLOR_NAMES))
 
 
 if __name__ == "__main__":

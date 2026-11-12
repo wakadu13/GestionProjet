@@ -16,7 +16,7 @@
     <div class="grid-2">
       <div class="field"><label>Identifiant</label><input class="input mono" name="identifier" value="{{ form.get('identifier', '') }}" required maxlength="10" pattern="[A-Za-z][A-Za-z0-9]{1,9}" style="text-transform:uppercase" data-project-ident><span class="help">Préfixe des tickets (ex. EAE → EAE-12).</span></div>
       <div class="field"><label>Couleur</label>
-        <div class="color-swatches">{% for c in M.PALETTE[:10] %}<label><input type="radio" name="color" value="{{ c }}" {% if loop.first %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div>
+        <div class="color-swatches" role="radiogroup" aria-label="Couleur du projet">{% for c in M.PALETTE[:10] %}<label title="{{ M.COLOR_NAMES.get(c, c) }}"><input type="radio" aria-label="{{ M.COLOR_NAMES.get(c, c) }}" name="color" value="{{ c }}" {% if loop.first %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div>
       </div>
     </div>
     <div class="field"><label>Description</label><textarea class="input" name="description" rows="3" placeholder="Objectif, périmètre, livrables…">{{ form.get('description', '') }}</textarea></div>

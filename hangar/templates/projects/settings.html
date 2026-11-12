@@ -27,7 +27,7 @@
       </div>
       <div class="grid-2">
         <div class="field"><label>Identifiant</label><input class="input mono" name="identifier" value="{{ p.identifier }}" required maxlength="10" {{ dis }}><span class="help">Le changer renomme toutes les clés de tickets.</span></div>
-        <div class="field"><label>Couleur</label><div class="color-swatches">{% for c in PALETTE %}<label><input type="radio" name="color" value="{{ c }}" {% if c == p.color %}checked{% endif %} {{ dis }}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
+        <div class="field"><label>Couleur</label><div class="color-swatches" role="radiogroup" aria-label="Couleur du projet">{% for c in PALETTE %}<label title="{{ M.COLOR_NAMES.get(c, c) }}"><input type="radio" aria-label="{{ M.COLOR_NAMES.get(c, c) }}" name="color" value="{{ c }}" {% if c == p.color %}checked{% endif %} {{ dis }}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
       </div>
       <div class="field"><label>Description</label><textarea class="input" name="description" rows="6" {{ dis }}>{{ p.description }}</textarea><span class="help">Markdown accepté.</span></div>
       <div class="grid-2">

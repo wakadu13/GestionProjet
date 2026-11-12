@@ -6,7 +6,7 @@
     <input type="hidden" name="parent_id" value="">
     <input type="hidden" name="intake" value="">
     <div class="modal-h">
-      <select class="input input-sm" name="project_id" data-ci-project style="width:auto;max-width:260px" required>
+      <select class="input input-sm" name="project_id" data-ci-project aria-label="Projet" title="Projet" style="width:auto;max-width:260px" required>
         {% for pid, p in picker_data().items() if p.editable or p.intake %}<option value="{{ pid }}" data-editable="{{ 1 if p.editable else 0 }}">{{ p.emoji }} {{ p.name }}</option>{% endfor %}
       </select>
       <h2 id="ci-heading" data-ci-heading>Nouveau ticket</h2>
