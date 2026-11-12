@@ -423,6 +423,10 @@ class AbonnementPush(db.Model):
     agent = db.Column(db.String(300), default="")
     cree_le = db.Column(db.DateTime, default=quiz.maintenant)
     dernier_envoi = db.Column(db.Date)  # au plus un rappel par jour
+    # Envois en échec (réseau, service de notifications) : nouvel essai 15 min plus tard au plus tôt ;
+    # abonnement supprimé après plusieurs refus (403) d'affilée.
+    dernier_echec = db.Column(db.DateTime)
+    refus = db.Column(db.Integer, default=0)
 
     user = db.relationship("User")
 

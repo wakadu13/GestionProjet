@@ -185,9 +185,22 @@ def lire_json(chemin, racine):
     chemin = Path(chemin)
     rel = PurePosixPath(chemin.relative_to(racine).as_posix())
     try:
-        return rel, json.loads(chemin.read_text(encoding="utf-8"))
+        # utf-8-sig : un fichier enregistré « UTF-8 avec BOM » (Bloc-notes, Excel) est accepté.
+        return rel, json.loads(chemin.read_bytes().decode("utf-8-sig"))
+    except UnicodeDecodeError:
+        raise ValueError(f"{rel} : le fichier doit être enregistré en UTF-8 (pas en ANSI).") from None
     except json.JSONDecodeError as e:
-        raise ValueError(f"JSON invalide dans {rel} : {e}")
+        raise ValueError(f"JSON invalide dans {rel} : {e}") from None
+
+
+def erreur_chargement(rel, e) -> str:
+    """Message d'un fichier du coffre qui n'a pas pu être chargé, avec son chemin : une erreur
+    inattendue (valeur de type imprévu…) ne doit pas emporter toute la section QCM."""
+    if isinstance(e, ValueError) and str(rel) in str(e):
+        return str(e)
+    if isinstance(e, ValueError):
+        return f"{rel} : {e}"
+    return f"{rel} : fichier mal formé ({e})."
 
 
 def question_depuis_json(q, i: int, contexte: str) -> Question:
@@ -205,8 +218,10 @@ def question_depuis_json(q, i: int, contexte: str) -> Question:
         for clef in ("choix", "reponses"):
             if clef not in q:
                 raise ValueError(f"{contexte} : clé '{clef}' manquante.")
+        if not isinstance(q["choix"], list):
+            raise ValueError(f"{contexte} : 'choix' doit être une liste de propositions.")
         choix = [str(c) for c in q["choix"]]
-        reponses = sorted(q["reponses"]) if isinstance(q["reponses"], list) else []
+        reponses = list(q["reponses"]) if isinstance(q["reponses"], list) else []
         if not choix:
             raise ValueError(f"{contexte} : la liste 'choix' est vide.")
         if not reponses:
@@ -214,9 +229,12 @@ def question_depuis_json(q, i: int, contexte: str) -> Question:
         for r in reponses:
             if not isinstance(r, int) or isinstance(r, bool) or not (0 <= r < len(choix)):
                 raise ValueError(f"{contexte} : indice de réponse {r} hors limites.")
+        reponses = sorted(reponses)
         if type_q == "QCM" and len(reponses) != 1:
             raise ValueError(f"{contexte} : un QCM doit avoir exactement 1 réponse.")
     elif type_q in TYPES_TEXTE:
+        if not isinstance(q.get("reponses_texte", []), list):
+            raise ValueError(f"{contexte} : 'reponses_texte' doit être une liste de réponses.")
         reponses_texte = [str(r) for r in q.get("reponses_texte", []) if str(r).strip()]
         if not reponses_texte:
             raise ValueError(f"{contexte} : 'reponses_texte' doit contenir une réponse.")
@@ -336,11 +354,11 @@ class Library:
                 continue
             try:
                 charge = charger(self.root / rel, self.root)
-            except ValueError as e:
+            except Exception as e:  # noqa: BLE001 — un fichier mal formé ne doit pas bloquer les autres
                 # On distingue « pas un set » (JSON sans 'questions', ex. .canvas)
                 # d'un vrai set malformé, qu'on signale.
-                if "questions' (liste) manquante" not in str(e):
-                    self.errors.append(str(e))
+                if not isinstance(e, ValueError) or "questions' (liste) manquante" not in str(e):
+                    self.errors.append(erreur_chargement(rel, e))
                     self.ids_invalides.add(PurePosixPath(rel).with_suffix("").as_posix())
                 continue
             charge.fichier = self.root / rel
@@ -363,9 +381,9 @@ class Library:
                 rel_id = PurePosixPath(PERSO + rel)
                 charge = (langues.set_depuis_json(data, rel_id) if langues.est_fichier_langue(data)
                           else set_depuis_json(data, rel_id))
-            except ValueError as e:
-                if "questions' (liste) manquante" not in str(e):
-                    self.erreurs_perso.setdefault(proprietaire, []).append(str(e))
+            except Exception as e:  # noqa: BLE001 — comme pour le coffre
+                if not isinstance(e, ValueError) or "questions' (liste) manquante" not in str(e):
+                    self.erreurs_perso.setdefault(proprietaire, []).append(erreur_chargement(rel, e))
                     self.ids_invalides.add(PERSO + PurePosixPath(rel).with_suffix("").as_posix())
                 continue
             charge.proprietaire, charge.fichier = proprietaire, chemin

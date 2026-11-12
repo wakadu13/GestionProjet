@@ -40,7 +40,7 @@
       <div class="qcm-hero">
         <div>
           <h1>QCM hors ligne</h1>
-          <div class="sub">Les sets téléchargés restent sur cet appareil : révise sans réseau, tes réponses rejoignent ta progression dès que la connexion revient.</div>
+          <div class="sub" id="hl-sous-titre">Les sets téléchargés restent sur cet appareil : révise sans réseau, tes réponses rejoignent ta progression dès que la connexion revient.</div>
         </div>
       </div>
 
@@ -49,6 +49,11 @@
         <p id="hl-etat">Chargement…</p>
         <button type="button" class="btn btn-sm" id="hl-synchroniser">Synchroniser</button>
       </div>
+      <div class="qcm-callout warning" id="hl-non-securise" hidden>{{ icon('alert', 16) }}<div>
+        <b>Cette page ne s’ouvrira pas sans réseau à cette adresse.</b> Ton navigateur ne garde une page pour le mode hors ligne
+        qu’à une adresse sécurisée (HTTPS), ou sur l’ordinateur qui fait tourner Hangar. Tes sets téléchargés restent bien sur l’appareil,
+        mais si l’onglet se ferme ou se recharge sans réseau, tu ne pourras pas les rouvrir.
+        Pour réviser dans le train : utilise l’appli Android, ou ouvre Hangar par une adresse en HTTPS.</div></div>
       <div class="qcm-callout warning" id="hl-alerte" hidden>{{ icon('alert', 16) }}<div id="hl-alerte-texte"></div></div>
 
       <div id="hl-telecharges"></div>
@@ -69,7 +74,8 @@
         <summary>{{ icon('help', 14) }} Installer sur le téléphone</summary>
         <p>Dans Chrome : menu <b>⋮</b> → <b>Ajouter à l’écran d’accueil</b> (ou <b>Installer l’application</b>) ; sur iPhone : Partager → <b>Sur l’écran d’accueil</b>.
           L’icône « QCM » ouvre alors cette page, même sans réseau. Tes réponses sont gardées sur l’appareil et envoyées automatiquement dès que la connexion revient.
-          Hors de cet ordinateur, Hangar doit être servi en HTTPS pour que le mode hors ligne fonctionne.</p>
+          Hors de cet ordinateur, Hangar doit être ouvert par une adresse en HTTPS pour que le mode hors ligne fonctionne :
+          à une adresse comme http://192.168.x.x, la page ne s’ouvre pas sans réseau (l’appli Android, elle, marche sans HTTPS).</p>
       </details>
     </section>
 

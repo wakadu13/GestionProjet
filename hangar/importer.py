@@ -101,11 +101,20 @@ def read_table(stream, filename: str):
     data = stream.read() if hasattr(stream, "read") else open(stream, "rb").read()
     if ext in ("xlsx", "xlsm"):
         import openpyxl
+
+        from .archives import ouvrir
+        # Taille décompressée et nombre de fichiers vérifiés avant de confier le classeur à openpyxl.
+        ouvrir(data, filename, XLSX_MAX_ENTREES, XLSX_TAILLE_MAX).close()
         warnings.filterwarnings("ignore", module="openpyxl")
         wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
         best = None
         for ws in wb.worksheets:
-            matrix = [list(r) for r in ws.iter_rows(values_only=True)]
+            matrix = []
+            # Bornes explicites : un classeur peut annoncer 1 048 576 lignes × 16 384 colonnes.
+            for r in ws.iter_rows(values_only=True, max_row=XLSX_MAX_LIGNES + 1, max_col=XLSX_MAX_COLONNES):
+                if len(matrix) >= XLSX_MAX_LIGNES:
+                    raise ValueError(f"Classeur trop grand : {XLSX_MAX_LIGNES} lignes au plus par import.")
+                matrix.append(list(r))
             try:
                 rows = _rows_from_matrix(matrix)
             except ValueError:
@@ -763,9 +772,25 @@ def _heading_level(p) -> int:
     return 0
 
 
-def docx_to_markdown(data: bytes) -> str:
-    with zipfile.ZipFile(io.BytesIO(data)) as z:
-        root = ET.fromstring(z.read("word/document.xml"))
+# Garde-fous des fichiers Office envoyés (archives ZIP : un petit fichier peut se décompresser
+# en gigaoctets) : taille décompressée et nombre de fichiers de l'archive (archives.py).
+DOCX_TAILLE_MAX_XML = 20 * 1024 * 1024
+DOCX_MAX_ENTREES = 10_000
+XLSX_TAILLE_MAX = 200 * 1024 * 1024
+XLSX_MAX_ENTREES = 10_000
+XLSX_MAX_LIGNES = 20_000
+XLSX_MAX_COLONNES = 200
+
+
+def docx_to_markdown(data: bytes, nom: str = "document.docx") -> str:
+    from .archives import lire, ouvrir
+
+    with ouvrir(data, nom, DOCX_MAX_ENTREES) as z:
+        xml = lire(z, "word/document.xml", DOCX_TAILLE_MAX_XML, nom)
+    # Word n'écrit jamais de DOCTYPE : un document qui en déclare un (entités imbriquées) est refusé.
+    if b"<!DOCTYPE" in xml or b"<!ENTITY" in xml:
+        raise ValueError(f"{nom} : document Word invalide.")
+    root = ET.fromstring(xml)
     body = root.find(W + "body")
     lines = []
     for el in body:

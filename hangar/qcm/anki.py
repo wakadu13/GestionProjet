@@ -272,6 +272,13 @@ def exporter(element, donnees=None):
 # ---------------------------------------------------------------------------
 TAILLE_MAX_APKG = 50 * 1024 * 1024
 MAX_NOTES_IMPORT = 5000
+# Garde-fous de l'import (un petit .apkg peut se décompresser en gigaoctets, et sa base SQLite est
+# fournie par l'expéditeur) : base décompressée, nombre de fichiers de l'archive, taille d'un champ,
+# durée de lecture de la base.
+TAILLE_MAX_BASE = 200 * 1024 * 1024
+MAX_ENTREES_APKG = 100_000
+TAILLE_MAX_CHAMP = 5 * 1024 * 1024
+DUREE_MAX_LECTURE = 15  # secondes
 
 
 class ImportAnkiImpossible(ValueError):
@@ -294,35 +301,79 @@ def _depuis_html(champ):
     return "\n".join(l for l in lignes if l).strip()
 
 
+def _lire_base(chemin, nom):
+    """(notes, ligne de « col ») de la base SQLite d'un paquet, avec des garde-fous : lecture seule,
+    `notes` et `col` doivent être de vraies tables (une vue ferait exécuter la requête de son
+    choix), schéma non fiable, taille d'une valeur bornée, durée bornée, 5 000 notes au plus."""
+    try:
+        base = sqlite3.connect(f"{Path(chemin).as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error as e:
+        raise ImportAnkiImpossible(f"{nom} : base illisible ({e}).") from None
+    limite = time.monotonic() + DUREE_MAX_LECTURE
+    trop_long = []
+
+    def surveiller():
+        if time.monotonic() > limite:
+            trop_long.append(True)
+            return 1  # interrompt la requête
+        return 0
+
+    try:
+        base.set_progress_handler(surveiller, 10_000)
+        base.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, TAILLE_MAX_CHAMP)
+        base.execute("PRAGMA trusted_schema = OFF")
+        types = dict(base.execute("SELECT name, type FROM sqlite_master WHERE name IN ('notes', 'col')").fetchall())
+        if types.get("notes") != "table" or types.get("col") != "table":
+            raise ImportAnkiImpossible(f"{nom} : ce n'est pas un paquet Anki (tables des notes introuvables).")
+        lignes = base.execute("SELECT id, mid, flds, tags FROM notes ORDER BY id LIMIT ?", (MAX_NOTES_IMPORT,)).fetchall()
+        col = base.execute("SELECT decks, models FROM col LIMIT 1").fetchone()
+    except sqlite3.DatabaseError as e:
+        if trop_long:
+            raise ImportAnkiImpossible(f"{nom} : lecture du paquet trop longue (plus de {DUREE_MAX_LECTURE} s), "
+                                       "import abandonné.") from None
+        if "too big" in str(e):
+            raise ImportAnkiImpossible(f"{nom} : une carte du paquet est trop volumineuse "
+                                       f"({TAILLE_MAX_CHAMP // (1024 * 1024)} Mo au plus).") from None
+        raise ImportAnkiImpossible(f"{nom} : base illisible ({e}).") from None
+    finally:
+        base.close()
+    return lignes, col
+
+
 def lire_apkg(contenu: bytes, nom: str = "paquet.apkg"):
     """Set de QCM (dict JSON au format du wiki) d'après un paquet Anki : une FLASHCARD par note.
 
     Les notes « texte à trous » d'Anki ({{c1::…}}) deviennent des questions TROU. Lève
     ImportAnkiImpossible si le fichier n'est pas lisible."""
+    from ..archives import ArchiveRefusee, extraire, ouvrir
+
     if len(contenu) > TAILLE_MAX_APKG:
         raise ImportAnkiImpossible("Paquet trop gros (50 Mo au plus).")
+    if not zipfile.is_zipfile(io.BytesIO(contenu)):
+        raise ImportAnkiImpossible(f"{nom} : ce n'est pas un paquet Anki (.apkg).")
     try:
-        archive = zipfile.ZipFile(io.BytesIO(contenu))
-    except zipfile.BadZipFile:
-        raise ImportAnkiImpossible(f"{nom} : ce n'est pas un paquet Anki (.apkg).") from None
+        archive = ouvrir(contenu, nom, MAX_ENTREES_APKG)
+    except ArchiveRefusee as e:
+        raise ImportAnkiImpossible(str(e)) from None
     noms = set(archive.namelist())
-    base_nom = next((n for n in ("collection.anki21", "collection.anki2") if n in noms), None)
-    if base_nom is None:
-        if "collection.anki21b" in noms:
-            raise ImportAnkiImpossible(f"{nom} : format Anki récent (compressé) : dans Anki, exporte le paquet en cochant "
-                                       "« Compatibilité avec les anciennes versions d'Anki ».")
+    # Un export récent contient collection.anki21b (compressée, illisible ici) et un collection.anki2
+    # factice (« mets Anki à jour ») : on le reconnaît avant de lire collection.anki2.
+    if "collection.anki21" in noms:
+        base_nom = "collection.anki21"
+    elif "collection.anki21b" in noms:
+        raise ImportAnkiImpossible(f"{nom} : format Anki récent (compressé) : dans Anki, exporte le paquet en cochant "
+                                   "« Compatibilité avec les anciennes versions d'Anki ».")
+    elif "collection.anki2" in noms:
+        base_nom = "collection.anki2"
+    else:
         raise ImportAnkiImpossible(f"{nom} : base du paquet introuvable.")
     with tempfile.TemporaryDirectory() as dossier:
         chemin = Path(dossier) / "collection.sqlite"
-        chemin.write_bytes(archive.read(base_nom))
-        base = sqlite3.connect(chemin)
         try:
-            lignes = base.execute("SELECT id, mid, flds, tags FROM notes ORDER BY id").fetchall()
-            col = base.execute("SELECT decks, models FROM col").fetchone()
-        except sqlite3.DatabaseError as e:
-            raise ImportAnkiImpossible(f"{nom} : base illisible ({e}).") from None
-        finally:
-            base.close()
+            extraire(archive, base_nom, chemin, TAILLE_MAX_BASE, nom)
+        except ArchiveRefusee as e:
+            raise ImportAnkiImpossible(str(e)) from None
+        lignes, col = _lire_base(chemin, nom)
     titre = Path(nom).stem
     modeles = {}
     try:
@@ -334,7 +385,7 @@ def lire_apkg(contenu: bytes, nom: str = "paquet.apkg"):
     except (ValueError, TypeError, AttributeError):
         pass
     questions = []
-    for nid, mid, flds, _tags in lignes[:MAX_NOTES_IMPORT]:
+    for nid, mid, flds, _tags in lignes:
         champs = [_depuis_html(c) for c in str(flds).split(SEPARATEUR_CHAMPS)]
         modele = modeles.get(str(mid), {}) if isinstance(modeles, dict) else {}
         if modele.get("type") == 1 or re.search(r"\{\{c\d+::", champs[0] if champs else ""):

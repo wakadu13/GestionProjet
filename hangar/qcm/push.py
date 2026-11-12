@@ -74,10 +74,60 @@ class AbonnementExpire(Exception):
     """Le service de notifications ne connaît plus cet appareil (abonnement à supprimer)."""
 
 
+class AdresseNonAutorisee(Exception):
+    """L'adresse de l'abonnement n'est pas celle d'un service de notifications connu."""
+
+
+class EnvoiRefuse(Exception):
+    """Le service de notifications refuse l'envoi (403 : le plus souvent, clés du serveur changées
+    depuis l'abonnement de l'appareil)."""
+
+
+# Services de notifications des navigateurs : c'est le navigateur qui fournit l'adresse de
+# l'abonnement, et le serveur y envoie une requête. Seuls ces hôtes sont acceptés (sinon un compte
+# pourrait faire appeler par le serveur une adresse de son choix : box, NAS, service local).
+HOTES_PUSH = {
+    "fcm.googleapis.com",                   # Chrome, Edge (Android), Opera, Samsung Internet, Brave…
+    "android.googleapis.com",               # anciens abonnements de Chrome
+    "updates.push.services.mozilla.com",    # Firefox
+    "push.services.mozilla.com",
+}
+SUFFIXES_PUSH = (".notify.windows.com", ".push.apple.com")  # Edge (Windows), Safari (macOS, iPhone)
+
+
+def adresse_autorisee(endpoint: str) -> bool:
+    """Vrai si ``endpoint`` est une adresse https d'un service de notifications connu (nom d'hôte
+    analysé, ni port ni identifiants)."""
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(str(endpoint))
+        hote, port = (parts.hostname or "").rstrip("."), parts.port
+    except ValueError:
+        return False
+    if parts.scheme != "https" or parts.username is not None or parts.password is not None or port not in (None, 443):
+        return False
+    return hote in HOTES_PUSH or any(hote.endswith(suffixe) for suffixe in SUFFIXES_PUSH)
+
+
+def _session_sans_redirection():
+    """Session HTTP qui ne suit aucune redirection : la requête part vers l'adresse contrôlée, et
+    nulle part ailleurs."""
+    import requests
+
+    session = requests.Session()
+    session.max_redirects = 0
+    return session
+
+
 def envoyer(abonnement, titre: str, texte: str, url: str = "/qcm/aujourdhui/") -> None:
-    """Envoie une notification à un appareil ; AbonnementExpire si l'abonnement est mort."""
+    """Envoie une notification à un appareil ; AbonnementExpire si l'abonnement est mort,
+    AdresseNonAutorisee si son adresse n'est pas celle d'un service connu, EnvoiRefuse sur un 403."""
     from pywebpush import WebPushException, webpush
 
+    if not adresse_autorisee(abonnement.endpoint):
+        raise AdresseNonAutorisee(abonnement.endpoint[:80])
+    session = _session_sans_redirection()
     try:
         webpush(
             subscription_info={"endpoint": abonnement.endpoint, "keys": {"p256dh": abonnement.p256dh, "auth": abonnement.auth}},
@@ -86,9 +136,14 @@ def envoyer(abonnement, titre: str, texte: str, url: str = "/qcm/aujourdhui/") -
             vapid_claims={"sub": contact()},
             ttl=12 * 3600,
             timeout=15,
+            requests_session=session,
         )
     except WebPushException as e:
         statut = getattr(getattr(e, "response", None), "status_code", None)
         if statut in (404, 410):
             raise AbonnementExpire(str(e)) from None
+        if statut == 403:
+            raise EnvoiRefuse(str(e)) from None
         raise
+    finally:
+        session.close()

@@ -13,6 +13,8 @@ commande `envoyer_rappels` de Revision :
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from flask import current_app, jsonify, request
 from flask_login import current_user, login_required
 
@@ -22,16 +24,28 @@ from .models import AbonnementPush, Activite
 from .views import bp
 
 TITRE = "Hangar · révisions"
+NON_RECONNU = "service de notifications non reconnu : active le rappel depuis Chrome, Edge, Firefox ou Safari"
+# Envoi en échec (pas d'Internet, service de notifications indisponible) : nouvel essai au plus tôt
+# 15 minutes après (le fil d'arrière-plan passe toutes les 30 s), comme le cron de Revision.
+DELAI_NOUVEL_ESSAI = timedelta(minutes=15)
+# Refus (403) d'affilée après lesquels l'abonnement est supprimé : le plus souvent, les clés du
+# serveur ont changé et l'appareil doit réactiver le rappel.
+MAX_REFUS = 3
 
 
 def etat_rappel(user_id, now=None, library=None) -> dict:
     """Ce qu'il reste à réviser (QCM, langues), série et réponses du jour : rappel de l'application
-    Android, notifications web."""
+    Android, notifications web.
+
+    Compté comme le tableau de bord : révisions dues (QCM et langues) plus les nouvelles questions
+    prévues par les quotas des sets. Les questions jamais vues d'un set sans quota n'y sont pas :
+    sinon le rappel ne se tairait jamais. `nouvelles` : la part des nouvelles dans `a_revoir`."""
     now = now or quiz.maintenant()
     e = services.etat(user_id, now, library)
     act = Activite.resume(user_id, quiz.jour(now))
-    return {"a_revoir": e["a_reviser"] + e["langues_a_revoir"], "qcm": e["a_reviser"],
-            "langues": e["langues_a_revoir"], "serie": act["serie"], "aujourdhui": act["aujourdhui"]}
+    qcm = e["revisions"] + e["nouvelles_prevues"]
+    return {"a_revoir": qcm + e["langues_a_revoir"], "qcm": qcm, "langues": e["langues_a_revoir"],
+            "nouvelles": e["nouvelles_prevues"], "serie": act["serie"], "aujourdhui": act["aujourdhui"]}
 
 
 def texte_rappel(etat) -> str | None:
@@ -40,7 +54,13 @@ def texte_rappel(etat) -> str | None:
     n, serie, auj = etat["a_revoir"], etat["serie"], etat["aujourdhui"]
     if n == 0 and auj > 0:
         return None
-    texte = (f"{n} élément{'s' if n > 1 else ''} à réviser" if n else "Rien d'urgent : quelques nouveaux mots ?")
+    nouvelles = min(etat.get("nouvelles", 0), n)
+    parts = []
+    if n - nouvelles:
+        parts.append(f"{n - nouvelles} à revoir")
+    if nouvelles:
+        parts.append(f"{nouvelles} nouvelle{'s' if nouvelles > 1 else ''} à découvrir")
+    texte = " · ".join(parts) if parts else "Rien d'urgent : quelques nouveaux mots ?"
     if serie > 0:
         texte += f" · série de {serie} jour{'s' if serie > 1 else ''}" + (" à prolonger" if auj == 0 else "")
     return texte
@@ -59,6 +79,8 @@ def envoyer_rappels_dus(now=None, journal=None) -> dict:
     for a in abonnements:
         if (a.heure, a.minute) > (now.hour, now.minute) or a.user is None or not a.user.active:
             continue
+        if a.dernier_echec is not None and timedelta(0) <= now - a.dernier_echec < DELAI_NOUVEL_ESSAI:
+            continue  # échec récent : on réessaiera plus tard
         if a.user_id not in etats:
             etats[a.user_id] = etat_rappel(a.user_id, now)
         texte = texte_rappel(etats[a.user_id])
@@ -68,7 +90,9 @@ def envoyer_rappels_dus(now=None, journal=None) -> dict:
             try:
                 push.envoyer(a, TITRE, texte)
                 compte["envoyes"] += 1
-            except push.AbonnementExpire:
+            except (push.AbonnementExpire, push.AdresseNonAutorisee):
+                # Appareil inconnu du service, ou adresse qui n'est pas celle d'un service de
+                # notifications (abonnement enregistré avant ce contrôle) : on le supprime.
                 db.session.delete(a)
                 db.session.commit()
                 compte["expires"] += 1
@@ -77,8 +101,16 @@ def envoyer_rappels_dus(now=None, journal=None) -> dict:
                 compte["erreurs"] += 1
                 if journal:
                     journal(f"{a} : {e}")
+                a.refus = ((a.refus or 0) + 1) if isinstance(e, push.EnvoiRefuse) else 0
+                if a.refus >= MAX_REFUS:
+                    db.session.delete(a)
+                    compte["expires"] += 1
+                else:
+                    a.dernier_echec = now
+                db.session.commit()
                 continue
         a.dernier_envoi = jour
+        a.dernier_echec, a.refus = None, 0
         db.session.commit()
     return compte
 
@@ -117,6 +149,8 @@ def _json_post():
 @bp.route("/api/push/abonner/", methods=["POST"])
 @login_required
 def push_abonner():
+    from . import push
+
     data = _json_post()
     try:
         sub = data["subscription"]
@@ -126,6 +160,8 @@ def push_abonner():
             raise ValueError
     except (KeyError, TypeError, ValueError):
         return jsonify(error="abonnement invalide"), 400
+    if not push.adresse_autorisee(endpoint):
+        return jsonify(error=NON_RECONNU), 400
     maintenant = quiz.maintenant()
     # Heure déjà passée aujourd'hui : premier rappel demain (pas tout de suite).
     deja = (heure, minute) <= (maintenant.hour, maintenant.minute)
@@ -136,6 +172,7 @@ def push_abonner():
     a.user_id, a.p256dh, a.auth, a.heure, a.minute = current_user.id, p256dh[:200], auth[:100], heure, minute
     a.agent = request.headers.get("User-Agent", "")[:300]
     a.dernier_envoi = maintenant.date() if deja else None
+    a.dernier_echec, a.refus = None, 0
     db.session.commit()
     return jsonify(ok=True, heure=heure, minute=minute)
 
@@ -165,7 +202,13 @@ def push_tester():
         db.session.delete(abonnement)
         db.session.commit()
         return jsonify(error="abonnement expiré : réactive le rappel"), 410
+    except push.AdresseNonAutorisee:
+        db.session.delete(abonnement)
+        db.session.commit()
+        return jsonify(error=NON_RECONNU), 400
     except Exception as e:  # noqa: BLE001
+        # Le détail (réponse du service, erreur réseau) reste dans le journal du serveur : renvoyé au
+        # navigateur, il permettrait de lire les réponses d'une adresse choisie par le compte.
         current_app.logger.warning("Notification de test impossible : %s", e)
-        return jsonify(error=f"envoi impossible : {e}"), 502
+        return jsonify(error="envoi impossible pour l'instant : réessaie plus tard"), 502
     return jsonify(ok=True)

@@ -349,7 +349,7 @@ def import_doc(pid):
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     try:
         if ext == "docx":
-            content = docx_to_markdown(f.stream.read())
+            content = docx_to_markdown(f.stream.read(), name)
         elif ext in ("md", "txt", "markdown"):
             content = f.stream.read().decode("utf-8", errors="replace")
         else:

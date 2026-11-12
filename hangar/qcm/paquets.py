@@ -153,7 +153,8 @@ def analyser_liste(texte, ordre=LANGUE_PUIS_FR):
     traduction), comme un set Quizlet anglais → anglais ; avec des virgules ou des
     points-virgules comme séparateur, tout ce qui suit le mot est la définition.
     """
-    lignes = [l for l in texte.replace("\r\n", "\n").split("\n") if l.strip() and not l.lstrip().startswith("#")]
+    # splitlines : fins de ligne Windows (CRLF), Unix (LF) et anciens Mac (CR seul, « CSV (Macintosh) »).
+    lignes = [l for l in texte.splitlines() if l.strip() and not l.lstrip().startswith("#")]
     if len(lignes) > MAX_LIGNES:
         raise PaquetInvalide(f"Trop de lignes ({len(lignes)}) : {MAX_LIGNES} au plus par paquet.")
     if not lignes:
@@ -162,7 +163,11 @@ def analyser_liste(texte, ordre=LANGUE_PUIS_FR):
     if sep == "=":
         rangs = [[part.strip() for part in l.split("=", 1)] for l in lignes]
     else:
-        rangs = list(csv.reader(io.StringIO("\n".join(lignes)), delimiter=sep, skipinitialspace=True))
+        try:
+            rangs = list(csv.reader(io.StringIO("\n".join(lignes)), delimiter=sep, skipinitialspace=True))
+        except csv.Error:
+            raise PaquetInvalide("Liste illisible : enregistre-la en texte (UTF-8), une ligne par mot, "
+                                 "le mot et sa traduction séparés par une tabulation ou un point-virgule.") from None
     fiches, ignorees = [], 0
     for rang in rangs:
         cellules = [_propre(c) for c in rang]
@@ -235,6 +240,17 @@ def options_vocabulaire(form):
     return options, erreur
 
 
+def decoder_liste(brut: bytes) -> str:
+    """Texte d'une liste de mots envoyée en fichier : UTF-8 (avec ou sans BOM), UTF-16 (export
+    « Texte Unicode » d'Excel, reconnu à son BOM), sinon Windows-1252 (« ANSI »)."""
+    if brut.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return brut.decode("utf-16", errors="replace")
+    try:
+        return brut.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return brut.decode("cp1252", errors="replace")
+
+
 def lire_liste(form, fichier=None, aujourdhui=None):
     """Paquet de vocabulaire d'après une liste collée ou un fichier exporté (Quizlet,
     Anki, tableur) du formulaire : (paquet, options, lignes ignorées, erreur).
@@ -247,10 +263,7 @@ def lire_liste(form, fichier=None, aujourdhui=None):
         if len(brut) > TAILLE_MAX_LISTE:
             erreur = erreur or "Fichier trop gros (1 Mo au plus)."
         else:
-            try:
-                texte = brut.decode("utf-8-sig")
-            except UnicodeDecodeError:
-                texte = brut.decode("cp1252", errors="replace")
+            texte = decoder_liste(brut)
     ordre = form.get("ordre", LANGUE_PUIS_FR)
     if ordre not in ORDRES:
         ordre = LANGUE_PUIS_FR
