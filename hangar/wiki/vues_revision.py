@@ -216,8 +216,9 @@ def erreurs():
         db.session.commit()
         return redirect(url_for("wiki.erreurs"))
     liste = ErreurServeur.query.order_by(ErreurServeur.reglee, ErreurServeur.derniere.desc()).limit(100).all()
+    from .erreurs import masquer  # aussi pour les erreurs gardées par une version plus ancienne
     return render("wiki/erreurs.html", ouvertes=[e for e in liste if not e.reglee],
-                  reglees=[e for e in liste if e.reglee])
+                  reglees=[e for e in liste if e.reglee], masquer=masquer)
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,8 @@
 - 5 mots de passe faux pour un même identifiant depuis une même adresse IP → connexion bloquée
   30 minutes pour ce couple ;
 - 20 échecs depuis une même adresse, tous identifiants confondus → l'adresse est bloquée 30 minutes
-  (essais en série sur plusieurs comptes) ;
+  (essais en série sur plusieurs comptes), sauf l'adresse de cet ordinateur (127.0.0.1, ::1) : derrière un
+  tunnel ou un proxy mal réglé, tous les visiteurs ont cette adresse, et un inconnu bloquerait tout le monde ;
 - une connexion réussie efface les échecs de ce couple ; un administrateur débloque depuis son
   profil (« Connexions bloquées ») ou par `uv run hangar connexions-debloquer [identifiant]` ;
   changer le mot de passe d'un compte (lui-même ou un admin) efface aussi ses blocages.
@@ -74,6 +75,19 @@ def ip_client() -> str:
     return request.remote_addr or ""
 
 
+def _bouclage(ip) -> bool:
+    """Adresse de cet ordinateur (127.0.0.1, ::1…) ?"""
+    try:
+        return ipaddress.ip_address(ip).is_loopback
+    except ValueError:
+        return False
+
+
+def _par_adresse(ip) -> bool:
+    """Le blocage de toute l'adresse (LIMITE_IP) s'applique-t-il ? Pas à la boucle locale (voir l'en-tête)."""
+    return bool(ip) and not _bouclage(ip)
+
+
 def _cle(identifiant):
     return (identifiant or "").strip().lower()[:120]
 
@@ -86,7 +100,7 @@ def bloque(identifiant: str, ip: str, now: datetime | None = None) -> int:
     fins = []
     if ligne and (ligne.echecs or 0) >= LIMITE and ligne.dernier and ligne.dernier > depuis:
         fins.append(ligne.dernier + DUREE)
-    if ip:
+    if _par_adresse(ip):
         total, dernier = db.session.query(func.sum(EchecConnexion.echecs), func.max(EchecConnexion.dernier)).filter(
             EchecConnexion.ip == ip, EchecConnexion.dernier > depuis).one()
         if (total or 0) >= LIMITE_IP and dernier:
@@ -142,7 +156,7 @@ def bloques(now: datetime | None = None) -> list[dict]:
             out.append({"identifiant": l.identifiant, "ip": l.ip, "echecs": l.echecs, "jusqua": l.dernier + DUREE,
                         "minutes": bloque(l.identifiant, l.ip, now), "adresse": False})
     for ip, total in par_ip.items():
-        if ip and total >= LIMITE_IP:
+        if _par_adresse(ip) and total >= LIMITE_IP:
             out.append({"identifiant": "", "ip": ip, "echecs": total, "jusqua": None,
                         "minutes": bloque("", ip, now), "adresse": True})
     return out

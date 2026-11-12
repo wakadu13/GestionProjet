@@ -225,6 +225,11 @@ def send_report(rid):
     if not addresses:
         flash("Choisis au moins un destinataire avec une adresse e-mail valide.", "error")
         return redirect(url_for("bilan.report", rid=rid))
+    refus = mailer.refus_envoi(current_user, [a for a, _ in addresses])
+    if refus:
+        flash(refus, "error")
+        return redirect(url_for("bilan.report", rid=rid))
+    reply_to = current_user.contact_email if mailer.valid_email(current_user.contact_email) else None
     note = (request.form.get("message") or "").strip()
     body = mailer.absolutize_links(str(render_markdown(bilan_markdown(r.data, _manual(r), r.title))), cfg)
     intro = f"<p>{escape(note)}</p>" if note else ""
@@ -236,9 +241,12 @@ def send_report(rid):
         if addr.lower() in seen:
             continue
         seen.add(addr.lower())
-        mailer.queue_email(addr, f"[Bilan] {r.title}", html, kind="bilan", to_user=u, created_by=current_user)
+        mailer.queue_email(addr, f"[Bilan] {r.title}", html, kind="bilan", to_user=u, created_by=current_user,
+                           reply_to=reply_to)
     db.session.commit()
-    where = "envoyé(s) par SMTP" if (cfg.enabled and cfg.mode == "smtp") else "déposé(s) dans la boîte d’envoi locale (data/outbox)"
+    # Même règle que l'envoi (mailer.send_pending) : « Activer les e-mails automatiques » n'y joue pas.
+    where = ("envoyé(s) par e-mail" if (cfg.mode == "smtp" and cfg.smtp_host)
+             else "déposé(s) dans la boîte d’envoi locale (data/outbox)")
     flash(f"{len(seen)} e-mail(s) {where} dans quelques secondes.", "success")
     for b in bad:
         flash(f"Adresse ignorée (invalide) : {b}", "error")

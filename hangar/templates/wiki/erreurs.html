@@ -26,12 +26,12 @@
   <details class="panel erreur">
     <summary>
       <span class="erreur-t"><b>{{ e.type }}</b> <span class="badge">{{ e.nombre }} fois</span> <span class="muted small">dernière {{ e.derniere|ago }}</span></span>
-      <span class="erreur-message">{{ e.message|truncate(200) }}</span>
+      <span class="erreur-message">{{ masquer(e.message)|truncate(200) }}</span>
     </summary>
     <div class="erreur-detail">
-      <p class="muted small">{% if e.methode %}{{ e.methode }} {% endif %}<code>{{ e.chemin }}</code>{% if e.utilisateur %} · @{{ e.utilisateur }}{% endif %}
+      <p class="muted small">{% if e.methode %}{{ e.methode }} {% endif %}<code>{{ masquer(e.chemin) }}</code>{% if e.utilisateur %} · @{{ e.utilisateur }}{% endif %}
         · première le {{ e.premiere|datetime }}{% if e.lieu %} · <code>{{ e.lieu }}</code>{% endif %}</p>
-      <pre class="erreur-trace">{{ e.trace }}</pre>
+      <pre class="erreur-trace">{{ masquer(e.trace) }}</pre>
       <form method="post">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ e.id }}">
         <button class="btn btn-sm" name="action" value="reglee">{{ icon('check', 14) }} Marquer comme réglée</button></form>
     </div>
@@ -42,7 +42,7 @@
     <summary>Réglées ({{ reglees|length }})</summary>
     <div class="panel wiki-list">
       {% for e in reglees %}
-      <div class="wiki-row"><span class="grow ellipsis">{{ e.type }} · {{ e.message|truncate(90) }}</span><span class="muted small nowrap">{{ e.nombre }} fois</span>
+      <div class="wiki-row"><span class="grow ellipsis">{{ e.type }} · {{ masquer(e.message)|truncate(90) }}</span><span class="muted small nowrap">{{ e.nombre }} fois</span>
         <form method="post">{{ ui.csrf() }}<input type="hidden" name="pk" value="{{ e.id }}"><button class="btn btn-xs btn-ghost" name="action" value="rouvrir">Rouvrir</button></form></div>
       {% endfor %}
     </div>

@@ -6,6 +6,7 @@ modules, vues enregistrées, pages (wiki), intake (triage), notifications, temps
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
 from datetime import date, datetime, timedelta
@@ -131,6 +132,9 @@ class Workspace(db.Model):
     emoji = db.Column(db.String(16), default="✈️")
     description = db.Column(db.Text, default="")
     allow_signup = db.Column(db.Boolean, default=False)
+    # « Qui es-tu ? » sur la page de connexion pour les visiteurs du réseau local (toujours sur cet ordinateur,
+    # jamais derrière un proxy ou un tunnel : voir views/auth.py::_montrer_comptes)
+    login_accounts = db.Column(db.Boolean, default=True)
     week_starts_monday = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=now)
 
@@ -142,6 +146,9 @@ class Workspace(db.Model):
             db.session.add(ws)
             db.session.commit()
         return ws
+
+
+MOT_DE_PASSE_MIN = 8  # longueur minimale d'un nouveau mot de passe (les anciens, plus courts, restent valables)
 
 
 class User(UserMixin, db.Model):
@@ -166,6 +173,8 @@ class User(UserMixin, db.Model):
     contact_email = db.Column(db.String(200))
     email_prefs = db.Column(db.String(10), default="instant")  # instant | digest | off
     email_reminders = db.Column(db.Boolean, default=True)
+    # « Déconnecter mes autres appareils » : +1 rend caduques toutes les sessions ouvertes (voir get_id)
+    session_version = db.Column(db.Integer, default=0)
 
     memberships = db.relationship("ProjectMember", back_populates="user", cascade="all, delete-orphan")
 
@@ -173,6 +182,36 @@ class User(UserMixin, db.Model):
     @property
     def is_active(self):  # type: ignore[override]
         return bool(self.active)
+
+    def get_id(self) -> str:
+        """Ce que gardent la session et le cookie « Rester connecté » : « numéro:empreinte ».
+
+        L'empreinte (HMAC avec la clé secrète de data/secret.key) dépend du mot de passe et de
+        `session_version` : changer de mot de passe, le faire réinitialiser ou « Déconnecter mes autres
+        appareils » rend caducs tous les anciens cookies, et le cookie d'un compte supprimé n'ouvre pas le
+        compte créé ensuite avec le même numéro."""
+        return f"{self.id}:{self.empreinte_session()}"
+
+    def empreinte_session(self) -> str:
+        from flask import current_app
+        cle = str(current_app.config["SECRET_KEY"]).encode()
+        msg = f"{self.id}|{self.password_hash}|{self.session_version or 0}".encode()
+        return hmac.new(cle, msg, hashlib.sha256).hexdigest()[:32]
+
+    @classmethod
+    def depuis_session(cls, valeur) -> "User | None":
+        """Compte d'une session ou d'un cookie « Rester connecté » (chargeur de Flask-Login), ou None.
+
+        Refuse sans erreur l'ancien format (numéro seul, écrit avant cette version : il suffit de se
+        reconnecter une fois), une empreinte qui ne correspond plus et un compte désactivé. Un cookie
+        « Rester connecté » refusé est effacé du navigateur."""
+        uid, _, empreinte = str(valeur or "").partition(":")
+        user = db.session.get(cls, int(uid)) if uid.isdigit() and empreinte else None
+        if (user is not None and user.active
+                and hmac.compare_digest(empreinte.encode(), user.empreinte_session().encode())):
+            return user
+        _oublier_cookie(valeur)
+        return None
 
     @staticmethod
     def internal_email(username: str) -> str:
@@ -211,6 +250,17 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f"<User {self.username}>"
+
+
+def _oublier_cookie(valeur) -> None:
+    """Le cookie « Rester connecté » porte une valeur refusée : Flask-Login l'efface à la réponse."""
+    from flask import current_app, has_request_context, request, session
+    from flask_login.utils import decode_cookie
+    if not has_request_context():
+        return
+    nom = current_app.config.get("REMEMBER_COOKIE_NAME", "remember_token")
+    if nom in request.cookies and decode_cookie(request.cookies[nom]) == valeur:
+        session["_remember"] = "clear"
 
 
 class APIToken(db.Model):
@@ -879,6 +929,9 @@ class MailConfig(db.Model):
     send_reminders = db.Column(db.Boolean, default=True)
     send_digest = db.Column(db.Boolean, default=True)
     send_bilan = db.Column(db.Boolean, default=True)
+    # Les membres (non administrateurs) peuvent-ils écrire à des adresses hors de l'équipe (rédaction, bilan) ?
+    # Les messages partent de l'adresse de l'expéditeur configurée (souvent le Gmail d'un administrateur).
+    members_external = db.Column(db.Boolean, default=False)
     last_reminder_date = db.Column(db.Date)
     last_digest_date = db.Column(db.Date)
     last_bilan_date = db.Column(db.Date)

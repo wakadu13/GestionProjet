@@ -41,15 +41,23 @@
       <div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>
     </form>
 
-    <h2 id="password">Mot de passe</h2><p class="help">6 caractères minimum.</p>
+    <h2 id="password">Mot de passe</h2><p class="help">8 caractères minimum. Le changer déconnecte tes autres navigateurs (et leurs cookies « Rester connecté »), ainsi que l’application Android.</p>
     <form method="post" action="{{ url_for('settings.password') }}" class="panel panel-b">
       {{ ui.csrf() }}
       <div class="field"><label>Mot de passe actuel</label><input class="input" type="password" name="current" required autocomplete="current-password"></div>
       <div class="grid-2">
-        <div class="field"><label>Nouveau mot de passe</label><input class="input" type="password" name="new" required minlength="6" autocomplete="new-password"></div>
-        <div class="field"><label>Confirmation</label><input class="input" type="password" name="confirm" required minlength="6" autocomplete="new-password"></div>
+        <div class="field"><label>Nouveau mot de passe</label><input class="input" type="password" name="new" required minlength="8" autocomplete="new-password"></div>
+        <div class="field"><label>Confirmation</label><input class="input" type="password" name="confirm" required minlength="8" autocomplete="new-password"></div>
       </div>
       <div class="form-actions"><button class="btn btn-primary">Changer le mot de passe</button></div>
+    </form>
+
+    <h2 id="sessions" class="mt-lg">Navigateurs connectés</h2>
+    <p class="help">Tu as oublié de te déconnecter sur un autre ordinateur ? Ferme toutes tes sessions sauf celle-ci. Les jetons d’API (Réglages › Jetons d’API) se révoquent à part.</p>
+    <form method="post" action="{{ url_for('settings.fermer_sessions') }}" class="panel panel-b" data-confirm="Déconnecter tous tes autres navigateurs ?">
+      {{ ui.csrf() }}
+      <label class="checkbox mb"><input type="checkbox" name="appareils" value="1"> Déconnecter aussi l’application Android</label>
+      <div class="form-actions"><button class="btn">{{ icon('x', 14) }} Déconnecter mes autres appareils</button></div>
     </form>
 
     {# Application Android (jetons d'appareil, hangar/appareils.py) #}
@@ -76,7 +84,7 @@
     {% if current_user.is_admin %}
     {% set bloques = connexions_bloquees() %}
     <h2 id="connexions" class="mt-lg">Connexions bloquées</h2>
-    <p class="help">Après 5 mots de passe faux pour un identifiant depuis une même adresse (ou 20 depuis une adresse, tous comptes confondus), la connexion est bloquée 30 minutes.</p>
+    <p class="help">Après 5 mots de passe faux pour un identifiant depuis une même adresse (ou 20 depuis une adresse, tous comptes confondus, sauf depuis cet ordinateur), la connexion est bloquée 30 minutes.</p>
     <div class="panel">
       {% if bloques %}
       {% for b in bloques %}

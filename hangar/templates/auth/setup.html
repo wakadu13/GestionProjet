@@ -18,7 +18,7 @@
         <div class="field"><label>Nom</label><input class="input" name="last_name" value="{{ form.get('last_name', '') }}"></div>
       </div>
       <div class="field"><label>Identifiant de connexion</label><input class="input" name="username" value="{{ form.get('username', '') }}" required pattern="[a-z0-9_.\-]{2,60}" placeholder="ex. awacogne"><span class="help">Minuscules, chiffres, point, tiret ou souligné.</span></div>
-      <div class="field"><label>Mot de passe</label><input class="input" type="password" name="password" required minlength="6"><span class="help">6 caractères minimum.</span></div>
+      <div class="field"><label>Mot de passe</label><input class="input" type="password" name="password" required minlength="8"><span class="help">8 caractères minimum.</span></div>
       <button class="btn btn-primary w-full" style="height:38px">Créer l’espace</button>
       <p class="help mt center-text">Astuce : <code>uv run hangar demo</code> crée à la place un espace d’exemple avec l’équipe et le planning du projet.</p>
     </form>

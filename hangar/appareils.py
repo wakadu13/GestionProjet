@@ -211,8 +211,11 @@ def _sans_cache(reponse):
 
 @bp.route("/api/appareil/connexion/", methods=["POST"])
 def connexion():
-    """{"username", "password", "appareil"} → {"jeton", "joueur"} ; les échecs comptent pour le blocage."""
-    data = request.get_json(silent=True, force=True)
+    """{"username", "password", "appareil"} → {"jeton", "joueur"} ; les échecs comptent pour le blocage.
+
+    Exige « Content-Type: application/json » (l'appli l'envoie) : une page web d'un autre site ne peut pas
+    l'envoyer sans autorisation, et ne peut donc pas faire bloquer un compte en série à ton insu."""
+    data = request.get_json(silent=True)
     try:
         username, password = str(data["username"]), str(data["password"])
     except (KeyError, TypeError):

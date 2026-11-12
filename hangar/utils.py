@@ -365,7 +365,16 @@ def greeting() -> str:
 # ---------------------------------------------------------------------------
 
 def is_safe_next(target: str | None) -> bool:
-    return bool(target) and target.startswith("/") and not target.startswith("//")
+    """Adresse de retour sur Hangar même (« /… ») : ni schéma ni hôte, un seul « / » au début. Refuse tout
+    caractère de contrôle (une tabulation retirée en écrivant l'en-tête ferait de « /<tab>/site » un « //site »
+    externe) et toute barre oblique inverse (lue comme « / » par les navigateurs)."""
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return False
+    if "\\" in target or any(ord(ch) < 32 or ord(ch) == 127 for ch in target):
+        return False
+    from urllib.parse import urlsplit
+    parts = urlsplit(target)
+    return not parts.scheme and not parts.netloc and parts.path.startswith("/") and not parts.path.startswith("//")
 
 
 def back_url(default: str) -> str:

@@ -171,6 +171,38 @@ def queue_email(to_address: str, subject: str, html: str, text: str | None = Non
     return msg
 
 
+MAX_EXTERIEURS = 20   # adresses hors de l'équipe par message, pour un membre
+PLAFOND_JOUR = 100    # e-mails écrits à la main (rédaction, bilan) par un membre sur 24 h
+
+
+def refus_envoi(user: User, adresses) -> str | None:
+    """Un membre (non administrateur) peut-il envoyer ce message (rédaction ou bilan) à ces adresses ?
+
+    Renvoie None, ou la raison du refus à afficher. Les messages partent de l'adresse configurée par
+    l'administrateur (souvent son Gmail) : hors de l'équipe seulement si le réglage le permet, 20 adresses
+    extérieures au plus par message, et 100 e-mails au plus par 24 h (rédaction et bilans de ce compte)."""
+    if user.is_admin:
+        return None
+    adresses = {a.strip().lower() for a in adresses if a}
+    equipe = {u.contact_email.strip().lower() for u in User.query.filter(User.active.is_(True))
+              if valid_email(u.contact_email)}
+    dehors = sorted(adresses - equipe)
+    if dehors and not MailConfig.get().members_external:
+        return ("Tu ne peux écrire qu’aux membres de l’équipe : l’envoi hors de l’équipe ("
+                + ", ".join(dehors[:3]) + ("…" if len(dehors) > 3 else "")
+                + ") doit être autorisé par un administrateur, dans Réglages › E-mails.")
+    if len(dehors) > MAX_EXTERIEURS:
+        return (f"{MAX_EXTERIEURS} destinataires hors de l’équipe au plus par message (tu en as mis {len(dehors)}) : "
+                "découpe ton envoi ou demande à un administrateur.")
+    deja = EmailMessage.query.filter(EmailMessage.created_by_id == user.id,
+                                     EmailMessage.kind.in_(("manual", "bilan")),
+                                     EmailMessage.created_at >= now() - timedelta(hours=24)).count()
+    if deja + len(adresses) > PLAFOND_JOUR:
+        return (f"Plafond atteint : {PLAFOND_JOUR} e-mails par 24 heures au plus (déjà {deja} depuis hier à la même "
+                f"heure, ce message en ajouterait {len(adresses)}). Réessaie plus tard ou demande à un administrateur.")
+    return None
+
+
 def deadline(m: EmailMessage) -> datetime:
     """Date limite d'envoi d'un message (au-delà, un message en échec n'est plus réessayé ni renvoyé)."""
     return m.expires_at or (m.created_at or now()) + DEFAULT_LIFETIME

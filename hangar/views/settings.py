@@ -10,7 +10,7 @@ from flask_login import current_user, login_required
 
 from .. import sauvegarde
 from ..extensions import db
-from ..models import PALETTE, APIToken, User, Workspace, now
+from ..models import MOT_DE_PASSE_MIN, PALETTE, APIToken, User, Workspace, now
 from ..securite import clean_color
 from ..seed import DEMO_PASSWORD
 from ..services import to_int
@@ -63,8 +63,8 @@ def password():
     u = current_user
     if not u.check_password(request.form.get("current", "")):
         flash("Mot de passe actuel incorrect.", "error")
-    elif len(request.form.get("new", "")) < 6:
-        flash("Le nouveau mot de passe doit contenir au moins 6 caractères.", "error")
+    elif len(request.form.get("new", "")) < MOT_DE_PASSE_MIN:
+        flash(f"Le nouveau mot de passe doit contenir au moins {MOT_DE_PASSE_MIN} caractères.", "error")
     elif request.form.get("new") != request.form.get("confirm"):
         flash("Les deux mots de passe ne correspondent pas.", "error")
     elif request.form.get("new") == DEMO_PASSWORD:
@@ -73,9 +73,43 @@ def password():
         u.set_password(request.form["new"])
         u.must_change_password = False
         db.session.commit()
-        flash("Mot de passe modifié.", "success")
+        _garder_cette_session(u)  # les autres navigateurs et cookies « Rester connecté » sont déconnectés
+        flash("Mot de passe modifié. Tes autres navigateurs sont déconnectés.", "success")
         return redirect(url_for("agenda.dashboard"))
     return redirect(url_for("settings.profile", must_change=1 if u.must_change_password else None))
+
+
+def _garder_cette_session(u) -> None:
+    """Après un changement de mot de passe ou de `session_version`, toutes les sessions du compte sont caduques
+    (models.User.get_id) : celle-ci est rouverte, avec « Rester connecté » seulement si ce cookie existait.
+    Une session ouverte par l'application Android reste liée à son jeton (révoqué ou non)."""
+    from flask import session
+    from flask_login import login_user
+
+    from ..appareils import SESSION_JETON
+    jeton = session.get(SESSION_JETON)
+    nom = current_app.config.get("REMEMBER_COOKIE_NAME", "remember_token")
+    login_user(u, remember=nom in request.cookies)
+    if jeton is not None:
+        session[SESSION_JETON] = jeton
+
+
+@bp.route("/sessions/fermer", methods=["POST"])
+@login_required
+def fermer_sessions():
+    """« Déconnecter mes autres appareils » : navigateurs et cookies « Rester connecté », sauf celui-ci ;
+    les applications Android (jetons d'appareil) seulement si la case est cochée."""
+    u = current_user
+    u.session_version = (u.session_version or 0) + 1
+    n = 0
+    if request.form.get("appareils"):
+        from ..appareils import JetonAppareil
+        n = JetonAppareil.query.filter_by(user_id=u.id).delete(synchronize_session=False)
+    db.session.commit()
+    _garder_cette_session(u)
+    flash("Tes autres navigateurs sont déconnectés" + (f", ainsi que {n} application(s) Android" if n else "")
+          + ".", "success")
+    return redirect(url_for("settings.profile") + "#sessions")
 
 
 @bp.route("/workspace", methods=["GET", "POST"])
@@ -88,6 +122,7 @@ def workspace():
         ws.emoji = (request.form.get("emoji") or ws.emoji).strip()[:16]
         ws.description = request.form.get("description", "")
         ws.allow_signup = bool(request.form.get("allow_signup"))
+        ws.login_accounts = bool(request.form.get("login_accounts"))
         db.session.commit()
         flash("Espace de travail mis à jour.", "success")
         return redirect(url_for("settings.workspace"))

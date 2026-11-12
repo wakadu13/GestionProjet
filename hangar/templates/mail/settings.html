@@ -62,6 +62,8 @@
         <div class="field"><label>Adresse de Hangar (liens)</label><input class="input" name="base_url" value="{{ cfg.base_url or 'http://127.0.0.1:5000' }}"><span class="help">Ex. http://192.168.1.20:5000 si partagé sur le réseau.</span></div>
       </div>
 
+      <label class="switch mb"><input type="checkbox" name="members_external" value="1" {% if cfg.members_external %}checked{% endif %}> <span><b>Les membres peuvent écrire hors de l’équipe</b> — depuis « Écrire un e-mail » et l’envoi d’un bilan, avec l’adresse d’expédition ci-dessus (20 adresses extérieures par message et 100 e-mails par jour au plus ; les administrateurs n’ont pas de limite)</span></label>
+
       <h3 class="mb mt">{{ icon('clock', 15) }} Automatisations</h3>
       <div class="col" style="gap:10px">
         <label class="switch"><input type="checkbox" name="send_notifications" value="1" {% if cfg.send_notifications %}checked{% endif %}> <span><b>Notifications instantanées</b> — assignation, mention, commentaire, changement sur un ticket suivi</span></label>
