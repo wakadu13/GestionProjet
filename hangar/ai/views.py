@@ -3,6 +3,7 @@ réglages des fournisseurs et usage, points d'entrée des fonctions d'IA de Revi
 from __future__ import annotations
 
 import os
+import re
 from urllib.parse import parse_qsl
 
 from flask import (
@@ -219,8 +220,16 @@ def contexte():
     if r is None:
         title = (request.args.get("title") or "").split(" · ")[0].strip() or "Page"
         return jsonify(ok=True, known=False, context={"type": "page", "title": title[:120], "icon": "page", "url": path})
-    return jsonify(ok=True, known=True, context={k: r[k] for k in ("type", "title", "icon", "url")},
-                   size=len(r.get("text") or ""))
+    from .chat import page_limit
+    try:
+        limit = page_limit(core.pick("chat"))
+    except AIError:
+        limit = page_limit(None)
+    ctx = {k: r[k] for k in ("type", "title", "icon", "url")}
+    taille = r.get("size") or len(r.get("text") or "")
+    # Pastille « page coupée » : le modèle ne recevra que des extraits de cette page.
+    ctx.update(taille=taille, transmis=min(taille, limit), coupee=taille > limit)
+    return jsonify(ok=True, known=True, context=ctx, size=taille)
 
 
 @bp.route("/ia/mentions")
@@ -295,6 +304,7 @@ def reglages():
     me = current_user.id
     usage = {
         "mine": core.month_cost(user_id=me), "total": core.month_cost(),
+        "reserved": core.reserved_cost(), "lots": AIJob.query.filter_by(status="batch").count(),
         "mine_calls": AIUsage.query.filter(AIUsage.user_id == me, AIUsage.created_at >= start).count(),
         "by_feature": core.usage_rows(start, user_id=None if admin else me, group="feature"),
         "by_model": core.usage_rows(start, user_id=None if admin else me, group="model"),
@@ -311,6 +321,7 @@ def reglages():
         errors=AIErrorLog.query.order_by(AIErrorLog.id.desc()).limit(30).all() if admin else [],
         jobs=AIJob.query.order_by(AIJob.id.desc()).limit(15).all() if admin else [],
         env_keys={p.id: bool(p.env_name() and os.environ.get(p.env_name())) for p in providers},
+        price_notes={p.id: core.price_notes(p) for p in providers} if admin else {},
     )
 
 
@@ -321,9 +332,26 @@ def _float(v, default=0.0) -> float:
         return default
 
 
-def _apply_provider_form(p: AIProvider, f, is_new: bool) -> str | None:
+_ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def env_name_ok(name: str) -> bool:
+    """Nom de variable d'environnement acceptable pour une clé d'API (« MISTRAL_API_KEY », « MA_CLE_API »…) : pas
+    n'importe quelle variable du système (mot de passe, clé secrète de Hangar), dont la valeur partirait vers le
+    serveur indiqué."""
+    up = name.upper()
+    return bool(_ENV_NAME_RE.fullmatch(name)) and any(w in up for w in ("KEY", "TOKEN", "CLE")) \
+        and not any(w in up for w in ("SECRET", "PASSWORD", "PASSWD", "MOT_DE_PASSE", "MDP"))
+
+
+def _apply_provider_form(p: AIProvider, f, is_new: bool, notes: list | None = None) -> str | None:
     preset = f.get("preset") or p.preset or "custom"
     info = P.PRESET_BY_KEY.get(preset, P.PRESET_BY_KEY["custom"])
+    env = (f.get("api_key_env") or "").strip()[:120]
+    if env and env != (p.api_key_env or "") and not env_name_ok(env):  # un nom déjà enregistré reste accepté
+        return ("Variable d’environnement refusée : son nom doit désigner une clé d’API (par exemple MISTRAL_API_KEY "
+                "ou MA_CLE_API).")
+    old_origin = None if is_new else P.origin(p.base_url, p.kind)
     p.preset = preset
     p.kind = info["kind"]
     p.name = (f.get("name") or "").strip()[:120] or info["label"]
@@ -339,7 +367,13 @@ def _apply_provider_form(p: AIProvider, f, is_new: bool) -> str | None:
         p.api_key = key
     elif f.get("clear_key"):
         p.api_key = ""
-    p.api_key_env = (f.get("api_key_env") or "").strip()[:120]
+    elif p.api_key and old_origin is not None and P.origin(p.base_url, p.kind) != old_origin:
+        # La clé enregistrée est liée à l'adresse : elle ne part pas vers un autre serveur sans être retapée.
+        p.api_key = ""
+        if notes is not None:
+            notes.append("Adresse changée : la clé enregistrée a été effacée par sécurité. Retape-la si ce serveur en "
+                         "a besoin.")
+    p.api_key_env = env
     p.model = (f.get("model") or "").strip()[:200]
     p.model_fast = (f.get("model_fast") or "").strip()[:200]
     p.model_vision = (f.get("model_vision") or "").strip()[:200]
@@ -387,13 +421,16 @@ def provider_create():
 def provider_update(pid):
     _admin()
     p = db.session.get(AIProvider, pid) or abort(404)
-    err = _apply_provider_form(p, request.form, False)
+    notes: list = []
+    err = _apply_provider_form(p, request.form, False, notes)
     if err:
         db.session.rollback()
         flash(err, "error")
     else:
         db.session.commit()
         flash(f"Fournisseur « {p.name} » enregistré.", "success")
+        for n in notes:
+            flash(n, "info")
     return redirect(url_for("ai.reglages") + f"#fournisseur-{pid}")
 
 
@@ -425,10 +462,13 @@ def _transient_provider() -> AIProvider:
     """Fournisseur décrit par le formulaire (non enregistré), pour tester avant d'enregistrer."""
     f = request.form
     existing = db.session.get(AIProvider, f.get("id", type=int) or 0)
-    p = AIProvider(id=existing.id if existing else None, enabled=True, roles="chat")
+    p = AIProvider(id=existing.id if existing else None, enabled=True, roles="chat",
+                   api_key_env=existing.api_key_env if existing else "")
     with db.session.no_autoflush:
         _apply_provider_form(p, f, True)
-        if not (f.get("api_key") or "").strip() and existing is not None and not f.get("clear_key"):
+        if not (f.get("api_key") or "").strip() and existing is not None and not f.get("clear_key") \
+                and P.origin(p.base_url, p.kind) == P.origin(existing.base_url, existing.kind):
+            # Clé enregistrée reprise seulement pour la même adresse (sinon elle partirait vers un autre serveur).
             p.api_key = existing.api_key
     if p in db.session:
         db.session.expunge(p)
@@ -440,6 +480,11 @@ def _transient_provider() -> AIProvider:
 def provider_try():
     """Tester la connexion et lister les modèles d'après le formulaire, avant d'enregistrer."""
     _admin()
+    env = (request.form.get("api_key_env") or "").strip()
+    existing = db.session.get(AIProvider, request.form.get("id", type=int) or 0)
+    if env and env != (existing.api_key_env if existing else "") and not env_name_ok(env):
+        return jsonify(ok=False, error="Variable d’environnement refusée : son nom doit désigner une clé d’API "
+                                       "(par exemple MISTRAL_API_KEY ou MA_CLE_API).")
     p = _transient_provider()
     what = request.form.get("what") or "test"
     try:

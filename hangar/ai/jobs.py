@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime, timedelta
 from typing import Callable
 
 from flask import current_app
@@ -34,6 +35,9 @@ from .providers import AIError, Result
 log = logging.getLogger(__name__)
 
 BATCH_POLL_S = 600
+BATCH_MAX_DAYS = 29        # Anthropic garde les résultats d'un lot 29 jours
+LOT_ECHEC_DEFINITIF = ("cle", "acces", "modele", "lot")  # relève impossible : inutile de réessayer
+ANNULE = "Annulé à ta demande."
 _HANDLERS: dict[str, Callable] = {}
 _lock = threading.Lock()
 _worker: threading.Thread | None = None
@@ -42,6 +46,17 @@ _resumed = False
 
 class Deferred(Exception):
     """La requête est partie dans un lot : le travail reprendra à l'arrivée des résultats."""
+
+
+class Annule(Exception):
+    """Le travail a été annulé pendant qu'il tournait (bouton « Annuler ») : on s'arrête sans rien écrire."""
+
+
+def _annule(job: AIJob) -> bool:
+    """Vrai si le travail n'est plus « en cours » en base (annulé depuis une autre requête). Sans écrire d'abord
+    les changements en mémoire (un brouillon « draft » pas encore enregistré n'est pas une annulation)."""
+    with db.session.no_autoflush:
+        return db.session.query(AIJob.status).filter(AIJob.id == job.id).scalar() != "running"
 
 
 def register_job(kind: str):
@@ -65,7 +80,7 @@ def enqueue(kind: str, payload: dict | None = None, *, user=None, feature: str =
 
 
 def _bound_ai(job: AIJob):
-    state = {"i": 0}
+    state = {"i": 0, "warnings": []}
 
     def ai(messages, **kw):
         i = state["i"]
@@ -82,18 +97,25 @@ def _bound_ai(job: AIJob):
         kw.pop("stream", None)
         kw.setdefault("user", job.user_id)
         kw.setdefault("feature", job.feature or job.kind)
+        if _annule(job):
+            raise Annule()
         if job.options.get("batch"):
             gen_kw = {k: v for k, v in kw.items() if k not in ("user", "feature", "allow_refusal")}
             row, prov, req = core.prepare(messages, **gen_kw)
             if prov.supports_batch:
+                # Coût au plus du lot, réservé jusqu'à son retour : le plafond mensuel le compte dès maintenant.
+                reserve = core.estimate_request_cost(row, req, batch=True)
                 batch_id, files = prov.batch_submit([(f"job{job.id}-{i}", req)])
                 opts = job.options
-                opts.update(files=files, batch_call=i)
+                opts.update(files=files, batch_call=i, reserve=reserve, batch_at=now().isoformat())
                 job.options, job.batch_id, job.provider_id = opts, batch_id, row.id
                 job.status, job.message = "batch", "Dans un lot : résultat sous 24 heures, moitié prix."
                 db.session.commit()
                 raise Deferred()
         r = core.generate(messages, **kw)
+        if _annule(job):  # annulé pendant l'appel : rien n'est gardé ni écrit
+            raise Annule()
+        state["warnings"] += [w for w in r.warnings if w not in state["warnings"]]
         calls = job.calls
         calls += [None] * (i + 1 - len(calls))
         calls[i] = r.to_dict()
@@ -101,6 +123,7 @@ def _bound_ai(job: AIJob):
         db.session.commit()
         return r
 
+    ai.warnings = state["warnings"]
     return ai
 
 
@@ -114,13 +137,21 @@ def run_job(job: AIJob) -> None:
     if (job.message or "").startswith("Dans un lot"):
         job.message = ""
     db.session.commit()
+    ai = _bound_ai(job)
     try:
-        result = handler(job, _bound_ai(job))
+        result = handler(job, ai)
+        if _annule(job):
+            raise Annule()
         if result is not None:
             job.result = result
         if job.status == "running":  # la fonction peut laisser un brouillon (« draft ») à relire
             job.status = "done"
+        if ai.warnings:  # ex. cours plus long que la mémoire du modèle local
+            job.message = " ".join([job.message or "", *ai.warnings]).strip()[:500]
     except Deferred:
+        return
+    except Annule:
+        db.session.rollback()  # l'annulation (statut et message) est déjà en base
         return
     except AIError as e:
         db.session.rollback()
@@ -173,13 +204,52 @@ def run_pending(limit: int | None = None) -> int:
         job = AIJob.query.filter_by(status="pending").order_by(AIJob.created_at, AIJob.id).first()
         if job is None:
             break
-        run_job(job)
+        jid = job.id
+        try:
+            run_job(job)
+        except Exception:
+            # Erreur hors du gestionnaire (base verrouillée au dernier enregistrement…) : le travail ne doit pas
+            # rester « En cours » jusqu'au prochain redémarrage ; il passe en échec, relançable.
+            db.session.rollback()
+            AIJob.query.filter_by(id=jid, status="running").update({
+                "status": "error", "finished_at": now(),
+                "message": "Travail interrompu par une erreur inattendue : tu peux le relancer."})
+            db.session.commit()
+            raise
         n += 1
     return n
 
 
+def annuler(job: AIJob) -> bool:
+    """Bouton « Annuler » : un travail en attente, en cours ou dans un lot passe en échec (relançable). Un lot est
+    aussi annulé chez Anthropic (les requêtes déjà traitées restent facturées). Un travail en cours s'arrête avant
+    son prochain appel à l'IA, ou dès la réponse de l'appel en cours, sans rien écrire. False s'il n'y a rien à
+    annuler ; AIError si Anthropic ne répond pas (le lot continue : réessaie)."""
+    if job.status not in ("pending", "running", "batch"):
+        return False
+    if job.status == "batch" and job.batch_id:
+        row = db.session.get(AIProvider, job.provider_id or 0)
+        if row is not None:
+            prov = P.get(row)
+            try:
+                prov.batch_cancel(job.batch_id)
+            except AIError as e:
+                if e.code not in LOT_ECHEC_DEFINITIF:
+                    raise AIError(f"Lot non annulé : {e.message}", e.code, e.status) from None
+            try:
+                prov.delete_files(job.options.get("files"))
+            except Exception:  # noqa: BLE001
+                pass
+    job.status, job.message, job.finished_at = "error", ANNULE, now()
+    db.session.commit()
+    return True
+
+
 def check_batches() -> int:
-    """Récupère les résultats des lots terminés ; les travaux concernés repassent « en attente »."""
+    """Récupère les résultats des lots terminés ; les travaux concernés repassent « en attente ». Un lot impossible
+    à relever (clé changée, lot introuvable ou expiré, déposé il y a plus de 29 jours) passe en échec, relançable ;
+    une panne passagère (réseau, service) est réessayée au passage suivant. Renvoie le nombre de travaux sortis
+    de l'état « Dans un lot »."""
     n = 0
     for job in AIJob.query.filter_by(status="batch").all():
         row = db.session.get(AIProvider, job.provider_id or 0)
@@ -192,8 +262,21 @@ def check_batches() -> int:
             out = prov.batch_poll(job.batch_id)
         except AIError as e:
             log.warning("Lot %s : %s", job.batch_id, e.message)
+            if e.code in LOT_ECHEC_DEFINITIF or _lot_perime(job):
+                _lot_en_echec(job, prov, e.message)
+                n += 1
+            continue
+        except Exception as e:  # noqa: BLE001 - une erreur imprévue ne doit ni bloquer les autres lots ni le fil
+            log.exception("Lot %s", job.batch_id)
+            db.session.rollback()
+            if _lot_perime(job):
+                _lot_en_echec(job, prov, f"erreur inattendue ({type(e).__name__}).")
+                n += 1
             continue
         if out is None:
+            if _lot_perime(job):
+                _lot_en_echec(job, prov, "il n’est toujours pas terminé.")
+                n += 1
             continue
         i = int(job.options.get("batch_call") or 0)
         r = out.get(f"job{job.id}-{i}")
@@ -215,6 +298,28 @@ def check_batches() -> int:
             pass
         n += 1
     return n
+
+
+def _lot_perime(job: AIJob) -> bool:
+    """Lot déposé il y a plus de 29 jours : ses résultats ne sont plus disponibles chez Anthropic."""
+    try:
+        depot = datetime.fromisoformat(job.options.get("batch_at") or "")
+    except (TypeError, ValueError):
+        depot = job.started_at or job.created_at
+    return depot is not None and now() - depot > timedelta(days=BATCH_MAX_DAYS)
+
+
+def _lot_en_echec(job: AIJob, prov, raison: str) -> None:
+    """Lot impossible à relever (clé changée, lot expiré, trop ancien) : le travail passe en échec, relançable, au
+    lieu de rester « Dans un lot » pour toujours."""
+    job.status, job.finished_at = "error", now()
+    job.message = f"Lot non récupéré : {raison} Tu peux relancer le travail."[:500]
+    db.session.commit()
+    try:
+        prov.delete_files(job.options.get("files"))
+    except Exception:  # noqa: BLE001
+        pass
+    notifier(job)
 
 
 def start_worker(app=None) -> None:

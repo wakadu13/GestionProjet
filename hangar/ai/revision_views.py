@@ -24,6 +24,8 @@ from .providers import AIError
 from .views import bp
 
 MAX_PHOTOS = 4
+PLAFOND_TRAVAUX = ("Plafond mensuel de l’IA atteint (travaux en lot compris) : réessaie le mois prochain ou relève le "
+                   "plafond dans les réglages de l’IA.")
 TAILLE_MAX_PHOTO = 15 * 1024 * 1024
 COTE_MAX = 1568   # au-delà, l'API réduit l'image de toute façon
 GARDER_COPIES = 30
@@ -80,7 +82,9 @@ def _question(set_id, question_id):
 @bp.route("/qcm/expliquer/", methods=["POST"])
 @login_required
 def expliquer():
-    """« Explique-moi » sur une question de QCM : explication par l'IA, gardée (une seule fois par question)."""
+    """« Explique-moi » sur une question de QCM : explication par l'IA, gardée (une seule fois par question, pour
+    tous les comptes). Une explication coupée par le plafond de longueur n'est pas gardée ; un administrateur peut
+    refaire une explication gardée (« refaire » : l'ancienne est effacée)."""
     from ..qcm.models import Explication
 
     data = _json_body()
@@ -90,21 +94,23 @@ def expliquer():
     qset, question = _question(set_id, question_id)
     if question is None:
         return jsonify(ok=False, error="question inconnue"), 404
+    admin = bool(current_user.is_admin)
     existante = Explication.query.filter_by(set_id=set_id, question_id=question_id).first()
-    if existante is not None:
-        return jsonify(html=_html(existante.texte), modele=existante.modele, gardee=True)
+    if existante is not None and not (admin and data.get("refaire")):
+        return jsonify(html=_html(existante.texte), modele=existante.modele, gardee=True, refaire=admin)
     if not _dispo():
         return _sans_ia()
     try:
         texte, usage, modele = demandes.expliquer(qset, question, user=current_user)
     except AIError as e:
         return _erreur(e)
-    e = Explication.query.filter_by(set_id=set_id, question_id=question_id).first() or \
-        Explication(set_id=set_id, question_id=question_id)
-    e.texte, e.modele, e.jetons_entree, e.jetons_sortie = texte, modele, usage[0], usage[1]
-    db.session.add(e)
-    db.session.commit()
-    return jsonify(html=_html(texte), modele=modele, gardee=False)
+    if not demandes.est_coupee(texte):  # coupée : montrée cette fois-ci, la prochaine demande refera l'appel
+        e = Explication.query.filter_by(set_id=set_id, question_id=question_id).first() or \
+            Explication(set_id=set_id, question_id=question_id)
+        e.texte, e.modele, e.jetons_entree, e.jetons_sortie = texte, modele, usage[0], usage[1]
+        db.session.add(e)
+        db.session.commit()
+    return jsonify(html=_html(texte), modele=modele, gardee=False, refaire=admin)
 
 
 @bp.route("/qcm/corriger-qrc/", methods=["POST"])
@@ -176,6 +182,9 @@ def generer_qcm():
         return redirect(url_for("ai.reglages"))
     genre = request.form.get("genre")
     retour = redirect(url_for("qcm.importer") + "#generer")
+    if core.cap_reached():  # vérifié dès le dépôt : un travail en lot ne part sinon qu'au-delà du plafond
+        flash(PLAFOND_TRAVAUX, "error")
+        return retour
 
     if genre == "qcm":
         cle = request.form.get("page", "").strip().removesuffix(".md")
@@ -306,8 +315,9 @@ def tuteur():
         return jsonify(ok=False, error="Plafond mensuel de l’IA atteint : le tuteur reviendra le mois prochain."), 429
     precedents = (AITutorExchange.query.filter_by(user_id=current_user.id, page=note.key)
                   .order_by(AITutorExchange.id.desc()).limit(demandes.HISTORIQUE_TUTEUR).all())[::-1]
+    page_texte = (vault.root / note.path).read_text(encoding="utf-8")
     try:
-        texte, usage, modele = demandes.tuteur(note, (vault.root / note.path).read_text(encoding="utf-8"), question,
+        texte, usage, modele = demandes.tuteur(note, page_texte, question,
                                                [(e.question, e.reponse) for e in precedents], user=current_user)
     except AIError as e:
         return _erreur(e)
@@ -315,7 +325,11 @@ def tuteur():
                                    reponse=texte, modele=modele, jetons_entree=usage[0], jetons_sortie=usage[1],
                                    cree_le=now()))
     db.session.commit()
-    return jsonify(html=_html(texte), modele=modele)
+    html = _html(texte)
+    if len(page_texte) > demandes.MAX_CHARS_COURS:
+        html = ('<p class="muted small">Page longue : le tuteur n’a lu que les passages liés à ta question, pas toute '
+                'la page.</p>' + html)
+    return jsonify(html=html, modele=modele, coupee=len(page_texte) > demandes.MAX_CHARS_COURS)
 
 
 def echange_html(e: AITutorExchange) -> dict:
@@ -480,16 +494,38 @@ def transformations():
     vault = _vault()
     if request.method == "POST":
         f = request.form
-        if not _dispo() and not (f.get("supprimer") or f.get("publier")):
+        envoi = request.files.get("fichier")
+        nouveau = bool(f.get("fiche") or f.get("pdf") or (envoi is not None and envoi.filename))
+        if jid := f.get("annuler", type=int):
+            try:
+                annule = jobs.annuler(db.session.get(AIJob, jid) or abort(404))
+            except AIError as e:
+                flash(e.message, "error")
+            else:
+                flash("Travail annulé." if annule else "Ce travail n’est plus en cours : rien à annuler.",
+                      "success" if annule else "info")
+        elif not _dispo() and not (f.get("supprimer") or f.get("publier")):
             flash("Aucun fournisseur d’IA : ajoute-en un dans les réglages.", "error")
+        elif nouveau and core.cap_reached():
+            flash(PLAFOND_TRAVAUX, "error")
         elif jid := f.get("relancer", type=int):
-            travaux.relancer(db.session.get(AIJob, jid) or abort(404))
-            flash("Travail relancé.", "success")
+            if travaux.relancer(db.session.get(AIJob, jid) or abort(404)):
+                flash("Travail relancé.", "success")
+            else:
+                flash("Ce travail n’est pas en échec : rien à relancer.", "info")
         elif f.get("verifier_lots"):
+            avant = [j.id for j in AIJob.query.filter_by(status="batch")]
             n = jobs.check_batches()
             jobs.start_worker()
-            flash(f"{n} travail{'aux' if n > 1 else ''} récupéré{'s' if n > 1 else ''}." if n
-                  else "Les lots ne sont pas encore traités : reviens plus tard.", "success" if n else "info")
+            echecs = AIJob.query.filter(AIJob.id.in_(avant), AIJob.status == "error").count() if avant else 0
+            if echecs:
+                flash(f"{echecs} lot{'s' if echecs > 1 else ''} en échec : lis le message du travail, puis "
+                      "relance-le si besoin.", "error")
+            if n > echecs:
+                flash(f"{n - echecs} travail{'aux' if n - echecs > 1 else ''} récupéré{'s' if n - echecs > 1 else ''}.",
+                      "success")
+            elif not echecs:
+                flash("Les lots ne sont pas encore traités : reviens plus tard.", "info")
         elif jid := f.get("publier", type=int):
             job = db.session.get(AIJob, jid) or abort(404)
             try:

@@ -112,12 +112,56 @@ def claude_supports_format(model: str) -> bool:
     return bool(_FORMAT_RE.search(model or ""))
 
 
-def claude_price(model: str) -> tuple[float, float, float] | None:
+_FAMILY_RE = re.compile(r"(fable|mythos|opus|sonnet|haiku)")
+
+
+def _exact_price(model: str) -> tuple[float, float, float] | None:
     model = (model or "").split("/")[-1]
     for key in sorted(CLAUDE_PRICES, key=len, reverse=True):
         if model == key or model.startswith(key + "-"):
             return CLAUDE_PRICES[key]
     return None
+
+
+def claude_family(model: str) -> str:
+    m = _FAMILY_RE.search((model or "").split("/")[-1])
+    return m.group(1) if m else ""
+
+
+def claude_price(model: str) -> tuple[float, float, float]:
+    """Tarif (entrée, sortie, lecture du cache) en $ par million de jetons. Un modèle absent de la table (ancien
+    modèle daté, modèle sorti depuis) est compté au tarif le plus cher de sa famille (Opus, Sonnet, Haiku…), sinon au
+    plus cher de la table : jamais 0, sinon le plafond mensuel ne le verrait pas."""
+    exact = _exact_price(model)
+    if exact:
+        return exact
+    family = claude_family(model)
+    prices = [v for k, v in CLAUDE_PRICES.items() if family and claude_family(k) == family]
+    return max(prices or CLAUDE_PRICES.values())
+
+
+def claude_price_known(model: str) -> bool:
+    return _exact_price(model) is not None
+
+
+def claude_can_disable_thinking(model: str, effort: str | None) -> bool:
+    """Seul Claude Haiku 5.5 accepte thinking {"type": "disabled"}, et seulement jusqu'à l'effort « high » (400 au-delà).
+    Opus 5.5, Sonnet 5.5 et Fable le refusent : leur réflexion ne se coupe pas."""
+    return (model or "").split("/")[-1].startswith("claude-haiku-5-5") and (effort or "medium") in ("low", "medium", "high")
+
+
+def origin(url: str, kind: str = "openai_compatible") -> str:
+    """Schéma, hôte et port d'une adresse (« https://openrouter.ai:443 ») : la clé d'API enregistrée est liée à
+    cette origine. Claude sans adresse = l'API d'Anthropic."""
+    url = (url or "").strip()
+    if not url and kind == "anthropic":
+        url = "https://api.anthropic.com"
+    parts = urllib.parse.urlsplit(url)
+    try:
+        port = parts.port or {"http": 80, "https": 443}.get(parts.scheme, 0)
+    except ValueError:
+        port = 0
+    return f"{parts.scheme.lower()}://{(parts.hostname or '').lower()}:{port}"
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +208,7 @@ class Request:
     cache_system: bool = True
     cache_messages: bool = False      # Claude : met aussi en cache la conversation (boucles d'outils, multi-tours)
     timeout: float | None = None
+    thinking: bool | None = None      # False : couper la réflexion quand le modèle le permet (Haiku 5.5, rôle « rapide »)
 
 
 @dataclass
@@ -299,6 +344,9 @@ class Provider:
 
     def __init__(self, row):
         self.row = row
+        # Usage de la réponse en cours (Result partiel) tant qu'elle n'est pas finie : core._run l'enregistre si le
+        # flux s'arrête avant la fin (bouton « Arrêter », coupure du réseau), car les jetons sont facturés quand même.
+        self.partial: Result | None = None
 
     @property
     def name(self) -> str:
@@ -340,6 +388,19 @@ _KEEP_FIELDS = {
 }
 
 
+def _usage_start(part: Result, ev) -> None:
+    """Jetons d'entrée (et du cache) annoncés par l'événement message_start."""
+    msg = getattr(ev, "message", None)
+    u = getattr(msg, "usage", None)
+    if u is None:
+        return
+    part.model = getattr(msg, "model", None) or part.model
+    part.usage.input_tokens = int(getattr(u, "input_tokens", 0) or 0)
+    part.usage.cache_read_tokens = int(getattr(u, "cache_read_input_tokens", 0) or 0)
+    part.usage.cache_write_tokens = int(getattr(u, "cache_creation_input_tokens", 0) or 0)
+    part.usage.output_tokens = max(part.usage.output_tokens, int(getattr(u, "output_tokens", 0) or 0))
+
+
 def _block_param(block) -> dict | None:
     """Bloc de réponse -> paramètre de requête (pour renvoyer le tour au modèle sans le modifier)."""
     d = block.to_dict(mode="json") if hasattr(block, "to_dict") else dict(block)
@@ -366,6 +427,8 @@ class AnthropicProvider(Provider):
         kw: dict = {"api_key": key, "max_retries": 2}
         if self.row.base_url:
             kw["base_url"] = self.row.base_url
+            # Passerelle personnalisée : pas de redirection suivie, l'en-tête x-api-key partirait vers l'autre serveur.
+            kw["http_client"] = anthropic.DefaultHttpxClient(follow_redirects=False)
         if timeout:
             kw["timeout"] = timeout
         return anthropic.Anthropic(**kw)
@@ -427,6 +490,9 @@ class AnthropicProvider(Provider):
         oc: dict = {}
         if req.effort and claude_supports_effort(model):
             oc["effort"] = req.effort
+        if req.thinking is False and claude_can_disable_thinking(model, req.effort):
+            # Réponse courte : sans réflexion, tout le plafond max_tokens va au texte (Haiku 5.5 réfléchit sinon).
+            body["thinking"] = {"type": "disabled"}
         if req.json_schema is not None:
             if claude_supports_format(model):
                 oc["format"] = {"type": "json_schema", "schema": strict_schema(req.json_schema)}
@@ -468,11 +534,16 @@ class AnthropicProvider(Provider):
 
         attempt = 0
         while True:
+            # Usage de la tentative en cours, au cas où elle n'irait pas au bout (bouton « Arrêter », coupure, nouvel
+            # essai) : l'entrée est connue dès message_start, la sortie s'estime d'après ce qui est déjà arrivé.
+            part = self.partial = Result(model=body["model"], kind="anthropic", stop_reason="interrupted")
+            received = 0
             try:
                 with client.beta.messages.stream(**body) as s:
                     for ev in s:
                         t = getattr(ev, "type", "")
                         if t == "text":
+                            received += len(ev.text or "")
                             if ev.text:
                                 yield {"type": "text", "text": ev.text}
                         elif t == "content_block_start":
@@ -481,6 +552,14 @@ class AnthropicProvider(Provider):
                                 yield {"type": "tool_start", "name": cb.name}
                             elif cb.type == "fallback":
                                 yield {"type": "fallback", "to": getattr(getattr(cb, "to", None), "model", "")}
+                        elif t == "message_start":
+                            _usage_start(part, ev)
+                        elif t == "message_delta":
+                            out = getattr(getattr(ev, "usage", None), "output_tokens", None)
+                            part.usage.output_tokens = max(part.usage.output_tokens, int(out or 0))
+                        elif t in ("input_json", "thinking"):
+                            received += len(getattr(ev, "partial_json", None) or getattr(ev, "thinking", None) or "")
+                        part.usage.output_tokens = max(part.usage.output_tokens, -(-received // 4))
                     msg = s.get_final_message()
                 break
             except anthropic.BadRequestError as e:
@@ -496,9 +575,13 @@ class AnthropicProvider(Provider):
                 # Entrée d'outil illisible (flux des entrées d'outils) : on refait le tour, deux fois au plus.
                 if attempt < 2:
                     attempt += 1
+                    self.partial = None
+                    if part.usage.input_tokens or part.usage.output_tokens:
+                        yield {"type": "usage", "result": part}  # tentative abandonnée, mais facturée
                     yield {"type": "reset"}
                     continue
                 raise AIError("Réponse de Claude illisible (appel d’outil incomplet) : réessaie.", "reponse") from None
+        self.partial = None
         yield {"type": "done", "result": self.result(msg, body["model"])}
 
     def result(self, msg, requested: str) -> Result:
@@ -614,8 +697,14 @@ class AnthropicProvider(Provider):
             if batch.processing_status != "ended":
                 return None
             results = list(client.beta.messages.batches.results(batch_id))
+        except anthropic.NotFoundError as e:
+            raise AIError("Lot introuvable chez Anthropic : la clé d’API a changé (autre compte) ou le lot a expiré.",
+                          "lot", 404, str(e)) from None
         except anthropic.APIError as e:
             raise self.error(e, "") from None
+        except anthropic.AnthropicError as e:  # lot terminé dont les résultats ne sont plus disponibles
+            raise AIError("Résultats du lot plus disponibles chez Anthropic (ils sont gardés 29 jours).", "lot", 410,
+                          str(e)) from None
         out: dict = {}
         for r in results:
             if r.result.type == "succeeded":
@@ -624,6 +713,18 @@ class AnthropicProvider(Provider):
                 detail = getattr(getattr(r.result, "error", None), "message", "") or r.result.type
                 out[r.custom_id] = AIError(f"Lot : {detail}", "lot")
         return out
+
+    def batch_cancel(self, batch_id: str) -> None:
+        """Annule un lot chez Anthropic (les requêtes déjà traitées restent facturées). Un lot déjà terminé ou
+        introuvable n'a plus rien à annuler."""
+        import anthropic
+
+        try:
+            self.client().beta.messages.batches.cancel(batch_id)
+        except (anthropic.NotFoundError, anthropic.BadRequestError, anthropic.ConflictError):
+            return
+        except anthropic.APIError as e:
+            raise self.error(e, "") from None
 
     def delete_files(self, ids) -> None:
         if not ids:
@@ -712,6 +813,41 @@ def _mentions(text: str, *words: str) -> bool:
 _FINISH = {"stop": "end_turn", "length": "max_tokens", "tool_calls": "tool_use", "function_call": "tool_use",
            "content_filter": "refusal"}
 
+OLLAMA_DEFAULT_CONTEXT = 4096   # mémoire de contexte d'Ollama par défaut (PC sans grosse carte graphique)
+_OLLAMA_CONTEXT: dict[tuple, tuple[float, int | None]] = {}  # (fournisseur, adresse, modèle) -> (instant, taille)
+_OLLAMA_CONTEXT_TTL = 300
+
+
+def estimate_chat_tokens(body: dict) -> int:
+    """Jetons d'une requête /chat/completions : textes, appels et définitions d'outils ; une image compte pour
+    environ 800 jetons (et non pour la taille de ses données en base64)."""
+    chars, images = 0, 0
+    for m in body.get("messages") or []:
+        c = m.get("content")
+        for p in c if isinstance(c, list) else [{"type": "text", "text": c or ""}]:
+            if p.get("type") == "image_url":
+                images += 1
+            else:
+                chars += len(p.get("text") or "")
+        if m.get("tool_calls"):
+            chars += len(json.dumps(m["tool_calls"], ensure_ascii=False))
+    if body.get("tools"):
+        chars += len(json.dumps(body["tools"], ensure_ascii=False))
+    return int(chars / 3.5) + 800 * images
+
+
+class _SameHostRedirect(urllib.request.HTTPRedirectHandler):
+    """Suit une redirection seulement vers le même hôte, sans passer de https à http : sinon la clé d'API
+    (en-tête Authorization, gardé par urllib) partirait vers un autre serveur."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        old, new = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(newurl)
+        if (new.hostname or "").lower() != (old.hostname or "").lower() or (old.scheme == "https" and new.scheme != "https"):
+            raise AIError(f"Le serveur a redirigé vers une autre adresse ({new.hostname or newurl}) : redirection "
+                          "refusée pour protéger la clé d’API. Vérifie l’adresse dans les réglages de l’IA.",
+                          "requete", 400, f"HTTP {code} -> {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
 
 class OpenAICompatProvider(Provider):
     kind = "openai_compatible"
@@ -749,8 +885,8 @@ class OpenAICompatProvider(Provider):
         data = json.dumps(body).encode("utf-8") if body is not None else None
         req = urllib.request.Request(url, data=data, headers=self._headers(), method="POST" if data else "GET")
         # Pas de proxy pour un serveur local (Ollama, LM Studio…), proxy du système sinon.
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({})) if is_local_url(url) \
-            else urllib.request.build_opener()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SameHostRedirect()) if is_local_url(url) \
+            else urllib.request.build_opener(_SameHostRedirect())
         try:
             return opener.open(req, timeout=timeout)
         except urllib.error.HTTPError as e:
@@ -881,6 +1017,10 @@ class OpenAICompatProvider(Provider):
                     raise self._http_error(f, model) from None
         else:  # pragma: no cover - toutes les tentatives ont échoué
             raise AIError(f"{self.row.name} refuse la requête.", "requete", 400)
+        sent = estimate_chat_tokens(body)
+        if (self.row.price_input or self.row.price_output) and not self.row.is_local:
+            # Service payant : si la réponse s'arrête avant la fin, l'entrée (estimée) reste à compter.
+            self.partial = Result(model=model, kind=self.kind, stop_reason="interrupted", usage=Usage(input_tokens=sent))
         with resp:
             ctype = (resp.headers.get("Content-Type") or "").lower()
             if "event-stream" in ctype or "ndjson" in ctype or not ctype.startswith("application/json"):
@@ -889,8 +1029,47 @@ class OpenAICompatProvider(Provider):
                 gen = self._read_json(resp, model)
             for ev in gen:
                 if ev["type"] == "done":
+                    self.partial = None
                     ev["result"].tools_disabled = tools_disabled
+                    warning = self._context_warning(model, sent)
+                    if warning:
+                        ev["result"].warnings.append(warning)
+                elif ev["type"] == "text" and self.partial is not None:
+                    self.partial.usage.output_tokens += max(1, len(ev["text"]) // 4)
                 yield ev
+
+    def _context_warning(self, model: str, sent: int) -> str | None:
+        """Ollama garde par défaut 4 096 jetons de contexte et coupe le début de ce qui dépasse, sans erreur
+        (consigne, outils, début de la page) : on le signale quand la demande est plus grosse que sa mémoire."""
+        if not self.is_ollama() or sent <= OLLAMA_DEFAULT_CONTEXT:
+            return None
+        ctx = self._ollama_context(model)
+        if ctx and sent <= ctx:
+            return None
+        n = f"{sent:,}".replace(",", " ")
+        memoire = (f"de {ctx:,} jetons".replace(",", " ") if ctx
+                   else f"par défaut d’Ollama ({OLLAMA_DEFAULT_CONTEXT:,} jetons)".replace(",", " "))
+        return (f"Demande d’environ {n} jetons pour une mémoire {memoire} : le modèle a pu oublier le début "
+                "(consignes, outils, début de la page). Augmente « Context length » dans les réglages de l’application "
+                "Ollama (voir l’aide des réglages de l’IA).")
+
+    def _ollama_context(self, model: str) -> int | None:
+        """Taille de contexte du modèle chargé (/api/ps, versions récentes d'Ollama), ou None si inconnue."""
+        key = (self.row.id, self.base(), model)
+        hit = _OLLAMA_CONTEXT.get(key)
+        if hit and time.time() - hit[0] < _OLLAMA_CONTEXT_TTL:
+            return hit[1]
+        ctx = None
+        try:
+            for m in self._get_json(self.root() + "/api/ps", timeout=3).get("models") or []:
+                name = str(m.get("name") or m.get("model") or "")
+                if name == model or name.split(":")[0] == model.split(":")[0]:
+                    ctx = int(m.get("context_length") or 0) or None
+                    break
+        except (AIError, ValueError, TypeError, AttributeError):
+            ctx = None
+        _OLLAMA_CONTEXT[key] = (time.time(), ctx)
+        return ctx
 
     def _downgrade_json(self, body: dict, json_mode: str, req: Request, system: str):
         """json_schema -> json_object -> consigne seule (le JSON est alors extrait du texte)."""
@@ -931,6 +1110,7 @@ class OpenAICompatProvider(Provider):
     def _read_sse(self, resp, model) -> Iterator[dict]:
         filt = _ThinkFilter()
         parts, tool_acc, finish, usage, served = [], {}, None, None, model
+        slots: dict = {}  # index annoncé par le serveur -> appel en cours (un nouvel identifiant = un nouvel appel)
         for raw in resp:
             line = raw.decode("utf-8", "replace").strip()
             if not line or line.startswith(":"):
@@ -960,8 +1140,13 @@ class OpenAICompatProvider(Provider):
                         parts.append(out)
                         yield {"type": "text", "text": out}
                 for tc in delta.get("tool_calls") or []:
-                    idx = tc.get("index", len(tool_acc)) if isinstance(tc.get("index"), int) else len(tool_acc)
-                    acc = tool_acc.setdefault(idx, {"id": "", "name": "", "args": ""})
+                    idx = tc["index"] if isinstance(tc.get("index"), int) else f"sans-index-{len(tool_acc)}"
+                    key = slots.get(idx)
+                    if key is None or (tc.get("id") and tool_acc[key]["id"] and tc["id"] != tool_acc[key]["id"]):
+                        # Certains serveurs répètent l'index 0 pour chaque appel : un autre identifiant ouvre un
+                        # nouvel appel au lieu de coller ses arguments au précédent.
+                        key = slots[idx] = len(tool_acc)
+                    acc = tool_acc.setdefault(key, {"id": "", "name": "", "args": ""})
                     if tc.get("id"):
                         acc["id"] = tc["id"]
                     fn = tc.get("function") or {}

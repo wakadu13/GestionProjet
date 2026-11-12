@@ -26,7 +26,9 @@ from ..utils import can, fmt_date, visible_projects
 
 log = logging.getLogger(__name__)
 
-MAX_CONTEXT_CHARS = 30_000
+# Texte gardé d'une page (garde-fou mémoire). La part transmise au modèle dépend du fournisseur (chat.page_limit) :
+# au-delà, ce sont des extraits (passages utiles à la question, ou aperçu de toute la page), signalés comme tels.
+MAX_CONTEXT_CHARS = 400_000
 MAX_ITEMS = 60
 _MENTION_SOURCES: list = []
 
@@ -76,12 +78,61 @@ def resolve(path: str, user, query: dict | None = None) -> dict | None:
             out = {"type": str(r.get("type") or "page"), "title": str(r.get("title") or "Page"),
                    "text": str(r.get("text") or ""), "url": str(r.get("url") or path),
                    "icon": str(r.get("icon") or _ICONS.get(str(r.get("type")), "page"))}
-            if len(out["text"]) > MAX_CONTEXT_CHARS:
-                out["text"] = out["text"][:MAX_CONTEXT_CHARS] + "\n\n[… page tronquée : elle est trop longue pour être " \
-                                                               "transmise en entier.]"
-            out["key"] = hashlib.sha1((out["url"] + "\n" + out["text"]).encode("utf-8")).hexdigest()[:16]
+            out["size"] = len(out["text"])  # taille d'origine (la page peut être coupée ensuite)
+            out["text"] = out["text"][:MAX_CONTEXT_CHARS]
+            out["key"] = page_key(out["url"], out["text"])
             return out
     return None
+
+
+def page_key(url: str, text: str) -> str:
+    return hashlib.sha1((url + "\n" + text).encode("utf-8")).hexdigest()[:16]
+
+
+def _apercu(texte: str, budget: int, morceaux: int = 8) -> str:
+    """Aperçu réparti sur toute la page : le début de `morceaux` tranches régulières, coupées à une fin de
+    paragraphe ou de ligne (un quiz ou un résumé porte ainsi sur tout le cours, pas sur son seul début)."""
+    part = max(1, budget // morceaux - 10)
+    pas = len(texte) / morceaux
+    sortie = []
+    for i in range(morceaux):
+        debut = int(i * pas)
+        if i:  # reprendre au début d'un paragraphe ou d'une ligne
+            for sep in ("\n\n", "\n"):
+                j = texte.find(sep, debut, debut + part // 2)
+                if j >= 0:
+                    debut = j + len(sep)
+                    break
+        bout = texte[debut:debut + part]
+        coupe = max(bout.rfind("\n\n"), bout.rfind("\n"))
+        if coupe > part // 2:
+            bout = bout[:coupe]
+        sortie.append(bout.strip())
+    return "\n\n[…]\n\n".join(b for b in sortie if b)
+
+
+def extraits(texte: str, question: str, budget: int) -> tuple[str, bool]:
+    """(texte transmis, coupé ?) : la page entière si elle tient dans `budget` caractères ; sinon les passages qui
+    parlent de la question (comme « Demander au wiki »), ou un aperçu de toute la page quand la question ne donne
+    pas de mots-clés utiles."""
+    if len(texte) <= budget:
+        return texte, False
+    from ..wiki.demander import mots_cles, passages
+    from ..wiki.vault import fold
+
+    mots = mots_cles(question or "")
+    replie = fold(texte)
+    if mots and any(m in replie for m in mots):
+        return passages(texte, mots, budget), True
+    return _apercu(texte, budget), True
+
+
+def note_extraits(taille: int, transmis: int) -> str:
+    """Mention ajoutée pour le modèle quand il ne reçoit que des extraits d'une page."""
+    n = lambda x: f"{x:,}".replace(",", " ")  # noqa: E731
+    return (f"[Page longue : seuls des extraits sont transmis (environ {n(transmis)} caractères sur {n(taille)}). "
+            "Si la réponse n’y est pas, dis que tu ne l’as pas trouvée dans ces extraits, sans affirmer que la page "
+            "n’en parle pas.]")
 
 
 _ICONS = {"agenda": "calendar", "calendrier": "calendar", "taches": "list-check", "tache": "list-check",

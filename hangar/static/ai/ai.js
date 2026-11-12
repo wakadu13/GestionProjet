@@ -464,8 +464,13 @@
         return;
       }
       if (this.mode === 'panel' && this.page) {
+        // Page trop longue pour le modèle : seuls des extraits partent (passages liés à la question).
+        const nb = (n) => Number(n || 0).toLocaleString('fr-FR');
+        const coupee = this.page.coupee
+          ? { titre: `Page longue : seuls des extraits sont transmis à l’assistant (environ ${nb(this.page.transmis)} caractères sur ${nb(this.page.taille)}), choisis d’après ta question`, marque: '<span class="ai-chip-cut">· page coupée</span>' }
+          : { titre: 'La page ouverte est transmise à l’assistant', marque: '' };
         parts.push(this.includePage
-          ? `<span class="ai-chip page" title="La page ouverte est transmise à l’assistant">${icon(this.page.icon || 'page', 13)}<span>${esc(this.page.title)}</span><button type="button" data-x="page" title="Ne pas transmettre la page">${icon('x', 11)}</button></span>`
+          ? `<span class="ai-chip page" title="${esc(coupee.titre)}">${icon(this.page.icon || 'page', 13)}<span>${esc(this.page.title)}</span>${coupee.marque}<button type="button" data-x="page" title="Ne pas transmettre la page">${icon('x', 11)}</button></span>`
           : `<span class="ai-chip off" title="Cliquer pour transmettre la page">${icon('plus', 12)}<span>${esc(this.page.title)}</span></span>`);
       }
       if (this.selection) parts.push(`<span class="ai-chip sel" title="${esc(this.selection.slice(0, 300))}">${icon('quote', 13)}<span>Sélection · ${this.selection.length} car.</span><button type="button" data-x="sel" title="Retirer">${icon('x', 11)}</button></span>`);

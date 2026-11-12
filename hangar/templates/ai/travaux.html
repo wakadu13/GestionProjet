@@ -61,7 +61,7 @@
       <div class="ai-job" data-statut="{{ j.status }}">
         <span class="ai-job-ic st-{{ j.status }}">{{ icon({'pending': 'clock', 'running': 'refresh', 'batch': 'timer', 'draft': 'edit', 'done': 'check-circle', 'error': 'alert'}.get(j.status, 'clock'), 15) }}</span>
         <div class="grow ai-job-main">
-          <div class="ai-job-t"><span class="badge">{{ x.genre }}</span><b>{{ x.nom }}</b><span class="help">· {{ x.statut }}{% if j.status == 'running' and j.started_at %} depuis {{ j.started_at|ago }}{% endif %}</span></div>
+          <div class="ai-job-t"><span class="badge">{{ x.genre }}</span><b>{{ x.nom }}</b><span class="help">· {{ x.statut }}{% if j.status in ('running', 'batch') and j.started_at %} depuis {{ j.started_at|ago }}{% endif %}</span></div>
           {% if j.message %}<div class="small {% if j.status == 'error' %}danger-text{% else %}text-2{% endif %}">{{ j.message }}</div>{% endif %}
           <div class="help small">{{ j.created_at|datetime }}{% if j.user %} · {{ j.user.display_name }}{% endif %}{% if x.totaux.cost is not none %} · {{ x.totaux.model }} · ≈ {{ '%.2f'|format(x.totaux.cost) }} $ ({{ x.totaux.input }} jetons lus, {{ x.totaux.output }} écrits{% if x.lot %}, lot à moitié prix{% endif %}){% endif %}{% if x.page_ecrite %} · <span class="mono">{{ x.page_ecrite }}</span>{% endif %}</div>
         </div>
@@ -73,6 +73,7 @@
           <form method="post" class="inline-form" data-confirm="Supprimer ce brouillon ?">{{ ui.csrf() }}<button class="btn btn-danger-ghost btn-xs" name="supprimer" value="{{ j.id }}">Supprimer</button></form>
           {% endif %}
           {% if j.status == 'error' and dispo %}<form method="post" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs" name="relancer" value="{{ j.id }}">{{ icon('refresh', 12) }} Relancer</button></form>{% endif %}
+          {% if j.status in ('pending', 'running', 'batch') %}<form method="post" class="inline-form" data-confirm="{{ 'Annuler ce lot ? Ce qu’Anthropic a déjà traité reste facturé.' if j.status == 'batch' else 'Annuler ce travail ?' }}">{{ ui.csrf() }}<button class="btn btn-danger-ghost btn-xs" name="annuler" value="{{ j.id }}">{{ icon('x', 12) }} Annuler</button></form>{% endif %}
         </div>
       </div>
       {% endfor %}
@@ -90,7 +91,8 @@
         <li>Une page déjà modifiée à la main n’est jamais écrasée : la version de l’IA est enregistrée à côté, avec « (IA) » dans son nom ; une page remplacée garde l’ancienne version dans son historique.</li>
         <li>Le PDF d’origine reste en bas de la page créée. Vérifie la page avant de réviser : l’IA peut se tromper, surtout sur un PDF scanné ou des schémas.</li>
         <li>Avec un modèle local (Ollama…), seul le texte du PDF est lu ; un long cours peut dépasser sa mémoire. Le coût de chaque travail s’affiche ici (Claude).</li>
-        <li>Une notification te prévient quand un travail se termine.</li>
+        <li>Une notification te prévient quand un travail se termine. Un travail lancé par erreur s’annule avec « Annuler » ; un travail annulé ou en échec se relance depuis le début.</li>
+        <li>Un lot réserve son coût au plus sur le plafond mensuel jusqu’à son retour : le coût réel, souvent bien plus bas, le remplace ensuite.</li>
       </ul>
     </div>
   </section>
