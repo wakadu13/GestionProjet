@@ -227,6 +227,9 @@ def connexion():
     blocage.reussite(ident, ip)
     _, cle = JetonAppareil.creer(user, str((data or {}).get("appareil", "")))
     user.last_login_at = _maintenant()
+    from .seed import est_mot_de_passe_public
+    if est_mot_de_passe_public(password):  # ancien mot de passe de démo, publié : à changer
+        user.must_change_password = True
     db.session.commit()
     return _sans_cache(jsonify(jeton=cle, joueur=user.username))
 

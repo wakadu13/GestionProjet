@@ -134,7 +134,8 @@ def settings():
     history = EmailMessage.query.order_by(EmailMessage.created_at.desc(), EmailMessage.id.desc()).limit(100).all()
     return render_template("mail/settings.html", cfg=cfg, users=users, history=history, counts=_counts(),
                            presets=PRESETS, KIND_LABELS=mailer.KIND_LABELS, STATUS_LABELS=mailer.STATUS_LABELS,
-                           WEEKDAYS=mailer.WEEKDAYS, outbox_path=mailer.outbox_dir())
+                           WEEKDAYS=mailer.WEEKDAYS, outbox_path=mailer.outbox_dir(),
+                           smtp_env=mailer.SMTP_PASSWORD_ENV, smtp_env_set=bool(os.environ.get(mailer.SMTP_PASSWORD_ENV)))
 
 
 def _stats_text(stats):

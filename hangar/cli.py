@@ -6,6 +6,7 @@ import getpass
 import os
 import shutil
 import socket
+import sqlite3
 import sys
 import threading
 import webbrowser
@@ -37,6 +38,26 @@ def _is_hangar(port: int) -> bool:
         return False
 
 
+HOTES_LOCAUX = ("127.0.0.1", "localhost", "::1")
+
+
+def avertissement_reseau(app, host: str) -> str | None:
+    """Message d'alerte si Hangar écoute au-delà de cet ordinateur alors qu'un compte garde encore l'ancien mot
+    de passe de démonstration, publié dans le README : n'importe qui sur le réseau pourrait s'y connecter."""
+    if host in HOTES_LOCAUX:
+        return None
+    from .seed import comptes_mot_de_passe_public
+    with app.app_context():
+        comptes = comptes_mot_de_passe_public()
+    if not comptes:
+        return None
+    noms = ", ".join(comptes[:10]) + ("…" if len(comptes) > 10 else "")
+    return ("\n  ⚠ Attention : Hangar est ouvert au réseau et ces comptes ont encore le mot de passe de démonstration\n"
+            f"    connu de tous : {noms}.\n"
+            "    N’importe qui sur le réseau peut s’y connecter. Change ces mots de passe avant de partager l’adresse :\n"
+            "    chacun dans Mon profil, ou un administrateur dans Équipe (réinitialiser le mot de passe).\n")
+
+
 def cmd_run(args):
     from . import create_app
     port = args.port
@@ -63,6 +84,9 @@ def cmd_run(args):
         if ip:
             print(f"  → Sur le réseau local : http://{ip}:{port}")
     print(f"  → Données : {app.config['DATA_DIR']}")
+    alerte = avertissement_reseau(app, args.host)
+    if alerte:
+        print(alerte)
     print("  (Ctrl+C pour arrêter)\n")
     if not args.no_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
@@ -84,22 +108,93 @@ def cmd_run(args):
         print("\n  Hangar arrêté.")
 
 
+def _confirmer(question: str) -> bool:
+    """Demande « oui » au clavier. Sans clavier (Planificateur de tâches, script, « < nul ») : message clair
+    et arrêt avec le code 1, pour qu'un script voie que rien n'a été fait."""
+    try:
+        ans = input(f"{question} Tape « oui » : ")
+    except EOFError:
+        print("\nAnnulé : aucune réponse. Ajoute --yes pour lancer la commande sans question.")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nAnnulé.")
+        return False
+    if ans.strip().lower() != "oui":
+        print("Annulé.")
+        return False
+    return True
+
+
+def _effacer_base(app, yes: bool, question: str) -> bool:
+    """Après confirmation : sauvegarde la base, met de côté les fichiers rangés par compte, puis vide la base.
+
+    Renvoie False si l'utilisateur annule. S'arrête (code 1) sans rien effacer si la sauvegarde échoue.
+    À appeler dans un contexte d'application. Le coffre du wiki n'est jamais touché : ce peut être le coffre
+    Obsidian de l'utilisateur (HANGAR_VAULT)."""
+    from pathlib import Path
+
+    from .extensions import db
+    from .sauvegarde import PREFIXE_AVANT_EFFACEMENT, dossier_fichiers
+    from .views.settings import make_backup
+    if not yes and not _confirmer(question):
+        return False
+    data = Path(app.config["DATA_DIR"])
+    try:  # nommée à part : la rotation (« backup --garder ») ne la retire jamais
+        copie = Path(make_backup(prefixe=PREFIXE_AVANT_EFFACEMENT))
+    except Exception as exc:  # disque plein, base verrouillée… : surtout ne rien effacer
+        print(f"✗ La sauvegarde de sécurité a échoué ({exc}) : rien n’a été effacé.")
+        sys.exit(1)
+    print(f"Sauvegarde de sécurité de la base : {copie}")
+    # Ces dossiers sont rangés par numéro de compte : une base vidée redonne les mêmes numéros, et un nouveau
+    # compte hériterait des fichiers de l'ancien. Ils sont mis de côté à côté de la sauvegarde.
+    cote = dossier_fichiers(copie)
+    deplaces = []
+    for nom in ("uploads", "qcm_perso", "copies", "agenda"):
+        src = data / nom
+        if not src.is_dir() or not any(src.iterdir()):
+            continue
+        try:
+            cote.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(cote / nom))
+        except OSError as exc:
+            print(f"✗ Impossible de déplacer {src} ({exc}) : la base n’a pas été effacée.")
+            if deplaces:
+                print(f"  Déjà mis de côté dans {cote} : {', '.join(deplaces)}")
+            sys.exit(1)
+        deplaces.append(nom)
+    (data / "uploads").mkdir(exist_ok=True)
+    db.session.remove()
+    db.drop_all()
+    db.create_all()
+    if deplaces:
+        print(f"Fichiers mis de côté dans {cote} : {', '.join(deplaces)}")
+    print(f"Gardés en place : le coffre du wiki ({app.config['WIKI_DIR']}), son historique (wiki_versions), "
+          "la boîte d’envoi locale (outbox) et les sauvegardes.")
+    print("Pour revenir en arrière : restaure la sauvegarde dans Réglages › Sauvegardes"
+          + (f", puis remets les dossiers de {cote.name} dans {data}." if deplaces else "."))
+    return True
+
+
 def cmd_demo(args):
     from . import create_app
-    from .extensions import db
     from .seed import seed_demo
     app = create_app(args.data)
     with app.test_request_context("/"):
-        if args.force:
-            db.drop_all()
-            db.create_all()
+        if args.force and not _effacer_base(
+                app, args.yes, "Effacer la base actuelle (comptes, projets, agenda, progression des QCM, conversations, "
+                               "réglages) pour recréer la démonstration ? Une sauvegarde est faite avant ; le wiki reste "
+                               "en place."):
+            return
         try:
-            seed_demo(args.planning)
+            res = seed_demo(args.planning)
         except RuntimeError as exc:
             print(f"✗ {exc}")
             sys.exit(1)
-    print("\nDonnées de démonstration prêtes. Lance « uv run hangar » puis connecte-toi avec "
-          "l’identifiant « wacogne ».")
+    print("\nDonnées de démonstration prêtes.")
+    print(f"  Mot de passe provisoire de tous les comptes : {res['password']}")
+    print("  Note-le maintenant : il ne sera plus affiché. Chaque compte, administrateur compris, devra le changer "
+          "à sa première connexion.")
+    print("Lance « uv run hangar » puis connecte-toi avec l’identifiant « wacogne ».")
 
 
 def cmd_rebuild_docs(args):
@@ -117,11 +212,9 @@ def cmd_rebuild_docs(args):
             print("✗ Aucun projet. Lance d’abord « hangar demo ».")
             sys.exit(1)
         actor = project.lead or User.query.filter_by(role="admin").first()
-        if not args.yes:
-            ans = input(f"Remplacer tous les tickets de « {project.name} » par ceux issus des documents ? Tape « oui » : ")
-            if ans.strip().lower() != "oui":
-                print("Annulé.")
-                return
+        if not args.yes and not _confirmer(
+                f"Remplacer tous les tickets de « {project.name} » par ceux issus des documents ?"):
+            return
         print(f"Sauvegarde de sécurité : {make_backup()}")
         clear_project(project)
         load_documents(project, actor)
@@ -141,33 +234,59 @@ def cmd_rebuild_docs(args):
 
 def cmd_reset(args):
     from . import create_app
-    from .extensions import db
-    if not args.yes:
-        ans = input("Supprimer TOUTES les données (base + fichiers joints) ? Tape « oui » : ")
-        if ans.strip().lower() != "oui":
-            print("Annulé.")
-            return
     app = create_app(args.data)
     with app.app_context():
-        from .views.settings import make_backup
-        try:
-            print(f"Sauvegarde de sécurité : {make_backup()}")
-        except Exception:
-            pass
-        db.drop_all()
-        db.create_all()
-    up = app.config["UPLOAD_DIR"]
-    shutil.rmtree(up, ignore_errors=True)
-    os.makedirs(up, exist_ok=True)
+        if not _effacer_base(app, args.yes, "Effacer la base (comptes, projets, agenda, progression des QCM, "
+                                            "conversations, réglages) ? Une sauvegarde est faite avant et les "
+                                            "pièces jointes sont mises de côté ; le wiki reste en place."):
+            return
     print("✓ Base réinitialisée.")
 
 
 def cmd_backup(args):
-    from . import create_app
-    from .views.settings import make_backup
+    from pathlib import Path
+
+    from . import create_app, sauvegarde
+    from .utils import human_size
     app = create_app(args.data)
+    vers = Path(args.vers).expanduser() if args.vers else None  # « ~/Sauvegardes » : le même dossier partout
+    if vers:
+        try:  # crée le dernier dossier (ex. « Sauvegardes » sur la clé), pas un chemin entier mal tapé
+            vers.mkdir(exist_ok=True)
+        except OSError as exc:
+            print(f"✗ Dossier de destination inaccessible : {args.vers} ({exc}). La clé ou le disque est-il branché ?")
+            sys.exit(1)
     with app.app_context():
-        print(f"✓ Sauvegarde créée : {make_backup()}")
+        try:
+            if args.complet:
+                bilan = sauvegarde.make_full_backup(vers, sans_secrets=args.sans_secrets, garder=args.garder)
+                chemin, supprimees = bilan.chemin, bilan.supprimees
+                print(f"✓ Sauvegarde complète créée : {chemin} ({bilan.fichiers} fichiers, "
+                      f"{human_size(bilan.octets)} avant compression)")
+            else:
+                chemin = sauvegarde.make_backup(vers)
+                if args.sans_secrets:
+                    sauvegarde.retirer_secrets(chemin)
+                supprimees = (sauvegarde.garder_dernieres(Path(chemin).parent, args.garder, sauvegarde.MOTIF_BASE)
+                              if args.garder else [])
+                print(f"✓ Sauvegarde de la base créée : {chemin}")
+                print("  (base seule : ajoute --complet pour le wiki, les sets de QCM et les pièces jointes)")
+        except (OSError, sqlite3.Error) as exc:  # disque plein, clé retirée, base illisible…
+            print(f"✗ Sauvegarde impossible : {exc}")
+            sys.exit(1)
+    if args.sans_secrets:
+        print("  Sans le mot de passe des e-mails ni les clés d’API (à ressaisir après une restauration).")
+    if supprimees:
+        print(f"  {len(supprimees)} ancienne(s) sauvegarde(s) supprimée(s) (--garder {args.garder}).")
+    if args.complet and bilan.non_copies:
+        print(f"! {len(bilan.non_copies)} fichier(s) illisible(s) ou verrouillé(s), absents de l’archive :")
+        for nom in bilan.non_copies[:20]:
+            print(f"  - {nom}")
+        if len(bilan.non_copies) > 20:
+            print(f"  … et {len(bilan.non_copies) - 20} autre(s).")
+        print(f"  La liste complète est dans {sauvegarde.MANQUANTS}, dans l’archive. Ferme les logiciels qui les "
+              "utilisent, puis recommence.")
+        sys.exit(2)
 
 
 def cmd_create_admin(args):
@@ -270,16 +389,24 @@ def main(argv=None):
 
     demo = sub.add_parser("demo", help="créer les données de démonstration du projet EAE")
     demo.add_argument("--planning", help="chemin du fichier Excel de planification à importer")
-    demo.add_argument("--force", action="store_true", help="effacer la base avant")
+    demo.add_argument("--force", action="store_true",
+                      help="effacer la base avant (après confirmation et sauvegarde ; le wiki est gardé)")
+    demo.add_argument("--yes", action="store_true", help="ne pas demander de confirmation (avec --force)")
 
     rb = sub.add_parser("rebuild-docs", help="recréer les tickets du projet d’après les documents du dossier")
     rb.add_argument("--project", type=int, help="identifiant numérique du projet (défaut : EAE)")
     rb.add_argument("--yes", action="store_true")
 
-    reset = sub.add_parser("reset", help="effacer toutes les données")
+    reset = sub.add_parser("reset", help="effacer la base (sauvegarde avant ; pièces jointes mises de côté, wiki gardé)")
     reset.add_argument("--yes", action="store_true")
 
-    sub.add_parser("backup", help="sauvegarder la base dans data/backups")
+    bk = sub.add_parser("backup", help="sauvegarder la base (ou tout, avec --complet) dans data/backups")
+    bk.add_argument("--complet", action="store_true",
+                    help="sauvegarde complète (.zip) : base, wiki, sets de QCM, copies, pièces jointes, agenda")
+    bk.add_argument("--vers", metavar="DOSSIER", help="dossier de destination (clé USB, OneDrive…)")
+    bk.add_argument("--garder", type=int, metavar="N", help="ne garder que les N dernières sauvegardes de ce type")
+    bk.add_argument("--sans-secrets", action="store_true",
+                    help="retirer le mot de passe des e-mails et les clés d’API de la copie")
 
     ms = sub.add_parser("mail-send", help="envoyer la file d’e-mails et les envois planifiés dus")
     ms.add_argument("--force", action="store_true", help="forcer rappels, récapitulatifs et bilans maintenant")

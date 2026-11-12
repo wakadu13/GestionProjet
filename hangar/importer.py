@@ -517,29 +517,51 @@ def export_markdown(issues, project) -> str:
 
 
 def export_workspace_json() -> str:
-    """Export complet lisible (sans mots de passe) pour archivage ou migration."""
+    """Export lisible des projets (partie Travail, sans mots de passe) : projets, tickets, pages, commentaires…
+
+    Ce n'est pas une sauvegarde (ni agenda, ni QCM, ni wiki : voir sauvegarde.py). Chaque ticket garde ses
+    colonnes et, comme l'export JSON d'un projet (serialize_issue), ses assignés, étiquettes, modules, cycle et
+    parent par leur nom : l'import JSON d'un projet sait relire la liste « issues »."""
+    from contextlib import nullcontext
+
+    from flask import current_app, has_request_context
+
     from .models import Activity, Label, Page, State, WorkLog, Workspace
+    from .services import serialize_issue
+
+    def row(obj, model, exclude=()):
+        d = {}
+        for col in model.__table__.columns:
+            if col.name in exclude:
+                continue
+            v = getattr(obj, col.name)
+            d[col.name] = v.isoformat() if isinstance(v, (date, datetime)) else v
+        return d
 
     def rows(model, exclude=()):
-        out = []
-        for obj in model.query.all():
-            d = {}
-            for col in model.__table__.columns:
-                if col.name in exclude:
-                    continue
-                v = getattr(obj, col.name)
-                d[col.name] = v.isoformat() if isinstance(v, (date, datetime)) else v
-            out.append(d)
-        return out
+        return [row(obj, model, exclude) for obj in model.query.all()]
 
-    payload = {
-        "format": "hangar-export", "version": 1, "exported_at": now().isoformat(),
-        "workspace": rows(Workspace), "users": rows(User, exclude=("password_hash",)),
-        "projects": rows(Project), "members": rows(ProjectMember), "states": rows(State), "labels": rows(Label),
-        "cycles": rows(Cycle), "modules": rows(Module), "issues": rows(Issue), "comments": rows(Comment),
-        "relations": rows(IssueRelation), "worklogs": rows(WorkLog), "pages": rows(Page),
-        "activities": rows(Activity),
-    }
+    def issue(i):
+        d = row(i, Issue)
+        d.update(serialize_issue(i))
+        d.pop("url", None)  # adresse propre à cette installation
+        d["subscribers"] = [u.username for u in i.subscribers]
+        return d
+
+    def module(m):
+        return dict(row(m, Module), members=[u.username for u in m.members])
+
+    # serialize_issue construit une adresse (url_for) : il lui faut une requête, même hors d'une page.
+    with nullcontext() if has_request_context() else current_app.test_request_context("/"):
+        payload = {
+            "format": "hangar-export", "version": 2, "contenu": "projets (Travail)", "exported_at": now().isoformat(),
+            "workspace": rows(Workspace), "users": rows(User, exclude=("password_hash",)),
+            "projects": rows(Project), "members": rows(ProjectMember), "states": rows(State), "labels": rows(Label),
+            "cycles": rows(Cycle), "modules": [module(m) for m in Module.query.all()],
+            "issues": [issue(i) for i in Issue.query.order_by(Issue.project_id, Issue.sequence_id)],
+            "comments": rows(Comment), "relations": rows(IssueRelation), "worklogs": rows(WorkLog),
+            "pages": rows(Page), "activities": rows(Activity),
+        }
     return json.dumps(payload, ensure_ascii=False, indent=1)
 
 

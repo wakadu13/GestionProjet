@@ -51,10 +51,10 @@
         <div class="grid-3">
           <div class="field"><label>Sécurité</label><select class="input" name="smtp_security">{% for k, lab in [('starttls', 'STARTTLS (587)'), ('ssl', 'SSL/TLS (465)'), ('none', 'Aucune')] %}<option value="{{ k }}" {% if cfg.smtp_security == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
           <div class="field"><label>Identifiant SMTP</label><input class="input" name="smtp_user" value="{{ cfg.smtp_user or '' }}" autocomplete="off"></div>
-          <div class="field"><label>Mot de passe SMTP</label><input class="input" type="password" name="smtp_password" placeholder="{{ '•••••••• (inchangé)' if cfg.smtp_password else '' }}" autocomplete="new-password">
+          <div class="field"><label>Mot de passe SMTP</label><input class="input" type="password" name="smtp_password" placeholder="{{ '•••••••• (inchangé)' if cfg.smtp_password else ('(lu dans ' ~ smtp_env ~ ')' if smtp_env_set else '') }}" autocomplete="new-password">
             {% if cfg.smtp_password %}<label class="checkbox small mt-0" style="margin-top:4px"><input type="checkbox" name="clear_password" value="1"> Effacer le mot de passe enregistré</label>{% endif %}</div>
         </div>
-        <p class="help mb">{{ icon('alert', 12) }} Le mot de passe est stocké en clair dans la base locale (<code>data/hangar.db</code>). Préfère un mot de passe d’application dédié.</p>
+        <p class="help mb">{{ icon('alert', 12) }} Le mot de passe est stocké en clair dans la base locale (<code>data/hangar.db</code>) et dans ses sauvegardes. Préfère un mot de passe d’application dédié. Pour qu’il n’y soit pas, laisse ce champ vide et donne-le à Hangar par la variable d’environnement <code>{{ smtp_env }}</code>.</p>
       </div>
       <div class="grid-3">
         <div class="field"><label>Nom de l’expéditeur</label><input class="input" name="from_name" value="{{ cfg.from_name or 'Hangar' }}"></div>

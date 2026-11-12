@@ -182,6 +182,15 @@ def eml_filename(m: EmailMessage) -> str:
     return f"{(m.created_at or now()):%Y%m%d_%H%M%S}_{m.id}_{slug}.eml"
 
 
+SMTP_PASSWORD_ENV = "HANGAR_SMTP_PASSWORD"
+
+
+def smtp_password(cfg: MailConfig) -> str:
+    """Mot de passe SMTP : celui enregistré dans les réglages, sinon la variable d'environnement
+    HANGAR_SMTP_PASSWORD (il n'est alors ni dans la base ni dans les sauvegardes)."""
+    return cfg.smtp_password or os.environ.get(SMTP_PASSWORD_ENV, "")
+
+
 def _open_smtp(cfg: MailConfig):
     context = ssl.create_default_context()
     port = cfg.smtp_port or (465 if cfg.smtp_security == "ssl" else 587)
@@ -194,7 +203,7 @@ def _open_smtp(cfg: MailConfig):
             server.starttls(context=context)
             server.ehlo()
     if cfg.smtp_user:
-        server.login(cfg.smtp_user, cfg.smtp_password or "")
+        server.login(cfg.smtp_user, smtp_password(cfg))
     return server
 
 
