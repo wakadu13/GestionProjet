@@ -20,6 +20,7 @@ import unittest
 from datetime import date, datetime, time, timedelta
 from unittest import mock
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import agenda as A
 from hangar import create_app, mailer
 from hangar.extensions import db
@@ -219,12 +220,12 @@ class ImportSemainesTests(Base):
     def test_alerte_quand_des_cours_du_jour_sont_retires(self):
         c, token = self.client()
         import io
-        complet = calendrier(*semaine(date.today() - timedelta(days=date.today().weekday()), "SEM"))
+        complet = calendrier(*semaine(horloge.today() - timedelta(days=horloge.today().weekday()), "SEM"))
         c.post("/agenda/import", data={"_csrf": token, "file": (io.BytesIO(complet.encode()), "a.ics")},
                content_type="multipart/form-data")
-        lundi = date.today() - timedelta(days=date.today().weekday())
-        reste = [e for e in semaine(lundi, "SEM") if f"SEM-{date.today():%d}-" not in e
-                 and f"SEM-{date.today() + timedelta(days=1):%d}-" not in e]
+        lundi = horloge.today() - timedelta(days=horloge.today().weekday())
+        reste = [e for e in semaine(lundi, "SEM") if f"SEM-{horloge.today():%d}-" not in e
+                 and f"SEM-{horloge.today() + timedelta(days=1):%d}-" not in e]
         if len(reste) == 10:  # week-end : rien aujourd'hui ni demain dans la semaine importée
             self.skipTest("Pas de cours aujourd'hui ni demain dans la semaine de test (week-end).")
         r = c.post("/agenda/import", data={"_csrf": token, "file": (io.BytesIO(calendrier(*reste).encode()), "b.ics")},
@@ -239,7 +240,7 @@ class ImportSemainesTests(Base):
 
 # Messages sans date limite propre : 24 h après leur création (heure réelle) ; on simule donc les
 # passages du fil à partir de maintenant.
-T0 = datetime.now().replace(second=0, microsecond=0) + timedelta(minutes=1)
+T0 = horloge.now().replace(second=0, microsecond=0) + timedelta(minutes=1)
 
 
 class FauxSMTP:
@@ -447,8 +448,8 @@ class RenvoyerLesEchecsTests(MailBase):
 
     def test_compteur_et_bouton_dans_l_agenda(self):
         FauxSMTP.erreur_login = smtplib.SMTPAuthenticationError(535, b"bad credentials")
-        t = self.tache_avec_rappel(jour=date.today() + timedelta(days=2))
-        A.process_reminders(datetime.combine(date.today() + timedelta(days=2), time(9, 0, 30)))
+        t = self.tache_avec_rappel(jour=horloge.today() + timedelta(days=2))
+        A.process_reminders(datetime.combine(horloge.today() + timedelta(days=2), time(9, 0, 30)))
         mailer.queue_email("autre@exemple.fr", "Pas pour moi", "<p>x</p>", kind="manual")
         db.session.commit()
         mailer.send_pending()
@@ -652,18 +653,18 @@ class RappelsTachesTests(Base):
         self.assertNotIn("En retard", html)
 
     def test_annuler_une_coche_donnee_par_erreur(self):
-        t = AgendaTask(user_id=self.user.id, title="Footing", due_date=date.today(), recurrence="weekly")
+        t = AgendaTask(user_id=self.user.id, title="Footing", due_date=horloge.today(), recurrence="weekly")
         db.session.add(t)
         db.session.commit()
         c, token = self.client()
         r = c.post(f"/agenda/tasks/{t.id}/toggle", data={"_csrf": token}, headers={"X-Requested-With": "fetch"})
         data = r.get_json()
-        self.assertEqual(data["next"], (date.today() + timedelta(days=7)).isoformat())
+        self.assertEqual(data["next"], (horloge.today() + timedelta(days=7)).isoformat())
         self.assertTrue(data["undo"])
         r = c.post(data["undo"], data={"_csrf": token, "prev": data["prev"]}, headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json()["ok"])
         db.session.refresh(t)
-        self.assertEqual((t.due_date, t.done_count, t.done_at), (date.today(), 0, None))
+        self.assertEqual((t.due_date, t.done_count, t.done_at), (horloge.today(), 0, None))
 
         # Seconde annulation : refusée, avec un message clair (pas seulement un code d'erreur)
         r = c.post(data["undo"], data={"_csrf": token, "prev": data["prev"]}, headers={"X-Requested-With": "fetch"})

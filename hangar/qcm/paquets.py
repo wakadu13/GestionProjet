@@ -13,9 +13,9 @@ peuvent la réutiliser.
 
 import json
 import unicodedata
-from datetime import date
 from pathlib import PurePosixPath
 
+from .. import heure
 from . import langues, quiz
 from .coffre import DOSSIER_QCM, INVALID_NAME_RE, invalider, racine_ecriture
 
@@ -289,7 +289,7 @@ def lire_liste(form, fichier=None, aujourdhui=None):
                           "séparés par une tabulation, une virgule ou « = ».")
     if erreur:
         return None, options, 0, erreur
-    jour = aujourdhui or date.today()
+    jour = aujourdhui or heure.today()
     titre = options["titre"] or f"Vocabulaire {options['langue'].lower()} du {jour:%d/%m/%Y}"
     paquet = paquet_vocabulaire(options["langue"], titre, "", options["types"], fiches, "Import de liste")
     return paquet, options, ignorees, None

@@ -13,6 +13,7 @@ import unittest
 from datetime import timedelta
 from unittest import mock
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app
 from hangar.extensions import db
 from hangar.models import EmailMessage, MailConfig, User, Workspace, now
@@ -257,12 +258,11 @@ class MailMembresTests(Base):
         self.assertEqual(self.nb(), 25)
 
     def creer_bilan(self):
-        from datetime import date
 
         from hangar.bilan import compute_bilan
         from hangar.models import BilanReport
         with self.app.app_context():
-            fin = date.today()
+            fin = horloge.today()
             data = compute_bilan([], fin - timedelta(days=7), fin, "Semaine")
             r = BilanReport(title="Bilan", data_json=json.dumps(data, ensure_ascii=False, default=str),
                             period_start=fin - timedelta(days=7), period_end=fin, created_by_id=self.membre_id)

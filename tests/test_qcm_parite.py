@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app
 from hangar.extensions import db
 from hangar.models import User
@@ -178,7 +179,7 @@ class HorsLigneTests(PariteTestCase):
         # Rejouées dans l'ordre chronologique : ratée avant-hier, réussie hier.
         p = QuizProgress.query.filter_by(user_id=self.user.id, set_id="QCM/Physique/elec", question_id="ohm").one()
         self.assertEqual((p.seen, p.correct, p.last_correct), (2, 1, True))
-        self.assertEqual(p.last_review.date(), (datetime.now() - timedelta(days=1)).date())
+        self.assertEqual(p.last_review.date(), (horloge.now() - timedelta(days=1)).date())
         self.assertIsNotNone(p.stabilite)
         self.assertGreater(p.echeance, p.last_review)
         jours = {a.jour: a.reponses for a in Activite.query.filter_by(user_id=self.user.id)}
@@ -247,7 +248,7 @@ class PushTests(PariteTestCase):
         self.assertEqual((a.user_id, a.heure, a.minute, a.p256dh), (self.user.id, 23, 59, "BPcle"))
         self.assertIn(SUB["endpoint"], c.get("/api/push/cle/").get_json()["abonnements"])
 
-        midi = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
+        midi = horloge.now().replace(hour=12, minute=0, second=0, microsecond=0)
         with mock.patch("pywebpush.webpush") as wp:
             self.assertEqual(rappels.envoyer_rappels_dus(midi)["envoyes"], 0)  # pas encore l'heure
             a.heure, a.minute, a.dernier_envoi = 7, 30, None
@@ -540,10 +541,10 @@ class BlocageTests(PariteTestCase):
         for _ in range(5):
             b.noter_echec("eleve", "10.0.0.7")
         self.assertEqual(b.bloque("Eleve", "10.0.0.7"), 30)
-        self.assertEqual(b.bloque("eleve", "10.0.0.7", datetime.now() + timedelta(minutes=31)), 0)
+        self.assertEqual(b.bloque("eleve", "10.0.0.7", horloge.now() + timedelta(minutes=31)), 0)
         # Après 30 minutes, une nouvelle série repart de zéro
-        b.noter_echec("eleve", "10.0.0.7", datetime.now() + timedelta(minutes=31))
-        self.assertEqual(b.bloque("eleve", "10.0.0.7", datetime.now() + timedelta(minutes=31)), 0)
+        b.noter_echec("eleve", "10.0.0.7", horloge.now() + timedelta(minutes=31))
+        self.assertEqual(b.bloque("eleve", "10.0.0.7", horloge.now() + timedelta(minutes=31)), 0)
 
     def test_blocage_par_adresse_et_commande(self):
         from hangar import blocage_connexion as b

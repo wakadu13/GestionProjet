@@ -19,7 +19,7 @@ base Django de Revision (DATA_DIR/db.sqlite3, hors du dépôt git), avec les esp
 - se relance sans rien doubler : pour une question, la révision la plus récente l'emporte
   (compteurs : le plus grand) ; pour l'activité et le temps, le plus grand de chaque jour ; les
   réglages déjà faits dans Hangar sont gardés ;
-- convertit les dates-heures (UTC dans Django) en heure locale ; les dates simples (jour,
+- convertit les dates-heures (UTC dans Django) en heure de l'agenda ; les dates simples (jour,
   date d'examen) sont copiées telles quelles.
 """
 from __future__ import annotations
@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath
 
+from .. import heure
 from ..extensions import db
 from . import quiz, rattachement
 from .models import Activite, Explication, ObjectifRevision, QuizDeck, QuizProgress, TempsRevision
@@ -95,7 +96,7 @@ def joueurs(base) -> list[str]:
 
 
 def _date_heure(valeur):
-    """Date-heure de Django (UTC, texte « AAAA-MM-JJ HH:MM:SS[.ffffff] ») → heure locale naïve."""
+    """Date-heure de Django (UTC, texte « AAAA-MM-JJ HH:MM:SS[.ffffff] ») → heure naïve de l'agenda (Paris)."""
     if valeur in (None, ""):
         return None
     if isinstance(valeur, datetime):
@@ -104,7 +105,7 @@ def _date_heure(valeur):
         quand = datetime.fromisoformat(str(valeur).strip().replace("Z", "+00:00"))
     if quand.tzinfo is None:
         quand = quand.replace(tzinfo=timezone.utc)
-    return quand.astimezone().replace(tzinfo=None, microsecond=0)
+    return heure.vers_agenda(quand).replace(microsecond=0)
 
 
 def _date(valeur):

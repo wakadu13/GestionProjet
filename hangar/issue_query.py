@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from flask import session
 from sqlalchemy.orm import selectinload
 
+from . import heure
 from .extensions import db
 from .models import (
     MODULE_STATUS_COLORS, PRIORITIES, PRIORITY_ORDER, STATE_GROUPS, Cycle, Issue,
@@ -81,7 +82,7 @@ def _ids(vals, me):
 
 
 def _date_clause(column, presets):
-    today = date.today()
+    today = heure.today()
     ws, we = week_bounds(today)
     clauses = []
     for p in presets:
@@ -336,7 +337,7 @@ def group_issues(issues, group_by: str, projects: list[Project], show_empty=True
 # ---------------------------------------------------------------------------
 
 def calendar_weeks(month_str: str, issues):
-    today = date.today()
+    today = heure.today()
     try:
         y, m = (int(x) for x in month_str.split("-"))
         first = date(y, m, 1)
@@ -367,7 +368,7 @@ def calendar_weeks(month_str: str, issues):
 
 def gantt_data(issues, zoom: str = "week"):
     dated = [i for i in issues if i.start_date or i.target_date]
-    today = date.today()
+    today = heure.today()
     if dated:
         lo = min((i.start_date or i.target_date) for i in dated)
         hi = max((i.target_date or i.start_date) for i in dated)

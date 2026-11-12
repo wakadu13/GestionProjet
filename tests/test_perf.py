@@ -11,12 +11,13 @@ import shutil
 import tempfile
 import unittest
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
 from sqlalchemy import event
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app
 from hangar.extensions import db
 from hangar.models import User
@@ -161,7 +162,7 @@ class PagesQcmAgendaTests(unittest.TestCase):
             (vault / (sid + ".json")).parent.mkdir(parents=True, exist_ok=True)
             (vault / (sid + ".json")).write_text(json.dumps(SET), encoding="utf-8")
         # Séances de la semaine en cours (tableau de bord et vue semaine), dont un contrôle
-        lundi = date.today() - timedelta(days=date.today().weekday())
+        lundi = horloge.today() - timedelta(days=horloge.today().weekday())
         lignes = ["BEGIN:VCALENDAR", "X-WR-TIMEZONE:Europe/Paris"]
         for j in range(5):
             jour = lundi + timedelta(days=j)
@@ -178,7 +179,7 @@ class PagesQcmAgendaTests(unittest.TestCase):
             db.session.add(u)
             db.session.commit()
             self.uid = u.id
-            A.import_calendar(u, "\n".join(lignes) + "\n", at=datetime.now() - timedelta(days=1))
+            A.import_calendar(u, "\n".join(lignes) + "\n", at=horloge.now() - timedelta(days=1))
             from hangar.models import AgendaEvent
             evs = AgendaEvent.query.filter_by(user_id=u.id).all()
             for ev in evs:  # une tâche liée et un rappel par séance
@@ -189,7 +190,7 @@ class PagesQcmAgendaTests(unittest.TestCase):
             tn = next(ev for ev in evs if ev.title.startswith("Techniques"))
             A.set_subject_link(u, tn.title, qcm_category="TECHNIQUES_NUM")
             # Progression : quelques questions dues, examen dans 10 jours sur deux sets
-            hier = datetime.now() - timedelta(days=1)
+            hier = horloge.now() - timedelta(days=1)
             for sid in self.sets:
                 for i in range(6):
                     p = QuizProgress(user_id=u.id, set_id=sid, question_id=f"q{i}")
@@ -198,7 +199,7 @@ class PagesQcmAgendaTests(unittest.TestCase):
                     db.session.add(p)
             for sid in self.sets[:2]:
                 db.session.add(QuizDeck(user_id=u.id, set_id=sid, nouvelles_jour=2,
-                                        date_objectif=date.today() + timedelta(days=10)))
+                                        date_objectif=horloge.today() + timedelta(days=10)))
             db.session.commit()
             self.nb_seances = len(evs)
             self.rappels = {ev.id: AgendaReminder.query.filter_by(event_id=ev.id).count() for ev in evs}
@@ -290,7 +291,7 @@ class PagesQcmAgendaTests(unittest.TestCase):
             self.assertEqual(len(sur_table(sql, "qcm_progress")), 1, url)
         with self.app.test_request_context("/"):
             e = services.etat(self.uid)
-            now = datetime.now()
+            now = horloge.now()
             self.assertEqual(services.previsions(self.uid, e["library"], now, tous=e["tous"]),
                              services.previsions(self.uid, e["library"], now))
             exams = services.objectifs(self.uid, e["library"], e["decks"], now, tous=e["tous"])
@@ -385,7 +386,7 @@ class TicketsTests(unittest.TestCase):
         with self.app.test_request_context("/"):
             from hangar.bilan import compute_bilan
             from hangar.models import Project
-            b = compute_bilan([db.session.get(Project, self.pid)], date.today() - timedelta(days=30), date.today())
+            b = compute_bilan([db.session.get(Project, self.pid)], horloge.today() - timedelta(days=30), horloge.today())
         self.assertTrue(b["blocked"])
         self.assertTrue(all(x["blockers"] for x in b["blocked"]))
         self.assertTrue(any(x["title"] == "Ticket de charge 0" for x in b["blocked"]))

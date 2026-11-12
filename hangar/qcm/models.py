@@ -439,7 +439,3 @@ class AbonnementPush(db.Model):
     def __repr__(self):
         return f"<AbonnementPush {self.user_id} · {self.heure:02d}:{self.minute:02d}>"
 
-
-# Tables des jetons de l'application Android et du blocage des connexions (modules de Hangar
-# hors QCM, mais créées avec celles-ci : create_app importe ce fichier avant db.create_all()).
-from .. import appareils as _appareils, blocage_connexion as _blocage  # noqa: E402,F401

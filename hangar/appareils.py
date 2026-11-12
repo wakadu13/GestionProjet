@@ -25,8 +25,8 @@ formats JSON et les mêmes en-têtes.
   en POST (`/logout` ou `/deconnexion/`) ; `/deconnexion/` en GET (et `/logout` en GET, qui y renvoie)
   affiche un bouton de confirmation.
 
-Le blueprint est enregistré par celui des QCM (`qcm/views.py`) ; ses tables sont créées avec celles
-des QCM (`qcm/models.py`).
+Le blueprint et ses tables (avec celle de `blocage_connexion`) sont enregistrés par `create_app`
+(`hangar/__init__.py`), comme les autres.
 """
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ from sqlalchemy import delete, event
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session as _SessionSA
 
+from . import heure
 from . import blocage_connexion as blocage
 from .extensions import db
 from .models import User
@@ -64,7 +65,7 @@ def _empreinte(cle: str) -> str:
 
 
 def _maintenant():
-    return datetime.now().replace(microsecond=0)
+    return heure.now()
 
 
 class JetonAppareil(db.Model):

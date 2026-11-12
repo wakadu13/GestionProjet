@@ -14,9 +14,10 @@ import re
 import shutil
 import tempfile
 import unittest
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app
 from hangar.extensions import db
 from hangar.models import User
@@ -169,7 +170,7 @@ class AppTestCase(unittest.TestCase):
     def _progresser(self, set_id, qids, user_id=None, quand=None):
         for qid in qids:
             p = QuizProgress(user_id=self.user.id if user_id is None else user_id, set_id=set_id, question_id=qid)
-            p.record(True, quand=quand or datetime.now().replace(microsecond=0) - timedelta(days=2))
+            p.record(True, quand=quand or horloge.now().replace(microsecond=0) - timedelta(days=2))
             db.session.add(p)
         db.session.commit()
 
@@ -196,7 +197,7 @@ class AppTestCase(unittest.TestCase):
 class PlanningPageTests(AppTestCase):
     def test_page_planning_et_badge_disent_que_l_ajustement_est_actif(self):
         deck = QuizDeck(user_id=self.user.id, set_id="QCM/Physique/elec", nouvelles_jour=1, auto_quota=True,
-                        date_objectif=date.today() + timedelta(days=3))
+                        date_objectif=horloge.today() + timedelta(days=3))
         db.session.add(deck)
         db.session.commit()
         c = self.client()
@@ -223,7 +224,7 @@ class RenommageHorsHangarTests(AppTestCase):
         self._progresser("QCM/Physique/elec", ["ohm"], user_id=self.autre.id)
         db.session.add_all([
             QuizDeck(user_id=self.user.id, set_id="QCM/Physique/elec", nouvelles_jour=5,
-                     date_objectif=date.today() + timedelta(days=30)),
+                     date_objectif=horloge.today() + timedelta(days=30)),
             Explication(set_id="QCM/Physique/elec", question_id="ohm", texte="Parce que."),
             Signalement(set_id="QCM/Physique/elec", question_id="pairs", user_id=self.user.id, commentaire="?"),
         ])
@@ -239,7 +240,7 @@ class RenommageHorsHangarTests(AppTestCase):
         self.assertEqual(self._lignes("QCM/Physique-S1/elec", self.autre.id), ["ohm"])
         self.assertEqual(self._lignes("QCM/Physique/elec"), [])
         deck = QuizDeck.query.filter_by(user_id=self.user.id, set_id="QCM/Physique-S1/elec").one()
-        self.assertEqual((deck.nouvelles_jour, deck.date_objectif), (5, date.today() + timedelta(days=30)))
+        self.assertEqual((deck.nouvelles_jour, deck.date_objectif), (5, horloge.today() + timedelta(days=30)))
         self.assertEqual(Explication.query.filter_by(set_id="QCM/Physique-S1/elec").count(), 1)
         self.assertEqual(Signalement.query.filter_by(set_id="QCM/Physique-S1/elec").count(), 1)
         c = self.client()
@@ -391,7 +392,7 @@ class DeplacerTests(AppTestCase):
         self.assertEqual(Explication.query.filter_by(set_id="QCM/Electro/elec").count(), 1)
 
     def test_deplacer_fusionne_question_par_question(self):
-        ancienne = datetime.now().replace(microsecond=0) - timedelta(days=10)
+        ancienne = horloge.now().replace(microsecond=0) - timedelta(days=10)
         self._progresser("QCM/Electro/elec", ["ohm"], quand=ancienne)
         self._progresser("QCM/Physique/elec", ["ohm"])
         c = self.client()
@@ -533,14 +534,14 @@ class RelectureQuotaAutoTests(AppTestCase):
         examen = examen[:examen.index("</div>")]
         self.assertIn("en retard", examen)
         self.assertIn("ajustement auto.", examen)  # avant : « en retard » seul
-        section = services._digest_revisions(digest.Contexte(user=self.user, jour=date.today(), at=datetime.now()))
+        section = services._digest_revisions(digest.Contexte(user=self.user, jour=horloge.today(), at=horloge.now()))
         self.assertIn("en retard (quotas ajustés automatiquement)", section.html)
         # Case décochée : « en retard » seul.
         QuizDeck.query.filter_by(set_id="QCM/Examen/gros").one().auto_quota = False
         db.session.commit()
         page = c.get("/qcm/").get_data(as_text=True)
         self.assertNotIn("ajustement auto.", page[page.index('class="qcm-exams"'):])
-        section = services._digest_revisions(digest.Contexte(user=self.user, jour=date.today(), at=datetime.now()))
+        section = services._digest_revisions(digest.Contexte(user=self.user, jour=horloge.today(), at=horloge.now()))
         self.assertIn("en retard", section.html)
         self.assertNotIn("quotas ajustés automatiquement", section.html)
 
@@ -618,7 +619,7 @@ class RelectureRattachementTests(AppTestCase):
         self.lib()  # empreintes connues
         for qid in ("q1", "q2", "q3"):  # identifiants par défaut, les mêmes dans les deux sets
             p = QuizProgress(user_id=self.user.id, set_id="QCM/Maths/chap1", question_id=qid)
-            p.record(False, quand=datetime.now().replace(microsecond=0) - timedelta(days=3))
+            p.record(False, quand=horloge.now().replace(microsecond=0) - timedelta(days=3))
             db.session.add(p)
         db.session.add(Explication(set_id="QCM/Maths/chap1", question_id="q1", texte="Dérivée de x²."))
         db.session.commit()

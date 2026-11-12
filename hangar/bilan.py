@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from flask import url_for
 from sqlalchemy.orm import selectinload
 
+from . import heure
 from .models import (
     PRIORITY_LABELS, PRIORITY_ORDER, Activity, Comment, Issue, Page,
     Project, WorkLog, blockers_map,
@@ -38,7 +39,7 @@ HEALTH = {
 def period_bounds(kind: str, projects, start_s=None, end_s=None):
     """Retourne (début, fin, libellé) pour un type de période."""
     from .utils import parse_date
-    today = date.today()
+    today = heure.today()
     if kind == "week":
         s, e = week_bounds(today)
     elif kind == "last_week":
@@ -96,7 +97,7 @@ def _issue(i: Issue, today: date) -> dict:
 
 
 def compute_bilan(projects: list[Project], start: date, end: date, label: str | None = None) -> dict:
-    today = date.today()
+    today = heure.today()
     pids = [p.id for p in projects] or [0]
     s_dt = datetime.combine(start, datetime.min.time())
     e_dt = datetime.combine(end, datetime.max.time())
@@ -219,7 +220,7 @@ def compute_bilan(projects: list[Project], start: date, end: date, label: str | 
 
     return {
         "version": 1,
-        "generated_at": datetime.now().replace(microsecond=0).isoformat(),
+        "generated_at": heure.now().isoformat(),
         "scope": {"label": projects[0].name if len(projects) == 1 else "Tous les projets",
                   "projects": [{"id": p.id, "name": p.name, "emoji": p.emoji, "identifier": p.identifier}
                                for p in projects]},

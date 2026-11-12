@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 from flask import url_for
 from markupsafe import escape
 
-from . import digest
+from . import digest, heure
 from .extensions import db
 from .icons import ICONS
 from .texte import COLLATION_FR, cle_tri
@@ -53,7 +53,7 @@ MILESTONE_LABELS = ("jalon", "jalons", "milestone", "milestones")
 
 def stats_of(issues, today: date | None = None) -> dict:
     """Compte les tickets par groupe d'état ; `issues` : objets ayant `state_group` et `target_date`."""
-    today = today or date.today()
+    today = today or heure.today()
     counts = {g: 0 for g, _, _ in STATE_GROUPS}
     overdue = 0
     for i in issues:
@@ -82,7 +82,7 @@ def compute_health(stats: dict, start: date | None, target: date | None, today: 
     - échéance dans 7 jours ou moins avec moins de 80 % terminé : à risque ;
     - tickets en retard : 20 % des tickets ouverts (au moins 2) = à risque, 50 % (au moins 3) = en retard.
     """
-    today = today or date.today()
+    today = today or heure.today()
     if closed:
         return "on_track", []
     level = "on_track"
@@ -160,7 +160,7 @@ class Snapshot:
     et dépendances des projets qu'il peut lire."""
 
     def __init__(self, today: date | None = None):
-        self.today = today or date.today()
+        self.today = today or heure.today()
         self.projects = {p.id: p for p in Project.query.order_by(Project.name.collate(COLLATION_FR)).all()}
         self.modules = {m.id: m for m in Module.query.order_by(Module.name.collate(COLLATION_FR)).all()}
         rows = (db.session.query(Issue.id, Issue.project_id, Issue.sequence_id, Issue.title, Issue.target_date,
@@ -300,7 +300,7 @@ def refresh_health(ini: Initiative, health: str | None, at: datetime | None = No
     """Retient la dernière santé constatée (et depuis quand) ; True si elle a changé."""
     if ini.health_seen != health:
         ini.health_seen = health
-        ini.health_since = at or datetime.now().replace(microsecond=0)
+        ini.health_since = at or heure.now()
         return True
     return False
 
@@ -668,7 +668,7 @@ def overview_text(user, snap: Snapshot | None = None) -> str:
         parts.append(txt)
     linked = {p.id for i in inis for p in i.projects}
     orphans = [snap.projects[pid] for pid in sorted(visible) if pid not in linked and pid in snap.projects]
-    head = (f"Workgraph de l’espace « {Workspace.get().name} » au {date.today():%d/%m/%Y} : {len(inis)} initiative(s)"
+    head = (f"Workgraph de l’espace « {Workspace.get().name} » au {heure.today():%d/%m/%Y} : {len(inis)} initiative(s)"
             + (" — " + ", ".join(f"{n} {HEALTH_LABELS[k].lower()}" for k, n in counts.items()) if counts else "")
             + ".")
     if orphans:

@@ -24,6 +24,9 @@ dependencies = [
     "py-vapid>=1.9.0",
     "cryptography>=42.0",
     "requests>=2.31",
+    # Base des fuseaux horaires pour zoneinfo : absente de Windows, sans elle l'heure de Paris (hangar/heure.py)
+    # et les heures « Z » des fichiers .ics retombent sur des calculs de secours
+    "tzdata>=2024.1",
 ]
 
 [project.scripts]

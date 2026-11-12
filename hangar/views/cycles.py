@@ -1,10 +1,10 @@
 """Cycles (sprints) : liste, détail avec burndown, transfert des tickets non terminés."""
-from datetime import date, timedelta
+from datetime import timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from .. import charts
+from .. import charts, heure
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import STATE_GROUPS, Cycle, Issue, now
@@ -129,7 +129,7 @@ def _burndown(cycle, issues):
         days = [cycle.start_date, cycle.start_date + timedelta(days=1)]
     scope = [i for i in issues if i.state_group != "cancelled"]
     total = len(scope)
-    today = date.today()
+    today = heure.today()
     ideal = [round(total - total * k / (len(days) - 1), 2) for k in range(len(days))]
     actual = []
     for d in days:

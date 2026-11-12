@@ -9,11 +9,12 @@ Un module peut ajouter un exécuteur d'action avec `register_action(kind, fn)` (
 from __future__ import annotations
 
 import re
-from datetime import date, time, timedelta
+from datetime import time, timedelta
 from pathlib import Path
 
 from flask import url_for
 
+from .. import heure
 from ..extensions import db
 from ..models import (
     PRIORITY_LABELS, AgendaTask, Cycle, Issue, Page, PageVersion, Project, State, now,
@@ -269,7 +270,7 @@ class ToolBox:
         if assignes_a_moi or not (texte or projet or en_retard or etat != "ouverts"):
             q = q.filter(Issue.assignees.any(id=user.id))
         if en_retard:
-            q = q.filter(Issue.target_date < date.today())
+            q = q.filter(Issue.target_date < heure.today())
         limite = max(1, min(int(limite or 20), 50))
         order = (Issue.target_date.is_(None), Issue.target_date, Issue.updated_at.desc())
 
@@ -298,7 +299,7 @@ class ToolBox:
     def t_lister_taches(self, filtre="toutes_ouvertes", texte=""):
         from .. import agenda as A
 
-        today = date.today()
+        today = heure.today()
         user = self.user
         if filtre == "terminees":
             tasks = AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.done_at.isnot(None)) \

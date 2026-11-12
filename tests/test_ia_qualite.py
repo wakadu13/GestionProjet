@@ -5,13 +5,14 @@ Lancer : uv run python -m unittest discover -s tests -p "test_ia_qualite.py" -v
 """
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest import mock
 
 from test_ai import claude_msg, tool_use
 from test_ai_revision import QUESTIONS_IA, RevisionTestCase
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar.ai import cli, jobs, travaux
 from hangar.ai.models import AIConversation, AIJob, AIMessage, AISettings, AIUsage
 from hangar.extensions import db
@@ -224,7 +225,7 @@ class KitTests(RevisionTestCase):
                                                                           "reponses_texte": ["UI"]}]}))
         self.ecrire("QCM/Elec/kirchhoff.json", json.dumps({"titre": "Lois de Kirchhoff", "questions": [
             {"id": "a", "type": "QRC", "question": "Nœuds ?", "reponses_texte": ["somme nulle"]}]}))
-        self.jour = (datetime.now() + timedelta(days=10)).replace(hour=8, minute=0, second=0, microsecond=0)
+        self.jour = (horloge.now() + timedelta(days=10)).replace(hour=8, minute=0, second=0, microsecond=0)
         self.ev = AgendaEvent(user_id=self.admin.id, uid="ctrl", title="Électricité", kind="CO_ECRIT",
                               start=self.jour, end=self.jour + timedelta(hours=2))
         db.session.add_all([self.ev, AgendaSubjectLink(user_id=self.admin.id, subject="electricite", title="Électricité",

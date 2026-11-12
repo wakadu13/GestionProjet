@@ -21,6 +21,7 @@ from flask import current_app, url_for
 from werkzeug.exceptions import HTTPException
 from werkzeug.routing import RequestRedirect
 
+from .. import heure
 from ..extensions import db
 from ..models import (
     PRIORITY_LABELS, AgendaTask, Comment, Cycle, Issue, Module, Page, Project, State,
@@ -368,7 +369,7 @@ def agenda_text(user, start: date, end: date, title: str | None = None) -> str:
     """Cours et tâches du `start` au `end` inclus, jour par jour."""
     from .. import agenda as A
 
-    today = date.today()
+    today = heure.today()
     lines = [title] if title else []
     evs = A.events_between(user, datetime.combine(start, time(0)), datetime.combine(end + timedelta(days=1), time(0)),
                            include_removed=False)
@@ -395,7 +396,7 @@ def agenda_text(user, start: date, end: date, title: str | None = None) -> str:
 def tasks_text(user, today: date | None = None) -> str:
     from .. import agenda as A
 
-    today = today or date.today()
+    today = today or heure.today()
     groups = A.open_task_groups(user, today)
     lines = []
     for key, label in A.TASK_GROUP_LABELS:
@@ -414,7 +415,7 @@ def _agenda_dashboard(path, args, user):
     from .. import agenda as A
     from .. import ics
 
-    today = date.today()
+    today = heure.today()
     d = A.dashboard(user)
     lines = [f"Tableau de bord de l’agenda — {A.day_long(today)}"]
     if d["current"]:
@@ -440,7 +441,7 @@ def _agenda_calendar(path, args, user):
     from .. import ics
     from ..utils import parse_date
 
-    ref = parse_date(args.get("date")) or date.today()
+    ref = parse_date(args.get("date")) or heure.today()
     view = args.get("view") or "week"
     if view == "month":
         start = ref.replace(day=1)
@@ -462,7 +463,7 @@ def _agenda_tasks(path, args, user):
     if focus and str(focus).isdigit():
         t = db.session.get(AgendaTask, int(focus))
         if t is not None and t.user_id == user.id:
-            lines = [f"Tâche {_task_line(t, date.today())}"]
+            lines = [f"Tâche {_task_line(t, heure.today())}"]
             if t.notes:
                 lines.append(f"Notes :\n{t.notes.strip()}")
             if t.event:

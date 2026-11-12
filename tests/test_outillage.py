@@ -36,6 +36,7 @@ from unittest import mock
 from werkzeug.datastructures import MultiDict
 
 import hangar
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import cli, create_app, issue_query
 from hangar.extensions import db
 from hangar.models import (
@@ -79,8 +80,8 @@ class BaseCase(unittest.TestCase):
             bet = create_project("Beta", "BET", chef, network="private")
             for p in (alp, bet):
                 db.session.add_all([Label(project=p, name="Urgent"), Label(project=p, name="Rapport")])
-            db.session.add_all([Cycle(project=alp, name="Cycle 1", start_date=date.today(),
-                                      end_date=date.today() + timedelta(days=14)),
+            db.session.add_all([Cycle(project=alp, name="Cycle 1", start_date=horloge.today(),
+                                      end_date=horloge.today() + timedelta(days=14)),
                                 Module(project=alp, name="Terrain"), Module(project=alp, name="Synthèse")])
             db.session.commit()
             self.ids = ids
@@ -206,7 +207,7 @@ class IssueQueryTests(BaseCase):
             terrain = Module.query.filter_by(name="Terrain").one().id
             cycle = Cycle.query.filter_by(project_id=p.id).one().id
         self.a = self.ticket("Entretiens", priority="high", assignee_ids=[self.ids["membre"]], label_ids=urgent,
-                             module_ids=[terrain], cycle_id=cycle, target_date=date.today().isoformat())
+                             module_ids=[terrain], cycle_id=cycle, target_date=horloge.today().isoformat())
         self.b = self.ticket("Sondage", priority="low")
         self.c = self.ticket("Synthèse écrite", priority="high", assignee_ids=[self.ids["chef"]])
 
@@ -248,10 +249,10 @@ class IssueQueryTests(BaseCase):
     def test_calendrier_du_mois(self):
         with self.app.test_request_context("/"):
             issues = Issue.query.filter_by(project_id=self.alp).all()
-            semaines = issue_query.calendar_weeks(date.today().strftime("%Y-%m"), issues)
+            semaines = issue_query.calendar_weeks(horloge.today().strftime("%Y-%m"), issues)
             self.assertTrue(semaines)
             places = {i.id: jour["date"] for semaine in semaines["weeks"] for jour in semaine for i in jour["issues"]}
-            self.assertEqual(places, {self.a: date.today()})  # seul ticket daté : le jour de son échéance
+            self.assertEqual(places, {self.a: horloge.today()})  # seul ticket daté : le jour de son échéance
             self.assertEqual(semaines["undated"], 2)
             self.assertTrue(issue_query.calendar_weeks("n'importe quoi", issues))  # mois invalide : mois courant
 
@@ -374,7 +375,7 @@ class ApiV1Tests(BaseCase):
         with self.app.app_context():
             t, brut = APIToken.generate(db.session.get(User, self.ids[username]), "Script", days=jours)
             if expire:
-                t.expires_at = datetime.now() - timedelta(minutes=1)
+                t.expires_at = horloge.now() - timedelta(minutes=1)
             db.session.add(t)
             db.session.commit()
             return brut
@@ -612,7 +613,7 @@ class HeureDesTestsQcmTests(unittest.TestCase):
             import test_qcm  # suite lancée par « unittest discover -s tests »
         except ImportError:
             from tests import test_qcm
-        tard = datetime.combine(date.today(), datetime.min.time()).replace(hour=23, minute=55)
+        tard = datetime.combine(horloge.today(), datetime.min.time()).replace(hour=23, minute=55)
         suite = unittest.TestSuite([test_qcm.ReponsesTests("test_reponses_enregistrees_et_file_du_jour")])
         resultat = unittest.TestResult()
         with mock.patch.object(quiz, "maintenant", lambda: tard):

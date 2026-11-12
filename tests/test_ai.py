@@ -21,6 +21,7 @@ from anthropic.types.beta import BetaMessage
 from flask import g, has_app_context
 from flask.testing import FlaskClient
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app
 from hangar.ai import _CONTEXT_RESOLVERS, client_config, disponible, register_context
 from hangar.ai import context as C
@@ -574,9 +575,9 @@ class ToolAndChatTests(AITestCase):
         super().setUp()
         self.p = self.project()
         self.issue = create_issue(self.p, {"title": "Rédiger le rapport", "description": "Partie 2 à finir",
-                                           "target_date": (date.today() - timedelta(days=2)).isoformat(),
+                                           "target_date": (horloge.today() - timedelta(days=2)).isoformat(),
                                            "assignee_ids": [self.admin.id]}, self.admin)
-        self.task = AgendaTask(user_id=self.admin.id, title="Rendre le TP de physique", due_date=date.today() - timedelta(days=1))
+        self.task = AgendaTask(user_id=self.admin.id, title="Rendre le TP de physique", due_date=horloge.today() - timedelta(days=1))
         db.session.add(self.task)
         db.session.commit()
 
@@ -599,7 +600,7 @@ class ToolAndChatTests(AITestCase):
         first = self.fake.requests[0]
         prompt = first["messages"][-1]["content"]
         self.assertIn("Tableau de bord de l’agenda", prompt)
-        self.assertIn(date.today().isoformat(), prompt)
+        self.assertIn(horloge.today().isoformat(), prompt)
         self.assertIn("Rendre le TP de physique", prompt)
         names = [t["name"] for t in first["tools"]]
         self.assertIn("chercher_tickets", names)
@@ -667,7 +668,7 @@ class ToolAndChatTests(AITestCase):
         self.assertIn("pas d’outils", srv.requests[2]["body"]["messages"][0]["content"])
 
     def test_actions_page_cycle_deadline_done_and_rights(self):
-        today = date.today()
+        today = horloge.today()
         page = Page(project=self.p, title="Compte rendu", content="# Compte rendu\n\nIntro.", owner=self.admin,
                     updated_by=self.admin)
         cyc = Cycle(project=self.p, name="Sprint 1", start_date=today - timedelta(days=3), end_date=today + timedelta(days=4))
@@ -726,7 +727,7 @@ class ToolAndChatTests(AITestCase):
 
 class ContextTests(AITestCase):
     def test_agenda_dashboard_and_calendar(self):
-        today = date.today()
+        today = horloge.today()
         at = datetime.combine(today, time(10, 0))
         db.session.add_all([
             AgendaEvent(user_id=self.admin.id, uid="e1", title="Mécanique du vol", kind="CM", location="SALLE A",
@@ -840,7 +841,7 @@ class ConversationTests(AITestCase):
         """Comme en production : le flux tourne après la fin de la requête (session de la vue fermée)."""
         p = self.project()
         create_issue(p, {"title": "Rédiger le rapport"}, self.admin)
-        db.session.add(AgendaTask(user_id=self.admin.id, title="Rendre le TP", due_date=date.today()))
+        db.session.add(AgendaTask(user_id=self.admin.id, title="Rendre le TP", due_date=horloge.today()))
         db.session.commit()
         self.claude()
         c = self.login()
@@ -901,7 +902,7 @@ class CapAndJobsTests(AITestCase):
         self.fake.replies.append(claude_msg(["ok"]))
         self.assertEqual(core.generate("x").text, "ok")
         # L'usage du mois dernier ne compte pas
-        self.assertAlmostEqual(core.month_cost(start=core.month_start(date.today() + timedelta(days=40))), 0)
+        self.assertAlmostEqual(core.month_cost(start=core.month_start(horloge.today() + timedelta(days=40))), 0)
 
     def test_provider_cap_switches_provider(self):
         p = self.claude(monthly_cap=0.01)

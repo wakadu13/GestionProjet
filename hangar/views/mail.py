@@ -1,13 +1,12 @@
 """E-mails : configuration (administrateurs), historique / boîte d'envoi, rédaction manuelle."""
 import json
 import os
-from datetime import date
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from markupsafe import escape
 
-from .. import mailer
+from .. import heure, mailer
 from ..extensions import db
 from ..models import EmailMessage, Issue, MailConfig, User
 from ..services import to_int
@@ -312,4 +311,4 @@ def compose():
                            templates=templates, templates_json=json.dumps(templates, ensure_ascii=False),
                            prefill_subject=prefill_subject, prefill_body=prefill_body,
                            prefill_others=prefill_others, checked_ids=checked_ids,
-                           cfg=MailConfig.get(), today=date.today())
+                           cfg=MailConfig.get(), today=heure.today())

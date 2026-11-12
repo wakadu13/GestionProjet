@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date
 
 from flask import url_for
 from markupsafe import Markup, escape
 
+from . import heure
 from .extensions import db
 from .models import (
     PALETTE, PRIORITY_LABELS, Activity, Cycle, Issue, IssueRelation, Label, Module, Notification,
@@ -690,4 +690,4 @@ def serialize_issue(i: Issue) -> dict:
 
 
 def today():
-    return date.today()
+    return heure.today()

@@ -8,6 +8,7 @@ import unittest
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import agenda as A
 from hangar import controles as C
 from hangar import create_app, digest
@@ -49,7 +50,7 @@ class ControlesTests(unittest.TestCase):
         self.user.set_password("secret1")
         db.session.add(self.user)
         db.session.commit()
-        self.at = datetime.now().replace(second=0, microsecond=0)
+        self.at = horloge.now().replace(second=0, microsecond=0)
         self.today = self.at.date()
         self.exam_day = self.today + timedelta(days=5)
 

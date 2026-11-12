@@ -1,13 +1,14 @@
 """Tickets : vues (liste, tableau, tableur, calendrier, Gantt), détail, commentaires, fichiers..."""
 import os
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 from flask import (Blueprint, Response, abort, current_app, flash, redirect, render_template, request,
                    send_file, url_for)
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 
+from .. import heure
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import (
@@ -415,7 +416,7 @@ def worklog_add(pid, seq):
     else:
         from ..utils import parse_date
         w = WorkLog(issue=issue, user=current_user, minutes=minutes,
-                    date=parse_date(request.form.get("date")) or date.today(),
+                    date=parse_date(request.form.get("date")) or heure.today(),
                     description=(request.form.get("description") or "")[:255])
         db.session.add(w)
         log_activity(issue, current_user, "worklog", new=fmt_minutes(minutes))
@@ -562,7 +563,7 @@ def export(pid, fmt):
     if request.args.get("archived") == "1":
         q = Issue.query.filter(Issue.project_id == pid)
     issues = IQ.sort_issues(q.all(), "key")
-    stamp = date.today().isoformat()
+    stamp = heure.today().isoformat()
     base = f"{project.identifier}_tickets_{stamp}"
     if fmt == "csv":
         return Response(importer.export_csv(issues), mimetype="text/csv; charset=utf-8",

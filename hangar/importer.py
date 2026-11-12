@@ -12,6 +12,7 @@ import warnings
 from datetime import date, datetime
 from xml.etree import ElementTree as ET
 
+from . import heure
 from .extensions import db
 from .models import (
     PALETTE, PRIORITY_LABELS, STATE_GROUP_LABELS, Comment, Cycle, Issue, IssueRelation, Module, Project,
@@ -490,7 +491,7 @@ def import_rows(project: Project, rows, actor: User, create_members=False, updat
                 # date de clôture réaliste : l'échéance prévue si elle est passée
                 tgt = data.get("target_date")
                 issue.completed_at = (datetime.combine(tgt, datetime.min.time()).replace(hour=17)
-                                      if tgt and tgt <= date.today() else now())
+                                      if tgt and tgt <= heure.today() else now())
             report["created"] += 1
         if ext:
             by_ext[ext] = issue
@@ -645,7 +646,7 @@ def export_xlsx(issues, title="Tickets") -> io.BytesIO:
     syn = wb.create_sheet("Synthèse")
     syn.append([xml_safe(title)])
     syn["A1"].font = Font(bold=True, size=14)
-    syn.append([f"Export du {date.today():%d/%m/%Y} — {len(issues)} tickets"])
+    syn.append([f"Export du {heure.today():%d/%m/%Y} — {len(issues)} tickets"])
     syn.append([])
     syn.append(["Groupe d’état", "Nombre"])
     for g, lab in STATE_GROUP_LABELS.items():
@@ -698,7 +699,7 @@ def export_json(issues) -> str:
 
 
 def export_markdown(issues, project) -> str:
-    lines = [f"# {project.name} — tickets", "", f"_Export du {date.today():%d/%m/%Y}_", ""]
+    lines = [f"# {project.name} — tickets", "", f"_Export du {heure.today():%d/%m/%Y}_", ""]
     by_state = {}
     for i in issues:
         by_state.setdefault(i.state.name if i.state else "Sans état", []).append(i)

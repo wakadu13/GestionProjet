@@ -8,6 +8,7 @@ from pathlib import Path
 from flask import Flask, abort, g, redirect, render_template, request, session, url_for
 from flask_login import current_user
 
+from . import heure
 from .extensions import db, login_manager
 
 # Seul endroit où le numéro de version est écrit : pyproject.toml le lit ici (version dynamique de hatchling).
@@ -72,6 +73,8 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
     from .ai import models as _ai_models  # noqa: F401
     from .qcm import models as _qcm_models  # noqa: F401
     from .wiki import models as _wiki_models  # noqa: F401
+    # Jetons de l'application Android et blocage des connexions : /login interroge sa table à chaque essai.
+    from . import appareils as _appareils, blocage_connexion as _blocage  # noqa: F401
     if wiki_origine == coffre.DEFAUT:  # un coffre choisi n'est jamais créé : introuvable, le wiki le dit
         wiki_dir.mkdir(parents=True, exist_ok=True)
 
@@ -182,6 +185,7 @@ def _remplir_colonne_ajoutee(table, col) -> None:
 
 
 def _register_blueprints(app: Flask) -> None:
+    from . import appareils
     from .ai import views as ai_views
     from .qcm import views as qcm_views
     from .views import (agenda, analytics, api, apiv1, auth, bilan, cycles, home, intake, issues, mail, modules,
@@ -189,7 +193,9 @@ def _register_blueprints(app: Flask) -> None:
     from .wiki import views as wiki_views
     for bp in (auth.bp, agenda.bp, home.bp, projects.bp, issues.bp, cycles.bp, modules.bp, saved_views.bp, pages.bp,
                intake.bp, analytics.bp, team.bp, settings.bp, api.bp, apiv1.bp, mail.bp, planning.bp, bilan.bp,
-               workgraph.bp, wiki_views.bp, qcm_views.bp, ai_views.bp):
+               workgraph.bp, wiki_views.bp, qcm_views.bp, appareils.bp, ai_views.bp):
+        # appareils.bp (appli Android, alias des adresses de Revision) : son crochet `_avant` doit passer avant
+        # `_setup_and_csrf` (_register_hooks, appelé après cette fonction), qui lit `g.csrf_exempt`.
         app.register_blueprint(bp)
 
 
@@ -310,23 +316,11 @@ def _register_template_helpers(app: Flask) -> None:
 
     @app.context_processor
     def _inject():
+        # Les autres variables communes sont des globales Jinja (ci-dessus) : visibles aussi des macros
+        # importées sans contexte. Ici, seulement ce qui dépend de la requête ou du jour.
         ctx = {
-            "icon": icons.icon,
-            "state_icon": icons.state_icon,
-            "priority_icon": icons.priority_icon,
-            "charts": charts,
-            "csrf_token": csrf_token,
-            "M": models,
-            "IQ": issue_query,
-            "activity_text": activity_text,
-            "today": __import__("datetime").date.today(),
-            "version": __version__,
-            "can": utils.can,
+            "today": heure.today(),
             "can_delete_issues": utils.can_delete_issues,
-            "project_role": utils.project_role,
-            "is_favorite": utils.is_favorite,
-            "markdown_toc": utils.markdown_toc,
-            "greeting": utils.greeting,
             "qs": lambda **kw: issue_query.query_string(request.args, **kw),
         }
         if current_user.is_authenticated:

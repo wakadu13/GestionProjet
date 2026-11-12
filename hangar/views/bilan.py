@@ -1,11 +1,11 @@
 """Bilan : synthèse d'avancement sur une période, bilans enregistrés, exports Markdown / Word."""
 import json
 
-from datetime import date
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
+from .. import heure
 from ..bilan import MANUAL_SECTIONS, PERIODS, bilan_docx, bilan_markdown, compute_bilan, period_bounds, scope_projects
 from ..extensions import db
 from ..models import BilanReport, Project, now
@@ -81,7 +81,7 @@ def project(pid):
 
 
 def _filename(title):
-    return (slugify(title)[:60] or "bilan") + f"_{date.today():%Y%m%d}"
+    return (slugify(title)[:60] or "bilan") + f"_{heure.today():%Y%m%d}"
 
 
 def _export(data, manual, title, fmt):

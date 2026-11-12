@@ -25,6 +25,7 @@ import unittest
 from datetime import date, datetime, time, timedelta
 from unittest import mock
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import agenda as A
 from hangar import create_app, ics, mailer
 from hangar.extensions import db
@@ -109,7 +110,7 @@ class Base(unittest.TestCase):
 
 class FeedTests(Base):
     def test_feed_by_secret_token(self):
-        A.import_calendar(self.user, week_file(monday_after(date.today())), "planning.ics")
+        A.import_calendar(self.user, week_file(monday_after(horloge.today())), "planning.ics")
         c, csrf = self.login()
         self.assertEqual(c.post("/agenda/flux/regenerer", data={"_csrf": csrf}).status_code, 302)
         token = db.session.get(AgendaSettings, self.user.id).feed_token
@@ -200,11 +201,11 @@ class PushTests(Base):
 
     def test_reminder_sent_as_push_with_tag_and_ttl(self):
         self.subscribe()
-        day = date.today() + timedelta(days=2)
+        day = horloge.today() + timedelta(days=2)
         t = AgendaTask(user_id=self.user.id, title="Rendre le rapport", due_date=day, start_time=time(10, 0))
         db.session.add(t)
         db.session.flush()
-        A.set_task_reminders(t, [15], "push", at=datetime.combine(date.today(), time(8)))
+        A.set_task_reminders(t, [15], "push", at=datetime.combine(horloge.today(), time(8)))
         db.session.commit()
         r = t.reminders[0]
         self.assertEqual(r.channel, "push")
@@ -231,8 +232,8 @@ class PushTests(Base):
         self.subscribe()
         self.subscribe(endpoint="https://updates.push.services.mozilla.com/wpush/v2/autre")
         self.subscribe(endpoint="https://example.org/pas-un-service")  # adresse non autorisée : oubliée sans appel
-        ev = AgendaEvent(user_id=self.user.id, uid="x1", title="Maths", start=datetime.now() + timedelta(hours=1),
-                         end=datetime.now() + timedelta(hours=3), location="B12")
+        ev = AgendaEvent(user_id=self.user.id, uid="x1", title="Maths", start=horloge.now() + timedelta(hours=1),
+                         end=horloge.now() + timedelta(hours=3), location="B12")
         db.session.add(ev)
         db.session.flush()
         A.add_event_reminder(ev, 15, "push")
@@ -246,7 +247,7 @@ class PushTests(Base):
                 raise WebPushException("parti", response=mock.Mock(status_code=410))
 
         with mock.patch("pywebpush.webpush", side_effect=fake):
-            self.assertEqual(A.process_reminders(datetime.now() + timedelta(minutes=50)), 1)
+            self.assertEqual(A.process_reminders(horloge.now() + timedelta(minutes=50)), 1)
         self.assertEqual(len(calls), 2)
         self.assertEqual([a.endpoint for a in AbonnementPush.query.all()],
                          ["https://updates.push.services.mozilla.com/wpush/v2/autre"])
@@ -254,8 +255,8 @@ class PushTests(Base):
         self.assertIn("Maths", note.message)
 
     def test_push_is_a_third_channel_everywhere(self):
-        ev = AgendaEvent(user_id=self.user.id, uid="x2", title="Maths", start=datetime.now() + timedelta(days=2),
-                         end=datetime.now() + timedelta(days=2, hours=2))
+        ev = AgendaEvent(user_id=self.user.id, uid="x2", title="Maths", start=horloge.now() + timedelta(days=2),
+                         end=horloge.now() + timedelta(days=2, hours=2))
         db.session.add(ev)
         db.session.commit()
         self.assertEqual(A.add_event_reminder(ev, 60, "push").channel, "push")
@@ -287,7 +288,7 @@ class PushTests(Base):
         a.heure, a.minute = 0, 0
         db.session.commit()
         with mock.patch("pywebpush.webpush") as wp:
-            rappels.envoyer_rappels_dus(datetime.now().replace(hour=12))
+            rappels.envoyer_rappels_dus(horloge.now().replace(hour=12))
         self.assertEqual(wp.call_count, 0)
         # Activer ensuite le rappel QCM sur le même appareil, puis le couper : l'agenda reste
         c.post("/api/push/abonner/", json={"subscription": sub, "heure": 19, "minute": 0}, headers=h)
@@ -303,14 +304,14 @@ class PushTests(Base):
 
     def test_qcm_only_device_gets_no_agenda_push(self):
         self.subscribe(agenda=False)  # abonné au seul rappel quotidien des QCM
-        ev = AgendaEvent(user_id=self.user.id, uid="x3", title="Maths", start=datetime.now() + timedelta(hours=1),
-                         end=datetime.now() + timedelta(hours=3))
+        ev = AgendaEvent(user_id=self.user.id, uid="x3", title="Maths", start=horloge.now() + timedelta(hours=1),
+                         end=horloge.now() + timedelta(hours=3))
         db.session.add(ev)
         db.session.flush()
         A.add_event_reminder(ev, 15, "push")
         db.session.commit()
         with mock.patch("pywebpush.webpush") as wp:
-            self.assertEqual(A.process_reminders(datetime.now() + timedelta(minutes=50)), 1)
+            self.assertEqual(A.process_reminders(horloge.now() + timedelta(minutes=50)), 1)
         self.assertEqual(wp.call_count, 0)
         self.assertEqual(Notification.query.filter_by(kind="reminder").count(), 1)  # la notification interne reste
 
@@ -344,7 +345,7 @@ class TeamTests(Base):
         db.session.add(st)
         db.session.flush()
         self.p, self.st = p, st
-        self.today = date.today()
+        self.today = horloge.today()
         self.issue = Issue(project_id=p.id, sequence_id=101, title="Rédiger la note DPO", state_id=st.id,
                            target_date=self.today, created_by_id=self.user.id)
         self.issue.assignees.append(self.user)
@@ -423,7 +424,7 @@ class TeamTests(Base):
 class SourceTests(Base):
     def setUp(self):
         super().setUp()
-        self.monday = monday_after(date.today())
+        self.monday = monday_after(horloge.today())
         self.at = datetime.combine(self.monday - timedelta(days=2), time(9))  # samedi d'avant
         self.folder = os.path.join(self.tmp, "Telechargements")
         os.makedirs(self.folder)
@@ -589,7 +590,7 @@ class SourceReviewTests(Base):
 
     def setUp(self):
         Base.setUp(self)
-        self.monday = monday_after(date.today())
+        self.monday = monday_after(horloge.today())
         self.at = datetime.combine(self.monday - timedelta(days=2), time(9))
         self.folder = os.path.join(self.tmp, "Telechargements")
         os.makedirs(self.folder)

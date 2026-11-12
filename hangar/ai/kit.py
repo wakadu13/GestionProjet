@@ -18,6 +18,7 @@ import re
 import uuid
 from datetime import date, datetime, time
 
+from .. import heure
 from ..extensions import db
 from ..models import now
 from ..texte import cle_tri, plier
@@ -65,7 +66,7 @@ def controles(user, dossier: str) -> list[dict]:
              if (lk.wiki_path or "").strip("/").lower() == d}
     if not liens:
         return []
-    debut = datetime.combine(date.today(), time(0))
+    debut = datetime.combine(heure.today(), time(0))
     out = []
     for e in (AgendaEvent.query.filter(AgendaEvent.user_id == user.id, AgendaEvent.status == "active",
                                        AgendaEvent.cancelled.is_(False), AgendaEvent.start >= debut)

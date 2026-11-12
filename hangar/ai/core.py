@@ -29,6 +29,7 @@ from typing import Any, Callable, Iterable, Iterator
 
 from sqlalchemy import func
 
+from .. import heure
 from ..extensions import db
 from ..models import now
 from . import providers as P
@@ -86,7 +87,7 @@ def model_label(model: str) -> str:
 # ---------------------------------------------------------------------------
 
 def month_start(d: date | None = None) -> datetime:
-    d = d or date.today()
+    d = d or heure.today()
     return datetime.combine(d.replace(day=1), time(0))
 
 
@@ -670,7 +671,7 @@ def usage_rows(start: datetime, end: datetime | None = None, user_id: int | None
 def usage_by_month(months: int = 6, user_id: int | None = None) -> list[dict]:
     """Coût et appels des derniers mois (le plus récent en premier)."""
     out = []
-    d = date.today().replace(day=1)
+    d = heure.today().replace(day=1)
     for _ in range(months):
         start = datetime.combine(d, time(0))
         nxt = (d.replace(year=d.year + 1, month=1) if d.month == 12 else d.replace(month=d.month + 1))

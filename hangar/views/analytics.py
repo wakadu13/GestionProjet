@@ -1,11 +1,11 @@
 """Analytique : vue d'ensemble, analyse personnalisée (axe X × segment), charge de l'équipe."""
 from collections import OrderedDict, defaultdict
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 
 from flask import Blueprint, Response, render_template, request
 from flask_login import current_user, login_required
 
-from .. import charts
+from .. import charts, heure
 from .. import issue_query as IQ
 from ..models import (
     MODULE_STATUS_COLORS, PALETTE, PRIORITIES, PRIORITY_COLORS, PRIORITY_LABELS, STATE_GROUP_COLORS,
@@ -100,7 +100,7 @@ def index(pid=None):
 
 
 def _overview(issues, period, project):
-    today = date.today()
+    today = heure.today()
     start = today - timedelta(days=period - 1)
     counts = {g: 0 for g, _, _ in STATE_GROUPS}
     prio = {k: 0 for k, _, _ in PRIORITIES}
@@ -224,7 +224,7 @@ def _custom(issues, project):
 
 
 def _team(issues, projects, period):
-    today = date.today()
+    today = heure.today()
     start = today - timedelta(days=period - 1)
     members = {}
     for p in projects:
@@ -298,7 +298,7 @@ def state_history(issues):
         changes[a.issue_id].append(a)
     out = {}
     for i in issues:
-        created = (i.created_at or datetime.now()).date()
+        created = (i.created_at or heure.now()).date()
         ch = changes.get(i.id, [])
         if ch:
             initial = grp(i.project_id, ch[0].old_value) or "unstarted"
@@ -306,7 +306,7 @@ def state_history(issues):
         elif i.state_group == "completed" and i.completed_at:
             initial, seq = "unstarted", [(i.completed_at.date(), "completed")]
         elif i.state_group == "cancelled":
-            initial, seq = "unstarted", [((i.updated_at or i.created_at or datetime.now()).date(), "cancelled")]
+            initial, seq = "unstarted", [((i.updated_at or i.created_at or heure.now()).date(), "cancelled")]
         else:
             initial, seq = i.state_group, []
         out[i.id] = (created, initial, seq)
@@ -326,7 +326,7 @@ def group_on(hist, d):
 
 
 def _trends(issues, projects, period):
-    today = date.today()
+    today = heure.today()
     first = min([i.created_at.date() for i in issues if i.created_at] or [today])
     start = max(today - timedelta(days=period - 1), first - timedelta(days=1))
     days = [start + timedelta(days=k) for k in range((today - start).days + 1)]

@@ -17,6 +17,7 @@ from flask import (Blueprint, abort, current_app, flash, jsonify, redirect, rend
                    send_file, url_for)
 from flask_login import current_user, login_required
 
+from .. import heure
 from ..extensions import db
 from ..icons import ICONS
 from ..texte import cle_tri
@@ -311,7 +312,7 @@ def _date_reponse(valeur, now):
     except ValueError:
         return None
     if d.tzinfo is not None:
-        d = d.astimezone().replace(tzinfo=None)
+        d = heure.vers_agenda(d)
     return d if now - timedelta(days=30) <= d <= now else None
 
 
@@ -547,9 +548,3 @@ def fichier(path):
 
 # Les autres pages du module, sur le même blueprint.
 from . import gestion, hors_ligne, langues_views, masque_views, rappels  # noqa: E402,F401
-
-# Application Android de Revision (jetons d'appareil, /api/appareil/…, /api/status/) et alias des
-# adresses de Revision : blueprint « appareils » enregistré en même temps que celui des QCM.
-from .. import appareils as _appareils  # noqa: E402
-
-bp.record_once(lambda etat: etat.app.register_blueprint(_appareils.bp))

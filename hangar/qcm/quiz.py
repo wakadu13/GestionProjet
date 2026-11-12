@@ -25,12 +25,13 @@ from pathlib import Path, PurePosixPath
 
 from flask import current_app
 
+from .. import heure
 from ..texte import cle_tri, plier
 
 
 def maintenant() -> datetime:
-    """Heure locale (naïve), comme dans tout Hangar."""
-    return datetime.now().replace(microsecond=0)
+    """Heure locale (naïve) de l'agenda, comme dans tout Hangar (voir hangar/heure.py)."""
+    return heure.now()
 
 
 def jour(dt) -> date:
