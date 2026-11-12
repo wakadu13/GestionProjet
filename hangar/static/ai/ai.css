@@ -89,6 +89,9 @@ html.ai-fullpage .ai-panel { display: none !important; }
 .ai-act-t b { font-size: 12.5px; font-weight: 600; }
 .ai-act-t span { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-act-t em { font-size: 11.5px; color: var(--danger); font-style: normal; }
+.ai-act-apercu { margin-top: 3px; font-size: 12px; }
+.ai-act-apercu summary { cursor: pointer; color: var(--accent-text); width: fit-content; }
+.ai-act-apercu div { margin-top: 4px; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-2); color: var(--text); font-size: 12px; line-height: 1.45; }
 .ai-act-b { display: flex; align-items: center; gap: 4px; flex: none; }
 .ai-act-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--success); font-weight: 500; padding: 0 4px; }
 .ai-act.done .ai-act-ic { background: var(--success-bg); color: var(--success); }

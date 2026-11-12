@@ -282,7 +282,9 @@
       if (a.status === 'done') buttons = `<span class="ai-act-ok">${icon('check', 13)} Fait</span>${res.url ? `<a class="btn btn-ghost btn-xs" href="${esc(res.url)}">Ouvrir</a>` : ''}`;
       else if (a.status === 'dismissed') buttons = '<span class="ai-act-ok muted">Écartée</span>';
       else buttons = `<button class="btn btn-primary btn-xs" type="button" data-do>${esc(a.label)}</button><button class="btn btn-ghost btn-xs" type="button" data-skip title="Ignorer">${icon('x', 12)}</button>`;
-      card.innerHTML = `<span class="ai-act-ic">${icon(a.icon || 'zap', 14)}</span><div class="ai-act-t"><b>${esc(a.label)}</b><span title="${esc(a.summary)}">${esc(a.summary)}</span>${a.status === 'failed' && res.error ? `<em>${esc(res.error)}</em>` : ''}</div><div class="ai-act-b">${buttons}</div>`;
+      // Le texte que l'action ajoutera (bloc de page, description, notes) : visible avant de cliquer.
+      const apercu = a.apercu ? `<details class="ai-act-apercu"><summary>Voir le contenu (${a.apercu.length.toLocaleString('fr-FR')} caractères)</summary><div>${esc(a.apercu)}</div></details>` : '';
+      card.innerHTML = `<span class="ai-act-ic">${icon(a.icon || 'zap', 14)}</span><div class="ai-act-t"><b>${esc(a.label)}</b><span title="${esc(a.summary)}">${esc(a.summary)}</span>${apercu}${a.status === 'failed' && res.error ? `<em>${esc(res.error)}</em>` : ''}</div><div class="ai-act-b">${buttons}</div>`;
       const go = $('[data-do]', card);
       if (go) {
         go.addEventListener('click', async () => {

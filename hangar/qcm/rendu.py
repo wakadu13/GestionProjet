@@ -20,6 +20,7 @@ import markdown
 import nh3
 from flask import current_app, url_for
 
+from ..securite import local_url
 from . import coffre
 
 MATH_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.S)
@@ -52,8 +53,8 @@ LOCAL_ONLY = {("img", "src"), ("audio", "src"), ("video", "src"), ("source", "sr
 
 
 def _filtre(tag, attr, value):
-    if (tag, attr) in LOCAL_ONLY and not (value.startswith("/") and not value.startswith("//")):
-        return None  # aucune ressource externe
+    if (tag, attr) in LOCAL_ONLY and not local_url(value):
+        return None  # aucune ressource externe (« //site », « /\site » ou « /<tabulation>/site » compris)
     if tag == "input" and attr == "type" and value != "checkbox":
         return None
     return value

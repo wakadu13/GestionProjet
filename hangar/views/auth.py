@@ -3,7 +3,7 @@ import random
 import re
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
-from flask_login import current_user, login_required, login_user, logout_user
+from flask_login import current_user, login_user, logout_user
 
 from .. import blocage_connexion as blocage
 from ..extensions import db
@@ -111,9 +111,19 @@ def signup():
     return render_template("auth/signup.html", ws=ws, form={})
 
 
-@bp.route("/logout", methods=["POST", "GET"])
-@login_required
+@bp.route("/logout", methods=["GET", "POST"])
 def logout():
+    """Déconnecte en POST seulement (avec le jeton CSRF, comme le bouton du menu) : une image « /logout »
+    glissée dans un commentaire ou une page déconnecterait sinon chaque lecteur. En GET (adresse tapée, favori),
+    renvoie vers la page de confirmation /deconnexion/ (adresse de Revision), sans rien faire.
+    Pas de @login_required : déjà déconnecté (bouton d'un autre onglet resté ouvert), on va à la connexion
+    sans « ?next=/logout », qui ramènerait ici une fois reconnecté."""
+    if not current_user.is_authenticated:
+        if request.method == "POST":
+            flash("Tu es déjà déconnecté.", "info")
+        return redirect(url_for("auth.login"))
+    if request.method != "POST":
+        return redirect(url_for("appareils.alias_deconnexion"))
     logout_user()
     flash("Tu es déconnecté.", "info")
     return redirect(url_for("auth.login"))

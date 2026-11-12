@@ -11,6 +11,7 @@ from flask_login import current_user, login_required
 from .. import sauvegarde
 from ..extensions import db
 from ..models import PALETTE, APIToken, User, Workspace, now
+from ..securite import clean_color
 from ..seed import DEMO_PASSWORD
 from ..services import to_int
 from ..utils import human_size, require_admin
@@ -37,7 +38,7 @@ def profile():
         u.last_name = request.form.get("last_name", "").strip()
         u.job_title = request.form.get("job_title", "").strip()
         u.bio = request.form.get("bio", "")
-        u.avatar_color = request.form.get("avatar_color") or u.avatar_color
+        u.avatar_color = clean_color(request.form.get("avatar_color"), u.avatar_color)
         u.theme = request.form.get("theme") if request.form.get("theme") in ("system", "light", "dark") else "system"
         u.capacity_hours = to_int(request.form.get("capacity_hours")) or u.capacity_hours
         if request.form.get("email_section"):
@@ -211,13 +212,17 @@ def _envoyer(fichier, nom: str, mimetype: str):
     return send_file(fichier, as_attachment=True, download_name=nom, mimetype=mimetype, max_age=0)
 
 
-@bp.route("/backup/download")
+@bp.route("/backup/download", methods=["GET", "POST"])
 @login_required
 def backup_download():
-    """Une sauvegarde de la liste ; sans nom : la base actuelle, sans secrets et sans rien garder sur le disque."""
+    """Une sauvegarde de la liste (GET ?name=…) ; sans nom : la base actuelle, sans secrets et sans rien garder
+    sur le disque. Cette copie demande un POST (jeton CSRF) : jamais sur un simple lien ou une image glissée
+    dans une page ; un GET sans nom ramène à la page des sauvegardes."""
     require_admin()
     name = request.args.get("name")
-    if name:
+    if request.method == "GET":
+        if not name:
+            return redirect(url_for("settings.backup"))
         name = _nom_sauvegarde(name)
         path = os.path.join(current_app.config["BACKUP_DIR"], name or "")
         if not name or not os.path.isfile(path):

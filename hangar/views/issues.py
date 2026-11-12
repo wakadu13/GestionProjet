@@ -14,6 +14,7 @@ from ..models import (
     RELATION_TYPES, Activity, Attachment, Comment, Issue, IssueLink, IssueRelation, Project, SavedView, WorkLog,
     group_reactions, now,
 )
+from ..securite import attachment_type, protect_file
 from ..services import (
     add_relation, archive_issue, create_issue, description_conflict, description_conflict_message, duplicate_issue,
     handle_mentions, log_activity, move_issue_to_project, notify_subscribers, restore_issue, run_automations,
@@ -283,8 +284,12 @@ def attachment_get(aid):
     path = os.path.join(current_app.config["UPLOAD_DIR"], a.stored_name)
     if not os.path.exists(path):
         abort(404)
-    inline = request.args.get("inline") == "1" and (a.is_image or a.mimetype == "application/pdf")
-    return send_file(path, mimetype=a.mimetype, as_attachment=not inline, download_name=a.filename)
+    # Type et affichage décidés d'après l'extension, pas d'après le type annoncé par l'expéditeur : un SVG
+    # (ou une page HTML) ouvert dans le navigateur exécuterait son script avec la session de celui qui clique.
+    mimetype, viewable = attachment_type(a.filename)
+    inline = request.args.get("inline") == "1" and viewable
+    response = send_file(path, mimetype=mimetype, as_attachment=not inline, download_name=a.filename)
+    return protect_file(response, pdf=inline and mimetype == "application/pdf")
 
 
 @bp.route("/attachments/<int:aid>/delete", methods=["POST"])

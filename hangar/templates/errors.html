@@ -6,12 +6,12 @@
 <div class="error-page">
   <div>
     <div class="code">{{ error.code }}</div>
-    <h2>{{ {400: 'Requête invalide', 403: 'Accès refusé', 404: 'Page introuvable', 413: 'Fichier trop volumineux', 500: 'Erreur interne'}.get(error.code, 'Erreur') }}</h2>
-    <p class="muted mt">{{ error.description if error.code != 500 else 'Une erreur inattendue s’est produite. Réessaie ou consulte le terminal du serveur.' }}</p>
+    <h2>{{ {400: 'Requête invalide', 403: 'Accès refusé', 404: 'Page introuvable', 405: 'Action impossible ici', 413: 'Fichier trop volumineux', 500: 'Erreur interne'}.get(error.code, 'Erreur') }}</h2>
+    <p class="muted mt">{{ (message or error.description) if error.code != 500 else 'Une erreur inattendue s’est produite. Réessaie ou consulte le terminal du serveur.' }}</p>
     <div class="mt-lg flex gap center"><a class="btn" href="javascript:history.back()">{{ icon('arrow-left', 14) }} Retour</a><a class="btn btn-primary" href="{{ url_for('agenda.dashboard') }}">Accueil</a></div>
   </div>
 </div>
 {% endblock %}
 {% block auth %}
-<div class="auth-wrap"><div class="auth-card center-text"><div class="code" style="font-size:48px;font-weight:700;color:var(--text-3)">{{ error.code }}</div><p class="muted">{{ error.description }}</p><a class="btn btn-primary mt" href="{{ url_for('auth.login') }}">Se connecter</a></div></div>
+<div class="auth-wrap"><div class="auth-card center-text"><div class="code" style="font-size:48px;font-weight:700;color:var(--text-3)">{{ error.code }}</div><p class="muted">{{ message or error.description }}</p><a class="btn btn-primary mt" href="{{ url_for('auth.login') }}">Se connecter</a></div></div>
 {% endblock %}

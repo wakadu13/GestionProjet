@@ -613,6 +613,12 @@ class Attachment(db.Model):
     def is_image(self):
         return (self.mimetype or "").startswith("image/")
 
+    @property
+    def viewable(self):
+        """Affichable dans le navigateur (image sûre ou PDF, d'après l'extension) ; sinon téléchargé."""
+        from .securite import attachment_type
+        return attachment_type(self.filename)[1]
+
 
 class WorkLog(db.Model):
     """Temps passé sur un ticket."""

@@ -10,6 +10,7 @@ from ..models import (
     Activity, Comment, Cycle, Favorite, Issue, Module, Notification, Page, Project, SavedView, State, Sticky,
     User, issue_assignees, now,
 )
+from ..securite import clean_color
 from ..utils import back_url, visible_projects, week_bounds
 
 bp = Blueprint("home", __name__)
@@ -215,7 +216,7 @@ def toggle_favorite(etype, eid):
 @login_required
 def sticky_create():
     s = Sticky(user_id=current_user.id, content=request.form.get("content", ""),
-               color=request.form.get("color", "#fef3c7"))
+               color=clean_color(request.form.get("color"), "#fef3c7"))
     db.session.add(s)
     db.session.commit()
     return redirect(url_for("home.index") + "#stickies")
@@ -233,7 +234,7 @@ def sticky_update(sid):
         if "content" in request.form:
             s.content = request.form["content"]
         if "color" in request.form:
-            s.color = request.form["color"]
+            s.color = clean_color(request.form["color"], s.color)
         s.updated_at = now()
     db.session.commit()
     if request.headers.get("X-Requested-With") == "fetch":

@@ -15,6 +15,7 @@ from .extensions import db
 from .models import (
     ROLE_RANK, Favorite, Issue, Project, ProjectMember, User,
 )
+from .securite import ExternalImages, media_filter
 
 MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
 MONTHS_FULL = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
@@ -159,14 +160,16 @@ def render_markdown(text: str | None, link_refs: bool = True) -> Markup:
     if not text:
         return Markup("")
     src = _link_refs(text) if link_refs else text
-    html = md.markdown(src, extensions=["extra", "sane_lists", "nl2br", "toc"], output_format="html")
+    html = md.markdown(src, extensions=["extra", "sane_lists", "nl2br", "toc", ExternalImages()], output_format="html")
     # Listes de tâches : - [ ] / - [x]
     html = re.sub(r"<li>\s*\[ \]\s*", '<li class="task"><input type="checkbox" disabled> ', html)
     html = re.sub(r"<li>\s*\[[xX]\]\s*", '<li class="task done"><input type="checkbox" checked disabled> ', html)
     html = re.sub(r"<li>\s*<p>\s*\[ \]\s*", '<li class="task"><p><input type="checkbox" disabled> ', html)
     html = re.sub(r"<li>\s*<p>\s*\[[xX]\]\s*", '<li class="task done"><p><input type="checkbox" checked disabled> ', html)
-    clean = nh3.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS,
-                      url_schemes={"http", "https", "mailto", "data"}, link_rel="noopener noreferrer")
+    # Images seulement depuis Hangar : une image externe (« ![x](https://…) » devenue un lien ci-dessus, ou
+    # balise <img> écrite à la main) se chargerait chez chaque lecteur sans qu'il clique.
+    clean = nh3.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, attribute_filter=media_filter,
+                      url_schemes={"http", "https", "mailto"}, link_rel="noopener noreferrer")
     return Markup(clean)
 
 

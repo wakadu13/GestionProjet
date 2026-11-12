@@ -45,7 +45,7 @@ def donut(segments, size: int = 170, thickness: int = 22, center_value=None, cen
             length = c * value / total
             gap = 1.5 if len([s for s in segments if s[1]]) > 1 else 0
             parts.append(
-                f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{color}" stroke-width="{thickness}" '
+                f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{escape(color)}" stroke-width="{thickness}" '
                 f'stroke-dasharray="{max(length - gap, 0.1):.2f} {c:.2f}" stroke-dashoffset="{-offset:.2f}" '
                 f'transform="rotate(-90 {cx} {cy})"><title>{escape(label)} : {_fmt(value)} '
                 f'({round(100 * value / total)} %)</title></circle>'
@@ -81,7 +81,7 @@ def bar_chart(items, height: int = 220, value_suffix: str = "") -> Markup:
         h = plot_h * (value / vmax) if vmax else 0
         y = top + plot_h - h
         out.append(
-            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw}" height="{max(h, 0):.1f}" rx="4" fill="{color}">'
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw}" height="{max(h, 0):.1f}" rx="4" fill="{escape(color)}">'
             f'<title>{escape(label)} : {_fmt(value)}{value_suffix}</title></rect>'
         )
         if value:
@@ -120,7 +120,7 @@ def stacked_bars(categories, series, height: int = 280) -> Markup:
                 continue
             h = plot_h * v / vmax
             y_cursor -= h
-            out.append(f'<rect x="{x:.1f}" y="{y_cursor:.1f}" width="{bw}" height="{h:.1f}" fill="{color}">'
+            out.append(f'<rect x="{x:.1f}" y="{y_cursor:.1f}" width="{bw}" height="{h:.1f}" fill="{escape(color)}">'
                        f'<title>{escape(cat)} · {escape(name)} : {_fmt(v)}</title></rect>')
         if totals[i]:
             out.append(f'<text x="{x + bw / 2:.1f}" y="{y_cursor - 5:.1f}" text-anchor="middle" class="ch-value">'
@@ -170,16 +170,17 @@ def line_chart(x_labels, series, height: int = 240, width: int = 680, today_inde
         pts = [(px(i), py(v), v, x_labels[i]) for i, v in enumerate(s["values"]) if v is not None]
         if not pts:
             continue
+        color = escape(s["color"])
         d = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y, _, _ in pts)
         if s.get("fill"):
             area = d + f" L{pts[-1][0]:.1f},{top + plot_h} L{pts[0][0]:.1f},{top + plot_h} Z"
-            out.append(f'<path d="{area}" fill="{s["color"]}" opacity="0.12" stroke="none"/>')
+            out.append(f'<path d="{area}" fill="{color}" opacity="0.12" stroke="none"/>')
         dash = ' stroke-dasharray="5 4"' if s.get("dashed") else ""
-        out.append(f'<path d="{d}" fill="none" stroke="{s["color"]}" stroke-width="2.2"{dash} '
+        out.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="2.2"{dash} '
                    f'stroke-linejoin="round" stroke-linecap="round"/>')
         if not s.get("dashed") and len(pts) <= 60:
             for x, y, v, lab in pts:
-                out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.6" fill="{s["color"]}">'
+                out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.6" fill="{color}">'
                            f'<title>{escape(s["name"])} · {escape(lab)} : {_fmt(v)}</title></circle>')
     return Markup(
         f'<svg class="chart" viewBox="0 0 {width} {height}" preserveAspectRatio="xMidYMid meet" role="img">'
@@ -217,6 +218,7 @@ def stacked_area(x_labels, series, height: int = 260, width: int = 680, label_ev
     base = [0] * len(x_labels)
     for name, color, values in series:
         topv = [b + v for b, v in zip(base, values)]
+        color = escape(color)
         if any(values):
             upper = " L".join(f"{px(i):.1f},{py(v):.1f}" for i, v in enumerate(topv))
             lower = " L".join(f"{px(i):.1f},{py(v):.1f}" for i, v in reversed(list(enumerate(base))))
@@ -247,5 +249,5 @@ def sparkline(values, color: str = "#3f76ff", width: int = 120, height: int = 32
     pts = " ".join(f"{i * step:.1f},{height - 3 - (height - 6) * v / vmax:.1f}" for i, v in enumerate(values))
     return Markup(
         f'<svg class="chart spark" viewBox="0 0 {width} {height}" width="{width}" height="{height}">'
-        f'<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="1.8" stroke-linejoin="round"/></svg>'
+        f'<polyline points="{pts}" fill="none" stroke="{escape(color)}" stroke-width="1.8" stroke-linejoin="round"/></svg>'
     )

@@ -178,9 +178,9 @@ class SauvegardeCompleteTests(unittest.TestCase):
             self.assertEqual(_secrets_dans(_db_du_zip(zf, self.extraits)), (True, True))
         r.close()
 
-        # « La base seule » et l'ancienne adresse de téléchargement : sans secrets non plus
+        # « La base seule » et l'ancienne adresse de téléchargement (en POST) : sans secrets non plus
         for r in (c.post("/settings/backup/telecharger", data={"_csrf": token, "format": "db"}),
-                  c.get("/settings/backup/download")):
+                  c.post("/settings/backup/download", data={"_csrf": token})):
             self.assertEqual(r.status_code, 200)
             copie = self.extraits / f"base_{len(list(self.extraits.iterdir()))}.db"
             copie.write_bytes(r.get_data())

@@ -25,7 +25,8 @@ import markdown
 import nh3
 from markdown.extensions.toc import slugify_unicode
 
-from .liens import wiki_url
+from ..securite import local_url
+from .liens import ROUTES, wiki_url
 from .vault import (COMMENT_RE, FENCED_CODE_RE, TAG_RE, WIKILINK_RE, Attachment, Note, map_outside_code,
                     parse_link_target)
 
@@ -93,11 +94,14 @@ ALLOWED_ATTRIBUTES = {
     "td": {"align", "style", "colspan", "rowspan"},
 }
 LOCAL_ONLY = {("iframe", "src"), ("img", "src"), ("audio", "src"), ("video", "src"), ("source", "src")}
+# Un cadre n'affiche que le lecteur PDF ou un fichier du coffre (servi sans pouvoir rien exécuter),
+# jamais une autre page de Hangar (pièce jointe d'un ticket, réglages…).
+IFRAME_PREFIXES = (ROUTES["wiki.pdf"][0], ROUTES["wiki.file"][0])
 
 
 def _filter_attribute(tag, attr, value):
     # Médias et cadres : uniquement les fichiers du wiki (pas de ressource externe).
-    if (tag, attr) in LOCAL_ONLY and not (value.startswith("/") and not value.startswith("//")):
+    if (tag, attr) in LOCAL_ONLY and not local_url(value, IFRAME_PREFIXES if tag == "iframe" else ()):
         return None
     if tag == "input" and attr == "type" and value != "checkbox":
         return None

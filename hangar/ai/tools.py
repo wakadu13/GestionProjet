@@ -498,8 +498,14 @@ class ToolBox:
 # Exécution des actions (au clic de l'utilisateur)
 # ---------------------------------------------------------------------------
 
+# Contenu écrit par l'IA qu'une action ajoutera tel quel : montré dans la carte avant validation.
+_APERCU = {"ajout_page": "contenu", "ticket": "description", "tache": "notes"}
+
+
 def action_dict(a: AIAction) -> dict:
-    return {"id": a.id, "kind": a.kind, "label": a.label, "summary": a.summary, "status": a.status,
+    champ = _APERCU.get(a.kind)
+    apercu = str((a.payload or {}).get(champ) or "") if champ else ""
+    return {"id": a.id, "kind": a.kind, "label": a.label, "summary": a.summary, "status": a.status, "apercu": apercu,
             "result": a.result, "icon": {"tache": "list-check", "ticket": "target", "ajout_page": "page",
                                          "ajout_cycle": "cycle", "echeance": "calendar", "terminer": "check-circle"}
             .get(a.kind, "zap")}
