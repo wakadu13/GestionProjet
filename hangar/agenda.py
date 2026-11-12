@@ -244,9 +244,13 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
     db.session.flush()
 
     existing = {e.uid: e for e in AgendaEvent.query.filter_by(user_id=user.id)}
-    known_by_week: dict[date, int] = {}  # séances actives par semaine avant l'import (garde-fou)
+    floor = at.date()  # le passé n'est jamais retiré
+    # Garde-fou : séances actives par semaine avant l'import, comptées comme celles qu'on pourrait
+    # retirer (à partir d'aujourd'hui). Compter aussi les jours passés rendrait le garde-fou inopérant
+    # en fin de semaine (4 séances retirées sur 10 « connues », alors que ce sont toutes celles qui restent).
+    known_by_week: dict[date, int] = {}
     for e in existing.values():
-        if e.status == "active":
+        if e.status == "active" and e.start.date() >= floor:
             w = ics.week_start(e.start.date())
             known_by_week[w] = known_by_week.get(w, 0) + 1
     details, touched, revived = [], [], []
@@ -288,7 +292,6 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
 
     imp.guarded_weeks = []  # semaines épargnées par le garde-fou (pour le message après l'import)
     if mode != "merge":
-        floor = at.date()  # le passé n'est jamais retiré
         to_remove: dict[date, list[AgendaEvent]] = {}
         for uid, ev in existing.items():
             if uid in parsed or ev.status != "active":
@@ -303,12 +306,13 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
             guard_lines = []
             for w, evs in sorted(to_remove.items()):
                 n, known = weeks[w], known_by_week.get(w, 0)
-                # Semaine voisine (pas la semaine principale du fichier) qui perdrait la majorité de ses séances
+                # Semaine voisine (pas la semaine principale du fichier) qui perdrait la majorité des
+                # séances qui lui restent
                 if n <= GUARD_MAX_SESSIONS and n < main and 2 * len(evs) > known:
                     imp.guarded_weeks.append(w)
                     guard_lines.append(
                         f"Semaine du {day_short(w)} : le fichier n’y apporte que {n} séance(s), alors que "
-                        f"{len(evs)} des {known} séances déjà connues en auraient été retirées. Par prudence, "
+                        f"{len(evs)} des {known} séances encore prévues en auraient été retirées. Par prudence, "
                         "rien n’a été retiré cette semaine-là : importe le fichier de cette semaine pour la mettre à jour.")
                     del to_remove[w]
             if guard_lines:
@@ -779,12 +783,40 @@ def _process_reminder(r: AgendaReminder, at: datetime) -> int:
     return 1
 
 
+def _repair_recurring_reminders(at: datetime) -> None:
+    """Rappels « X min avant » d'une tâche répétée encore ouverte restés bloqués sur une occurrence passée
+    (envoyés, manqués, ignorés ou en erreur : état laissé par les versions précédentes, qui ne passaient pas à
+    l'occurrence suivante tant que la tâche n'était pas cochée) : ils visent de nouveau la prochaine occurrence.
+    L'occurrence déjà visée n'est jamais rappelée une seconde fois ; une série terminée n'est pas touchée."""
+    rows = (AgendaReminder.query.join(AgendaTask, AgendaReminder.task_id == AgendaTask.id)
+            .filter(AgendaReminder.status.in_(("sent", "missed", "skipped", "error")),
+                    AgendaReminder.offset_minutes.isnot(None), AgendaReminder.remind_at.isnot(None),
+                    AgendaReminder.remind_at <= at, AgendaTask.recurrence.isnot(None), AgendaTask.recurrence != "",
+                    AgendaTask.done_at.is_(None), AgendaTask.due_date.isnot(None),
+                    db.or_(AgendaTask.recurrence_until.is_(None),
+                           AgendaTask.recurrence_until >= at.date() - timedelta(days=1)))
+            .all())
+    for r in rows:
+        t = r.task
+        after = max(at - timedelta(minutes=5, microseconds=1), r.remind_at, r.sent_at or r.remind_at)
+        nxt = task_reminder_time(t, r.offset_minutes, settings_of_id(t.user_id), after)
+        if nxt is not None:
+            r.remind_at, r.status = nxt, "pending"
+
+
 def process_reminders(at: datetime | None = None) -> int:
     """Envoie les rappels arrivés à échéance. Retourne le nombre de rappels envoyés.
 
     Chaque rappel est validé à part : un rappel en erreur passe à l'état « error » (noté sur /erreurs/) sans
     empêcher les autres de partir ni revenir en boucle à chaque passage du fil."""
     at = at or now()
+    try:
+        _repair_recurring_reminders(at)
+        db.session.commit()
+    except Exception:  # noqa: BLE001 - la réparation ne doit pas empêcher les rappels de partir
+        db.session.rollback()
+        current_app.logger.exception("Réparation des rappels des tâches répétées")
+        _mail().noter_erreur("Réparation des rappels des tâches répétées")
     due = (AgendaReminder.query.filter(AgendaReminder.status == "pending", AgendaReminder.remind_at.isnot(None),
                                        AgendaReminder.remind_at <= at).order_by(AgendaReminder.remind_at).all())
     sent = 0

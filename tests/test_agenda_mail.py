@@ -1,12 +1,13 @@
 """Tests du groupe « agenda-mail » :
 
 - import .ics : semaines couvertes calculées sur de vraies séances d'une journée, garde-fou contre les
-  retraits massifs, annulation qui remet les rappels ;
+  retraits massifs (y compris en fin de semaine), annulation qui remet les rappels ;
 - e-mails : nouvel essai après un échec passager (faux smtplib), date limite selon le type, pas de nouvel
   essai pour un mot de passe refusé, « Renvoyer les échecs », compteur d'échecs dans l'agenda ;
 - fil d'arrière-plan : chaque étape protégée et notée sur /erreurs/ ;
 - rappels des tâches : tâche répétée non cochée, rappel à date fixe posé après l'échéance, répétition
-  mensuelle du 31, résumé sans doublon, annulation d'une coche.
+  mensuelle du 31, résumé sans doublon, annulation d'une coche (et son message d'erreur), rappels bloqués
+  par l'ancienne version qui repartent.
 
 Lancer : uv run python -m unittest tests.test_agenda_mail -v
 """
@@ -151,6 +152,28 @@ class ImportSemainesTests(Base):
         imp = A.import_calendar(self.user, calendrier(cours("S48-23-08", S48, 8, title="Matière 0 1 CM")),
                                 "s48-v2.ics", at=datetime(2026, 11, 22, 19, 0))
         self.assertEqual((imp.removed, imp.warnings), (9, ""))
+
+    def test_garde_fou_aussi_en_fin_de_semaine(self):
+        # Le garde-fou compare les séances qu'on retirerait à celles qui restent dans la semaine (pas à celles
+        # de la semaine entière, passé compris) : jeudi midi, il protège encore les cours de jeudi et vendredi.
+        A.import_calendar(self.user, calendrier(*semaine(S47, "S47")), "s47.ics", at=datetime(2026, 11, 15, 18, 0))
+        s48 = calendrier(*semaine(S48, "S48"),
+                         cours("BRIEF", date(2026, 11, 20), 17, title="Briefing semaine prochaine BRIEFING", minutes=60))
+        imp = A.import_calendar(self.user, s48, "s48.ics", at=datetime(2026, 11, 19, 12, 30))
+        self.assertEqual(imp.removed, 0)
+        self.assertEqual(imp.guarded_weeks, [S47])
+        self.assertIn("16 nov.", imp.warnings)
+        self.assertIn("4 des 4 séances encore prévues", imp.warnings)
+        for uid in ("S47-19-08", "S47-19-13", "S47-20-08", "S47-20-13"):
+            self.assertEqual(self.ev(uid).status, "active", uid)
+        self.assertEqual(self.ev("BRIEF").status, "active")
+        # Le fichier de la semaine elle-même fait toujours foi, même en fin de semaine
+        v2 = [e for e in semaine(S47, "S47") if "UID:S47-20-13" not in e]
+        imp = A.import_calendar(self.user, calendrier(*v2, cours("BRIEF", date(2026, 11, 20), 17, minutes=60,
+                                                               title="Briefing semaine prochaine BRIEFING")),
+                                "s47-v2.ics", at=datetime(2026, 11, 19, 13, 0))
+        self.assertEqual((imp.removed, imp.guarded_weeks), (1, []))
+        self.assertEqual(self.ev("S47-20-13").status, "removed")
 
     def test_annuler_l_import_remet_les_rappels(self):
         s = A.settings_of(self.user)
@@ -518,6 +541,42 @@ class RappelsTachesTests(Base):
         self.assertEqual(A.process_reminders(datetime(2026, 11, 15, 18, 0, 30)), 1)
         self.assertEqual(r.status, "sent")
 
+    def test_rappel_bloque_par_l_ancienne_version_repart(self):
+        # État laissé par l'ancienne version : tâche quotidienne non cochée dont le rappel est resté « envoyé »
+        # sur l'occurrence du 9 (et un second, « manqué », sur celle du 8)
+        t = AgendaTask(user_id=self.user.id, title="Réviser 20 min", due_date=date(2026, 11, 8),
+                       start_time=time(18, 0), recurrence="daily")
+        db.session.add(t)
+        db.session.flush()
+        A.set_task_reminders(t, [0, 30], "email", at=datetime(2026, 11, 8, 8, 0))
+        r0, r30 = sorted(t.reminders, key=lambda r: r.offset_minutes)
+        r0.remind_at, r0.status, r0.sent_at = datetime(2026, 11, 9, 18, 0), "sent", datetime(2026, 11, 9, 18, 0, 30)
+        r30.remind_at, r30.status, r30.sent_at = datetime(2026, 11, 8, 17, 30), "missed", None
+        db.session.commit()
+        # Le 11 à 18 h : le rappel « à l'heure » repart (une seule fois), celui de 30 min avant vise le 12
+        self.assertEqual(A.process_reminders(datetime(2026, 11, 11, 18, 0, 30)), 1)
+        self.assertEqual((r0.status, r0.remind_at), ("pending", datetime(2026, 11, 12, 18, 0)))
+        self.assertEqual((r30.status, r30.remind_at), ("pending", datetime(2026, 11, 12, 17, 30)))
+        self.assertEqual(A.process_reminders(datetime(2026, 11, 11, 18, 1, 0)), 0)
+        self.assertEqual(A.process_reminders(datetime(2026, 11, 12, 18, 0, 30)), 2)
+        # Une série terminée garde son dernier rappel tel quel (jamais renvoyé ni déplacé)
+        t.recurrence_until = date(2026, 11, 13)
+        db.session.commit()
+        self.assertEqual(A.process_reminders(datetime(2026, 11, 13, 18, 0, 30)), 2)
+        self.assertEqual(A.process_reminders(datetime(2026, 11, 14, 18, 0, 30)), 0)
+        self.assertEqual((r0.status, r0.remind_at), ("sent", datetime(2026, 11, 13, 18, 0)))
+        # Une tâche répétée cochée pour de bon n'est pas concernée
+        t2 = AgendaTask(user_id=self.user.id, title="Fini", due_date=date(2026, 11, 9), start_time=time(18, 0),
+                        recurrence="daily", done_at=datetime(2026, 11, 9, 19, 0))
+        db.session.add(t2)
+        db.session.flush()
+        r2 = AgendaReminder(user_id=self.user.id, offset_minutes=0, channel="email", task=t2, status="skipped",
+                            remind_at=datetime(2026, 11, 9, 18, 0), created_at=datetime(2026, 11, 9, 8, 0))
+        db.session.add(r2)
+        db.session.commit()
+        self.assertEqual(A.process_reminders(datetime(2026, 11, 15, 18, 0, 30)), 0)
+        self.assertEqual((r2.status, r2.remind_at), ("skipped", datetime(2026, 11, 9, 18, 0)))
+
     def test_rappel_a_date_fixe_pose_apres_l_echeance(self):
         t = AgendaTask(user_id=self.user.id, title="Rendre le rapport", due_date=date(2026, 11, 10))
         db.session.add(t)
@@ -605,6 +664,48 @@ class RappelsTachesTests(Base):
         self.assertTrue(r.get_json()["ok"])
         db.session.refresh(t)
         self.assertEqual((t.due_date, t.done_count, t.done_at), (date.today(), 0, None))
+
+        # Seconde annulation : refusée, avec un message clair (pas seulement un code d'erreur)
+        r = c.post(data["undo"], data={"_csrf": token, "prev": data["prev"]}, headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["error"], "Impossible d’annuler : la tâche a changé entre-temps.")
+
+    def test_le_message_d_erreur_du_serveur_est_affiche(self):
+        # postForm (app.js) lit le message d'erreur renvoyé par le serveur, comme api() : le bouton « Annuler »
+        # affiche « Impossible d’annuler : … » et non « Erreur 400 ».
+        import json
+        import os
+        import subprocess
+        node = shutil.which("node")
+        version = subprocess.run([node, "--version"], capture_output=True, text=True, check=False).stdout if node else ""
+        if not re.match(r"v(1[89]|[2-9]\d)", version):  # fetch/Response natifs depuis Node 18
+            self.skipTest("Node.js 18 ou plus absent : le script de l'interface n'est pas exécuté.")
+        racine = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(racine, "hangar", "static", "js", "app.js"), encoding="utf-8") as f:
+            source = f.read()
+        m = re.search(r"\n  async function postForm\(.*?\n  }\n", source, re.S)
+        self.assertIsNotNone(m, "postForm introuvable dans app.js")
+        script = (
+            "const H = { csrf: 'x' };\n"
+            "const reponses = [\n"
+            "  { status: 400, body: JSON.stringify({ ok: false, error: 'Impossible d’annuler : la tâche a changé entre-temps.' }) },\n"
+            "  { status: 500, body: '<html>panne</html>' },\n"
+            "  { status: 200, body: JSON.stringify({ ok: true, message: 'Coche annulée' }) },\n"
+            "  { status: 200, body: '' },\n"
+            "];\n"
+            "globalThis.fetch = async () => { const r = reponses.shift();"
+            " return new Response(r.body || null, { status: r.status }); };\n"
+            + m.group(0) +
+            "(async () => { const out = [];\n"
+            "  for (let i = 0; i < 4; i++) {\n"
+            "    try { out.push(await postForm('/x', { prev: '2026-11-12' })); } catch (e) { out.push('!' + e.message); }\n"
+            "  }\n"
+            "  console.log(JSON.stringify(out)); })();\n")
+        res = subprocess.run([node, "-e", script], capture_output=True, text=True, encoding="utf-8", timeout=60,
+                             check=False)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(json.loads(res.stdout), ["!Impossible d’annuler : la tâche a changé entre-temps.",
+                                                  "!Erreur 500", {"ok": True, "message": "Coche annulée"}, {}])
 
 
 if __name__ == "__main__":

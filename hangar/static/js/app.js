@@ -24,8 +24,11 @@
     fd.append('_csrf', H.csrf);
     Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
     const r = await fetch(url, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'fetch', 'X-CSRF-Token': H.csrf } });
-    if (!r.ok) throw new Error(`Erreur ${r.status}`);
-    try { return await r.json(); } catch (e) { return {}; }
+    let j = null;
+    try { j = await r.json(); } catch (e) { /* réponse non JSON */ }
+    // Comme api() : le message d'erreur du serveur (« Impossible d'annuler : … ») plutôt que « Erreur 400 »
+    if (!r.ok) throw new Error((j && j.error) || `Erreur ${r.status}`);
+    return j || {};
   }
 
   /* ------------------------------------------------------------------ Icônes */
