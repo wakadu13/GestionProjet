@@ -66,7 +66,7 @@ Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaqu
   - Pour un seul lancement, la variable `HANGAR_VAULT` passe avant ce choix. Sous Windows : `set HANGAR_VAULT=C:\chemin\du\coffre` puis `uv run hangar` dans l'invite de commandes (cmd), ou `$env:HANGAR_VAULT = "C:\chemin\du\coffre"` dans PowerShell ; sous Linux/macOS : `HANGAR_VAULT=/chemin/du/coffre uv run hangar`.
 - **Corbeille et renommage** : « Mettre à la corbeille » range la page dans le dossier `.trash` du coffre, à son chemin d'origine ; la page *Corbeille* du menu du wiki la remet en place d'un clic. Une page supprimée hors du wiki (ou une corbeille vidée) garde son historique : la Corbeille le liste, et « Recréer la page avec cette version » la fait revenir. « Renommer / déplacer » (menu ⋯ d'une page) met à jour les liens `[[…]]` des autres pages (leur ancien texte reste dans l'historique), ainsi que l'historique, les favoris, les pages récentes, le tuteur et les QCM générés d'après la page. Un lien écrit avec un alias de la page reste tel quel : l'alias suit la page.
 - Syntaxe Obsidian : liens `[[…]]` et alias, intégrations `![[…]]` (images, PDF, notes, sections), encadrés `> [!note]`, propriétés YAML, tags, formules `$…$` / `$$…$$`, diagrammes Mermaid, surlignage, notes de bas de page…
-- **Images hébergées ailleurs** : le wiki ne charge jamais rien d'un autre site. Il affiche un lien « Image externe : légende ↗ » à la place de l'image. Le bouton « Enregistrer ces images dans le wiki » de la page Importer (ou `hangar wiki-import --images`) les télécharge une fois dans `image/` et met les pages à jour (`![[image.png]]`) : elles s'affichent alors aussi hors ligne.
+- **Images hébergées ailleurs** : le wiki ne charge jamais rien d'un autre site. Il affiche un lien « Image externe : légende ↗ » à la place de l'image. C'est la même règle partout dans Hangar (tickets, pages, réponses de l'IA, QCM). Le bouton « Enregistrer ces images dans le wiki » de la page Importer (ou `hangar wiki-import --images`) les télécharge une fois dans `image/` et met les pages à jour (`![[image.png]]`) : elles s'affichent alors aussi hors ligne.
 - **Fichiers récalcitrants** : une note que Windows refuse d'ouvrir (antivirus, OneDrive « en ligne uniquement » sans réseau) ne bloque plus le wiki. Elle est signalée dans le sommaire et relue dès que possible. Une note écrite avec un vieux Bloc-notes (ANSI) s'ouvre normalement et passe au format habituel quand tu l'enregistres (l'original reste dans l'historique).
 - Menu façon Plane : collections (les dossiers), favoris, pages récentes, sommaire, tags, graphe, recherche (pages **et texte des PDF**).
 - Éditeur CodeMirror (aperçu en direct, côte à côte, Ctrl+S, collage d'images, liens suggérés, brouillon de secours), historique des versions avec différences et restauration (une version au début de chaque séance d'écriture puis toutes les 10 minutes ; avec le temps, une par heure, par jour, par semaine puis par mois ; la corbeille, les restaurations, les imports et l'IA gardent toujours leur version ; au plus 100 versions et 20 Mo par page), import de fichiers (.md, PDF, images, LaTeX), lecteur PDF avec annotations, conversion LaTeX → page.
@@ -240,6 +240,7 @@ Variables d'environnement reconnues :
 | Variable | Rôle |
 |---|---|
 | `HANGAR_DATA` | dossier des données (par défaut `data/`) |
+| `HANGAR_TZ` | fuseau de l'emploi du temps (par défaut `Europe/Paris`) : rappels, résumé du jour et « aujourd'hui » suivent cette heure, même si l'ordinateur ou le serveur est réglé autrement ; `local` = heure de l'ordinateur |
 | `HANGAR_VAULT` | dossier du coffre Obsidian du wiki |
 | `HANGAR_WIKI_HOME` | page d'accueil du wiki (par défaut « Accueil ») |
 | `HANGAR_SMTP_PASSWORD` | mot de passe SMTP, pour ne pas l'enregistrer dans la base |
@@ -249,6 +250,8 @@ Variables d'environnement reconnues :
 | `HANGAR_HTTPS` | visiteurs en HTTPS : cookies sécurisés et HSTS |
 | `HANGAR_CSP` | `rapport` ou `non` : politique de sécurité des pages seulement signalée, ou désactivée |
 | `HANGAR_COMPRESSION` | `jamais` ou `toujours` : compression des pages |
+
+Les heures de l'agenda sont celles de Paris, quel que soit le réglage de la machine : un serveur ou un Raspberry Pi resté en UTC envoie les rappels à la bonne heure. La page *Agenda › Rappels et e-mails* affiche l'horloge utilisée et signale un écart avec celle de l'ordinateur.
 
 ## Fonctionnalités
 
@@ -402,7 +405,8 @@ GestionProjet/
 │   ├── issue_query.py      filtres, tris, regroupements, calendrier, Gantt
 │   ├── texte.py            recherche et tri à la française (accents, apostrophes, ligatures ; « École » avant « Zèbre »)
 │   ├── ics.py              lecture des fichiers .ics (format de l'école et iCalendar standard)
-│   ├── agenda.py           agenda : imports (le dernier fait foi), tâches, rappels, vues semaine / mois
+│   ├── agenda/             agenda : imports (le dernier fait foi), tâches, rappels, e-mails, source automatique, vues, export .ics, liens wiki / QCM
+│   ├── heure.py            heure de l'agenda (Europe/Paris ou HANGAR_TZ) : now() et today() communs
 │   ├── digest.py           résumé quotidien par e-mail (chaque module y ajoute sa section)
 │   ├── mailer.py           e-mails : file d'envoi, SMTP ou .eml, envois planifiés, fil d'arrière-plan
 │   ├── bilan.py            bilans d'avancement (calcul, Markdown, Word)
@@ -414,7 +418,8 @@ GestionProjet/
 │   ├── blocage_connexion.py  blocage après des mots de passe faux
 │   ├── importer.py         import/export Excel, CSV, JSON, Word
 │   ├── charts.py           graphiques SVG générés en Python
-│   ├── securite.py         garde-fous communs : couleurs, adresses locales, fichiers servis, images externes
+│   ├── securite.py         garde-fous communs : couleurs, adresses locales, fichiers servis, images externes du Markdown
+│   ├── nettoyage_html.py   nettoyage du HTML affiché (tickets, pages, e-mails, IA, wiki, QCM) : une seule règle, médias locaux seulement
 │   ├── sauvegarde.py       sauvegardes complètes (.zip), copies sans secrets, vérification avant restauration
 │   ├── seed.py, seed_documents.py, seed_data/   données de démonstration du projet EAE
 │   ├── views/              routes (une par domaine : tickets, cycles, pages, équipe, API…)
