@@ -18,7 +18,19 @@
         {% elif not mail.smtp %}{{ icon('alert', 16) }}<span><b>L’envoi réel n’est pas configuré</b> : les e-mails sont seulement enregistrés en .eml dans <code>data/outbox</code>. {% if current_user.is_admin %}<a href="{{ url_for('mail.settings') }}">Configurer l’envoi (Gmail avec mot de passe d’application, Outlook…)</a>{% else %}Demande à un administrateur de configurer l’envoi.{% endif %}</span>
         {% else %}{{ icon('alert', 16) }}<span>Renseigne ton adresse ci-dessus pour recevoir les e-mails.</span>{% endif %}
       </div>
-      <p class="help" style="margin-top:8px">Les rappels sont envoyés tant que Hangar est lancé sur ton ordinateur. Si l’application était fermée au moment d’un rappel, il part à la réouverture, sauf si la séance ou la tâche est déjà passée.</p>
+      {% if mail.failed or mail.retrying %}
+      <div class="mail-state ko" style="margin-top:8px">
+        {{ icon('alert', 16) }}
+        <span class="grow">
+          {% if mail.failed %}<b>{{ mail.failed }} e-mail{{ 's n’ont' if mail.failed > 1 else ' n’a' }} pas pu partir.</b>{% endif %}
+          {% if mail.retrying %}{{ mail.retrying }} e-mail{{ 's' if mail.retrying > 1 }} en attente : Hangar réessaie tout seul dès que le serveur d’envoi répond.{% endif %}
+          {% if mail.error %}<br>{{ mail.error }}{% endif %}
+          {% if mail.failed and not current_user.is_admin %}<br>Si le problème vient des réglages d’envoi, préviens un administrateur.{% endif %}
+        </span>
+        {% if mail.failed %}<button class="btn btn-sm" type="submit" form="mail-retry">{{ icon('refresh', 13) }} Renvoyer les échecs</button>{% endif %}
+      </div>
+      {% endif %}
+      <p class="help" style="margin-top:8px">Les rappels sont envoyés tant que Hangar est lancé sur ton ordinateur. Si l’application était fermée au moment d’un rappel, il part à la réouverture, sauf si la séance ou la tâche est déjà passée (un rappel « à date fixe » part encore jusqu’à 24 h après son heure). Pour une tâche répétée, chaque occurrence a son rappel, même si tu n’as pas coché la précédente.</p>
     </div>
 
     <h2>{{ icon('sun', 17) }} Résumé quotidien</h2>
@@ -90,6 +102,7 @@
 
     <div class="form-actions" style="position:sticky;bottom:0;background:var(--bg);padding:10px 0"><button class="btn btn-primary">Enregistrer</button></div>
   </form>
+  <form id="mail-retry" method="post" action="{{ url_for('agenda.mail_retry') }}" hidden>{{ ui.csrf() }}</form>
 
   <h2 style="margin-top:20px">{{ icon('send', 17) }} Tester</h2>
   <div class="panel panel-b mb-lg flex wrap gap">
@@ -117,7 +130,7 @@
     <div class="rem-row muted">
       <span class="rem-when">{{ A.day_short(r.remind_at.date()) }} {{ A.hm(r.remind_at) }}</span>
       <span class="grow ellipsis">{% if r.task %}{{ r.task.title }}{% elif r.event %}{{ r.event.title }}{% endif %}</span>
-      <span class="small">{{ A.STATUS_LABELS[r.status] }}</span>
+      <span class="small">{{ A.reminder_status_label(r) }}</span>
     </div>
     {% endfor %}
   </div>

@@ -106,7 +106,9 @@ class ImportTests(AgendaTestCase):
     def test_latest_file_wins(self):
         imp1 = A.import_calendar(self.user, SAMPLE, "s46.ics", at=self.at)
         self.assertEqual((imp1.added, imp1.modified, imp1.removed), (6, 0, 0))
-        self.assertEqual((imp1.range_start, imp1.range_end), (date(2026, 11, 9), date(2026, 11, 22)))
+        # Semaines couvertes : celles où le fichier apporte de vraies séances d'une journée (le bloc MILT qui
+        # commence le 16 et la séance « (PREVISION) » ne font pas couvrir la semaine suivante)
+        self.assertEqual((imp1.range_start, imp1.range_end), (date(2026, 11, 9), date(2026, 11, 15)))
         self.ev("1005").note = "calculatrice"
         db.session.commit()
         # Nouvel envoi : SIG déplacé et changé de salle, Anglais retiré, une séance ajoutée,

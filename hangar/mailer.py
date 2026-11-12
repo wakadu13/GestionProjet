@@ -2,13 +2,19 @@
 
 - Les requêtes web ne font que *mettre en file* les messages (jamais d'attente SMTP).
 - Un fil d'exécution (`start_worker`, lancé par `hangar run`) envoie la file et déclenche les envois planifiés.
+  Chaque étape du fil est protégée : une étape en panne est notée sur /erreurs/ sans bloquer les suivantes.
 - En mode « Boîte d'envoi locale », rien ne quitte la machine : chaque message est écrit en .eml dans data/outbox/.
+- Échec passager (pas de réseau au réveil du portable, serveur injoignable, délai dépassé, coupure, code 4xx) :
+  le message reste en file et le fil réessaie après 1, 5, 15 puis 60 min, jusqu'à sa date limite (fin de la
+  séance ou de la tâche pour un rappel, fin de la journée pour le résumé quotidien, 24 h sinon). Un mot de
+  passe refusé ou un destinataire rejeté ne sont pas réessayés : le message passe tout de suite en échec.
 """
 from __future__ import annotations
 
 import os
 import re
 import smtplib
+import socket
 import ssl
 import threading
 import time
@@ -33,6 +39,12 @@ WEEKDAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanc
 
 _send_lock = threading.Lock()
 _worker = None
+
+RETRY_DELAYS = (1, 5, 15, 60)            # minutes d'attente après 1, 2, 3, puis 4 échecs ou plus d'affilée
+DEFAULT_LIFETIME = timedelta(hours=24)   # date limite d'un message qui n'en a pas (création + 24 h)
+# Une panne de connexion touche tous les messages : l'attente est commune et gardée en mémoire (au
+# redémarrage de Hangar, un nouvel essai part tout de suite).
+_retry = {"failures": 0, "next": None, "error": ""}
 
 
 def valid_email(addr: str | None) -> bool:
@@ -145,14 +157,23 @@ def issue_list(title: str, issues, cfg: MailConfig, color: str = "#1d2127") -> s
 # ---------------------------------------------------------------------------
 
 def queue_email(to_address: str, subject: str, html: str, text: str | None = None, kind: str = "manual",
-                to_user: User | None = None, created_by: User | None = None, reply_to: str | None = None) -> EmailMessage:
-    """Ajoute un message à la file (sans commit : l'appelant valide la transaction)."""
+                to_user: User | None = None, created_by: User | None = None, reply_to: str | None = None,
+                expires_at: datetime | None = None) -> EmailMessage:
+    """Ajoute un message à la file (sans commit : l'appelant valide la transaction).
+
+    `expires_at` : au-delà, plus de nouvel essai après un échec passager (par défaut 24 h après la création)."""
     msg = EmailMessage(to_address=to_address.strip(), subject=subject.strip()[:300], body_html=html,
                        body_text=text or html_to_text(html), kind=kind, status="queued",
                        to_user_id=to_user.id if to_user else None,
-                       created_by_id=created_by.id if created_by else None, reply_to=reply_to)
+                       created_by_id=created_by.id if created_by else None, reply_to=reply_to,
+                       expires_at=expires_at, attempts=0)
     db.session.add(msg)
     return msg
+
+
+def deadline(m: EmailMessage) -> datetime:
+    """Date limite d'envoi d'un message (au-delà, un message en échec n'est plus réessayé ni renvoyé)."""
+    return m.expires_at or (m.created_at or now()) + DEFAULT_LIFETIME
 
 
 def build_mime(m: EmailMessage, cfg: MailConfig) -> MimeMessage:
@@ -198,10 +219,109 @@ def _open_smtp(cfg: MailConfig):
     return server
 
 
-def send_pending(app=None, limit: int = 100, ids: list[int] | None = None) -> dict:
-    """Envoie les messages en attente (SMTP ou fichiers .eml). Retourne les compteurs."""
-    stats = {"sent": 0, "outbox": 0, "failed": 0}
+def describe_error(exc: BaseException) -> str:
+    """Raison d'un échec d'envoi en français simple, suivie du détail technique entre parenthèses."""
+    detail = str(exc) or type(exc).__name__
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        text = ("Identifiant ou mot de passe refusé par le serveur d’envoi (pour Gmail, il faut un "
+                "« mot de passe d’application »).")
+    elif isinstance(exc, smtplib.SMTPRecipientsRefused):
+        text = "Adresse du destinataire refusée par le serveur d’envoi."
+    elif isinstance(exc, smtplib.SMTPSenderRefused):
+        text = "Adresse d’expédition refusée par le serveur d’envoi."
+    elif isinstance(exc, smtplib.SMTPServerDisconnected):
+        text = "Connexion avec le serveur d’envoi coupée."
+    elif isinstance(exc, smtplib.SMTPNotSupportedError):
+        text = "Le serveur d’envoi ne gère pas ce réglage (vérifie la sécurité et l’identifiant)."
+    elif isinstance(exc, smtplib.SMTPResponseException) and 400 <= exc.smtp_code < 500:
+        text = "Le serveur d’envoi est momentanément indisponible."
+    elif isinstance(exc, smtplib.SMTPException):
+        text = "Le serveur d’envoi a refusé le message."
+    elif isinstance(exc, socket.gaierror):
+        text = "Serveur d’envoi introuvable : pas de connexion Internet, ou adresse du serveur mal écrite."
+    elif isinstance(exc, TimeoutError):
+        text = "Le serveur d’envoi ne répond pas (délai dépassé)."
+    elif isinstance(exc, ConnectionRefusedError):
+        text = "Le serveur d’envoi refuse la connexion (serveur arrêté, ou port mal réglé)."
+    elif isinstance(exc, ssl.SSLError):
+        text = "Échec de la connexion sécurisée avec le serveur d’envoi (vérifie la sécurité et le port)."
+    elif isinstance(exc, OSError):
+        text = "Pas de connexion avec le serveur d’envoi (réseau indisponible ?)."
+    else:
+        text = "Erreur pendant l’envoi."
+    return f"{text}{DETAIL_SEP}{detail})"[:1000]
+
+
+DETAIL_SEP = " (détail : "
+
+
+def plain_error(error: str | None) -> str:
+    """Raison d'un échec sans le détail technique (pour l'agenda)."""
+    return (error or "").split(DETAIL_SEP, 1)[0]
+
+
+def is_transient(exc: BaseException) -> bool:
+    """Erreur passagère : réseau absent, DNS, délai dépassé, connexion coupée ou refusée, code 4xx.
+    Un mot de passe refusé, un destinataire rejeté ou un réglage incompatible ne le sont pas."""
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return False
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        codes = [code for code, _ in (exc.recipients or {}).values()]
+        return bool(codes) and all(400 <= c < 500 for c in codes)
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return 400 <= exc.smtp_code < 500
+    if isinstance(exc, smtplib.SMTPServerDisconnected):
+        return True
+    if isinstance(exc, smtplib.SMTPException):
+        return False
+    if isinstance(exc, ssl.SSLError):  # certificat, mauvais port : réglage ; fin de flux : coupure réseau
+        return isinstance(exc, (ssl.SSLEOFError, ssl.SSLZeroReturnError))
+    return isinstance(exc, OSError)
+
+
+def _connection_lost(exc: BaseException) -> bool:
+    """Après cette erreur, la connexion ne sert plus : les messages suivants attendent le prochain essai."""
+    if isinstance(exc, smtplib.SMTPServerDisconnected):
+        return True
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return exc.smtp_code == 421
+    return isinstance(exc, OSError) and not isinstance(exc, smtplib.SMTPException)
+
+
+def reset_retry() -> None:
+    """Oublie les échecs de connexion (réglages modifiés, envoi réussi) : le prochain essai part tout de suite."""
+    _retry.update(failures=0, next=None, error="")
+
+
+def retry_state() -> dict:
+    """Prochain essai automatique après une panne (affiché dans Réglages › E-mails)."""
+    return dict(_retry)
+
+
+def _note_failure(at: datetime, error: str) -> None:
+    _retry["failures"] += 1
+    _retry["next"] = at + timedelta(minutes=RETRY_DELAYS[min(_retry["failures"], len(RETRY_DELAYS)) - 1])
+    _retry["error"] = error
+
+
+def _log_warning(message: str, *args) -> None:
+    try:
+        current_app.logger.warning(message, *args)
+    except Exception:  # noqa: BLE001 - hors application : pas de journal
+        pass
+
+
+def send_pending(app=None, limit: int = 100, ids: list[int] | None = None, at: datetime | None = None,
+                 force: bool = False) -> dict:
+    """Envoie les messages en attente (SMTP ou fichiers .eml). Retourne les compteurs.
+
+    `ids` : envoi lancé depuis l'interface (test, rédaction, renvoi) : essai immédiat, et un échec est
+    immédiat pour pouvoir l'afficher. Sinon (fil d'arrière-plan, « Traiter la file ») : un message en échec
+    passager reste en file (« waiting ») ; le prochain essai attend 1, 5, 15 puis 60 min (`force` : sans
+    attendre) et le message est abandonné à sa date limite (voir `deadline`)."""
+    stats = {"sent": 0, "outbox": 0, "failed": 0, "waiting": 0}
     with _ctx(app), _send_lock:
+        at = at or now()
         cfg = _cfg()
         q = EmailMessage.query.filter_by(status="queued")
         if ids:
@@ -209,43 +329,99 @@ def send_pending(app=None, limit: int = 100, ids: list[int] | None = None) -> di
         pending = q.order_by(EmailMessage.id).limit(limit).all()
         if not pending:
             return stats
-        use_smtp = cfg.mode == "smtp" and bool(cfg.smtp_host)
-        if use_smtp:
-            try:
-                server = _open_smtp(cfg)
-            except Exception as exc:  # connexion impossible : tous en échec, réessayables
-                for m in pending:
-                    m.status, m.error = "failed", f"Connexion SMTP impossible : {exc}"
-                    stats["failed"] += 1
-                db.session.commit()
-                return stats
-            try:
-                for m in pending:
-                    try:
-                        server.send_message(build_mime(m, cfg))
-                        m.status, m.sent_at, m.error = "sent", now(), None
-                        stats["sent"] += 1
-                    except Exception as exc:
-                        m.status, m.error = "failed", str(exc)[:1000]
-                        stats["failed"] += 1
-            finally:
-                try:
-                    server.quit()
-                except Exception:
-                    pass
+        if cfg.mode == "smtp" and bool(cfg.smtp_host):
+            _send_smtp(cfg, pending, at, bool(ids), force, stats)
         else:
             folder = outbox_dir()
             for m in pending:
                 try:
                     with open(os.path.join(folder, eml_filename(m)), "wb") as fh:
                         fh.write(bytes(build_mime(m, cfg)))
-                    m.status, m.sent_at, m.error = "outbox", now(), None
+                    m.status, m.sent_at, m.error = "outbox", at, None
                     stats["outbox"] += 1
                 except Exception as exc:
                     m.status, m.error = "failed", str(exc)[:1000]
                     stats["failed"] += 1
         db.session.commit()
     return stats
+
+
+def _send_smtp(cfg: MailConfig, pending: list[EmailMessage], at: datetime, immediate: bool, force: bool,
+               stats: dict) -> None:
+    if not immediate:
+        keep = []
+        for m in pending:
+            if deadline(m) <= at:  # trop tard : un rappel après la séance, le résumé d'hier… ne servent plus
+                m.status = "failed"
+                m.error = ("Pas envoyé à temps : " + (m.error or "Hangar n’a pas pu l’envoyer avant sa date limite."))[:1000]
+                stats["failed"] += 1
+            else:
+                keep.append(m)
+        pending = keep
+        if not pending:
+            return
+        if not force and _retry["next"] is not None and at < _retry["next"]:
+            stats["waiting"] += len(pending)  # panne en cours : on attend le prochain essai
+            return
+    try:
+        server = _open_smtp(cfg)
+    except Exception as exc:
+        error, transient = describe_error(exc), is_transient(exc)
+        for m in pending:
+            m.attempts = (m.attempts or 0) + 1
+            m.error = error
+            if transient and not immediate:
+                stats["waiting"] += 1
+            else:
+                m.status = "failed"
+                stats["failed"] += 1
+        # Même pour un mot de passe refusé : pas de nouvelle connexion à chaque passage (blocage du compte)
+        _note_failure(at, error)
+        _log_warning("Envoi des e-mails impossible : %s", error)
+        return
+    reset_retry()
+    try:
+        for i, m in enumerate(pending):
+            try:
+                server.send_message(build_mime(m, cfg))
+                m.status, m.sent_at, m.error = "sent", at, None
+                stats["sent"] += 1
+            except Exception as exc:
+                m.attempts = (m.attempts or 0) + 1
+                m.error = describe_error(exc)
+                if immediate or not is_transient(exc):
+                    m.status = "failed"
+                    stats["failed"] += 1
+                    continue
+                stats["waiting"] += 1
+                _note_failure(at, m.error)
+                _log_warning("E-mail %s : nouvel essai plus tard (%s)", m.id, m.error)
+                if _connection_lost(exc):  # les suivants n'ont pas été essayés : ils attendent aussi
+                    stats["waiting"] += len(pending) - i - 1
+                    break
+    finally:
+        try:
+            server.quit()
+        except Exception:
+            pass
+
+
+def retry_failed(user: User | None = None, at: datetime | None = None) -> tuple[list[int], int]:
+    """« Renvoyer les échecs » : remet en file les messages en échec encore utiles (date limite pas dépassée),
+    tous ou seulement ceux de `user`. Retourne (identifiants remis en file, nombre de messages trop anciens)."""
+    at = at or now()
+    q = EmailMessage.query.filter_by(status="failed")
+    if user is not None:
+        q = q.filter(EmailMessage.to_user_id == user.id)
+    ids, too_old = [], 0
+    for m in q.order_by(EmailMessage.id):
+        if deadline(m) <= at:
+            too_old += 1
+            continue
+        m.status, m.error, m.attempts = "queued", None, 0
+        ids.append(m.id)
+    db.session.commit()
+    return ids, too_old
 
 
 def send_test(address: str, actor: User | None = None) -> EmailMessage:
@@ -473,6 +649,49 @@ def run_scheduled(app=None, at: datetime | None = None, force: set[str] | frozen
 # Fil d'exécution en arrière-plan
 # ---------------------------------------------------------------------------
 
+def noter_erreur(contexte: str) -> None:
+    """Note l'exception en cours sur la page « Erreurs du serveur » (/erreurs/). Ne lève jamais."""
+    try:
+        from .wiki import erreurs
+        erreurs.noter(contexte=contexte)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _etape(app, nom: str, fn):
+    """Une étape du fil : en cas d'erreur, on annule ses écritures, on la journalise et on la note sur
+    /erreurs/, puis le fil passe à l'étape suivante."""
+    try:
+        return fn()
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        app.logger.exception("Erreur dans le fil d’arrière-plan : %s", nom)
+        noter_erreur(f"Fil des e-mails : {nom}")
+        return None
+
+
+def _agenda_jobs():
+    from . import agenda  # rappels des tâches et séances, résumé quotidien
+    return agenda.run_jobs()
+
+
+def _qcm_rappels(app):
+    from .qcm.rappels import envoyer_rappels_dus  # rappels de révision par notification web
+    return envoyer_rappels_dus(journal=app.logger.warning)
+
+
+def tick(app) -> None:
+    """Un tour du fil d'arrière-plan : envois planifiés, agenda, révisions, puis la file d'e-mails."""
+    with app.app_context():
+        try:
+            _etape(app, "envois planifiés (rappels d’échéance, récapitulatifs, bilans)", lambda: run_scheduled())
+            _etape(app, "rappels de l’agenda et résumé quotidien", _agenda_jobs)
+            _etape(app, "rappels de révision (QCM)", lambda: _qcm_rappels(app))
+            _etape(app, "envoi de la file d’e-mails", lambda: send_pending())
+        finally:
+            db.session.remove()
+
+
 def start_worker(app, interval: int = 30):
     """Lance (une seule fois) le fil qui envoie la file et les messages planifiés."""
     global _worker
@@ -482,22 +701,7 @@ def start_worker(app, interval: int = 30):
     def loop():
         while True:
             try:
-                with app.app_context():
-                    run_scheduled()
-                    try:  # agenda : rappels des tâches / séances et programme quotidien
-                        from .agenda import run_jobs
-                        run_jobs()
-                    except Exception:
-                        db.session.rollback()
-                        app.logger.exception("Erreur dans les rappels de l’agenda")
-                    try:  # QCM : rappels quotidiens par notification web (hangar/qcm/rappels.py)
-                        from .qcm.rappels import envoyer_rappels_dus
-                        envoyer_rappels_dus(journal=app.logger.warning)
-                    except Exception:
-                        db.session.rollback()
-                        app.logger.exception("Erreur dans les rappels de révision")
-                    send_pending()
-                    db.session.remove()
+                tick(app)
             except Exception:  # ne jamais arrêter le serveur pour un e-mail
                 app.logger.exception("Erreur dans l’envoi des e-mails")
             time.sleep(interval)

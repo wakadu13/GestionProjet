@@ -194,10 +194,11 @@ def cmd_mail_send(args):
         force = {"reminders", "digest", "bilan"} if args.force else set()
         res = run_scheduled(force=force)
         ag = run_jobs()
-        stats = send_pending()
+        stats = send_pending(force=True)
     print(f"Planifiés : {res or 'rien à envoyer pour l’instant'}")
     print(f"Agenda : {ag['reminders']} rappel(s), {ag['daily']} programme(s) du jour")
-    print(f"File : {stats['sent']} envoyé(s), {stats['outbox']} dans data/outbox, {stats['failed']} en échec")
+    print(f"File : {stats['sent']} envoyé(s), {stats['outbox']} dans data/outbox, {stats['failed']} en échec"
+          + (f", {stats['waiting']} en attente d’un nouvel essai (serveur injoignable)" if stats.get("waiting") else ""))
 
 
 def cmd_agenda_import(args):

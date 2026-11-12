@@ -48,6 +48,10 @@ jobs:
         run: |
           uv run hangar --data ci-data demo > demo.log
           uv run hangar --data ci-data mail-send > mail.log
+          # Mode « boîte d'envoi locale » : l'e-mail de test doit être écrit en .eml (build_mime compris)
+          uv run hangar --data ci-data mail-test ci@exemple.fr > mail-test.log
+          grep -q "Statut : outbox" mail-test.log
+          ls ci-data/outbox/*.eml
           uv run hangar --data ci-data backup > backup.log
           printf 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:1\nDTSTART:20261112T080000\nDTEND:20261112T100000\nSUMMARY:Cours  CM\nEND:VEVENT\nEND:VCALENDAR\n' > planning.ics
           uv run hangar --data ci-data agenda-import planning.ics > import.log

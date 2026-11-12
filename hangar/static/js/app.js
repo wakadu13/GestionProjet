@@ -80,12 +80,18 @@
   const avatarHTML = (m, size = 18) => `<span class="avatar" style="--av:${esc(m.color)};width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px">${esc(m.initials)}</span>`;
 
   /* ------------------------------------------------------------------ Toasts */
-  function toast(msg, type = 'info', ms = 4200) {
+  function toast(msg, type = 'info', ms = 4200, action = null) {
     const box = $('#toasts');
     if (!box) return;
     const el = document.createElement('div');
     el.className = `toast ${type}`;
     el.innerHTML = `${ICON[type] || ICON.info}<div>${esc(msg)}</div>`;
+    if (action) { // bouton dans le message (ex. « Annuler »)
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn btn-xs'; b.style.marginLeft = 'auto'; b.textContent = action.label;
+      b.addEventListener('click', () => { el.remove(); action.run(); });
+      el.appendChild(b);
+    }
     box.appendChild(el);
     setTimeout(() => { el.classList.add('hiding'); setTimeout(() => el.remove(), 300); }, ms);
   }
@@ -1369,8 +1375,20 @@
       try { await postForm(url); tmModal.close(); toast('Tâche supprimée', 'success', 2000); softReload(300); } catch (err) { toast(err.message, 'error'); }
     });
     $('[data-tm-done]', form).addEventListener('change', async (e) => {
-      try { const r = await postForm(e.target.dataset.url); toast(r.message || 'Enregistré', 'success', 2500); tmModal.close(); softReload(400); } catch (err) { toast(err.message, 'error'); }
+      try { const r = await postForm(e.target.dataset.url); tmModal.close(); doneToast(r, 400); } catch (err) { toast(err.message, 'error'); }
     });
+  }
+  // Après une coche : message, puis rechargement. Tâche répétée : « Annuler » pendant quelques secondes
+  // (le rechargement attend, sinon le bouton disparaîtrait avec la page).
+  function doneToast(r, delay) {
+    if (!r.undo) { toast(r.message || 'Enregistré', 'success', r.next ? 4000 : 2200); softReload(r.next ? 900 : delay); return; }
+    let undone = false;
+    toast(r.message || 'Enregistré', 'success', 6000, { label: 'Annuler', run: async () => {
+      undone = true;
+      try { const u = await postForm(r.undo, { prev: r.prev }); toast(u.message || 'Coche annulée', 'success', 2500); } catch (err) { toast(err.message, 'error'); }
+      softReload(600);
+    } });
+    setTimeout(() => { if (!undone) softReload(); }, 6300);
   }
   document.addEventListener('click', (e) => {
     const nt = e.target.closest('[data-new-task]');
@@ -1393,8 +1411,7 @@
       b.classList.toggle('on', !!r.done); b.classList.add('pulse');
       const row = b.closest('.tk-row, .wk-task, .ag-line, .ag-chip, .wk-bar');
       if (row) row.classList.toggle('done', !!r.done);
-      toast(r.message || 'Enregistré', 'success', r.next ? 4000 : 2200);
-      softReload(r.next ? 900 : 700);
+      doneToast(r, 700);
     } catch (err) { toast(err.message, 'error'); b.disabled = false; }
   });
 

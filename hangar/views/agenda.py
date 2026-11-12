@@ -222,6 +222,7 @@ def _apply_task_form(t: AgendaTask, f) -> str | None:
     title = (f.get("title") or "").strip()
     if not title:
         return "Le titre de la tâche est obligatoire."
+    old_due, old_rec = t.due_date, t.recurrence
     t.title = title[:300]
     t.due_date = parse_date(f.get("date"))
     t.start_time = parse_time(f.get("start")) if t.due_date else None
@@ -239,6 +240,13 @@ def _apply_task_form(t: AgendaTask, f) -> str | None:
     if "recurrence" in f:
         t.recurrence = f.get("recurrence") if f.get("recurrence") in RECURRENCES and t.due_date else ""
         t.recurrence_until = parse_date(f.get("until")) if t.recurrence else None
+    # Répétition mensuelle : on retient le jour choisi (le 31 revient le 31, même après un mois plus court).
+    # Une fiche réenregistrée avec la même date (ex. le 28 février) ne fait pas oublier ce jour.
+    if t.recurrence == "monthly" and t.due_date:
+        if not t.recurrence_day or old_rec != "monthly" or t.due_date != old_due:
+            t.recurrence_day = t.due_date.day
+    else:
+        t.recurrence_day = None
     if "event_id" in f:
         eid = to_int(f.get("event_id"))
         ev = db.session.get(AgendaEvent, eid) if eid else None
@@ -310,6 +318,7 @@ def task_update(tid):
 @login_required
 def task_toggle(tid):
     t = _own_task(tid)
+    prev = t.due_date
     nxt = A.complete_task(t)
     db.session.commit()
     if nxt:
@@ -317,7 +326,31 @@ def task_toggle(tid):
     else:
         msg = "Tâche terminée. 🎉" if t.is_done else "Tâche rouverte."
     if _fetch():
-        return jsonify(ok=True, done=t.is_done, next=nxt.isoformat() if nxt else None, message=msg)
+        # Tâche répétée : une coche donnée par erreur s'annule (bouton « Annuler » du message)
+        undo = url_for("agenda.task_undo", tid=t.id) if nxt and prev else None
+        return jsonify(ok=True, done=t.is_done, next=nxt.isoformat() if nxt else None, message=msg, undo=undo,
+                       prev=prev.isoformat() if undo else None)
+    flash(msg, "success")
+    return redirect(back_url(url_for("agenda.tasks")))
+
+
+@bp.route("/agenda/tasks/<int:tid>/undo", methods=["POST"])
+@login_required
+def task_undo(tid):
+    """Annule la coche d'une tâche répétée : elle revient à l'occurrence d'avant."""
+    t = _own_task(tid)
+    prev = parse_date(request.form.get("prev"))
+    if not A.undo_complete(t, prev):
+        db.session.rollback()
+        msg = "Impossible d’annuler : la tâche a changé entre-temps."
+        if _fetch():
+            return jsonify(ok=False, error=msg), 400
+        flash(msg, "error")
+        return redirect(back_url(url_for("agenda.tasks")))
+    db.session.commit()
+    msg = f"Coche annulée : la tâche revient au {A.day_long(prev)}."
+    if _fetch():
+        return jsonify(ok=True, message=msg)
     flash(msg, "success")
     return redirect(back_url(url_for("agenda.tasks")))
 
@@ -507,6 +540,15 @@ def import_upload():
     else:
         msg = "Emploi du temps importé : aucun changement par rapport au précédent."
     flash(msg, "success")
+    # Des cours d'aujourd'hui ou de demain qui disparaissent : à vérifier tout de suite (annulation possible)
+    today = date.today()
+    soon = [d for d in imp.details if d["type"] == "removed"
+            and today <= datetime.fromisoformat(d["before"]["start"]).date() <= today + timedelta(days=1)]
+    if soon:
+        flash(f"Attention : {len(soon)} séance(s) d’aujourd’hui ou de demain retirée(s) du planning. "
+              "Vérifie la liste ci-dessous ; si c’est une erreur, annule cet import.", "error")
+    if getattr(imp, "guarded_weeks", None):
+        flash("Par prudence, des séances n’ont pas été retirées : lis l’avertissement ci-dessous.", "info")
     return redirect(url_for("agenda.import_detail", iid=imp.id))
 
 
@@ -611,10 +653,19 @@ def settings():
                                            AgendaReminder.remind_at > now())
                .order_by(AgendaReminder.remind_at).limit(30).all())
     history = (AgendaReminder.query.filter(AgendaReminder.user_id == current_user.id,
-                                           AgendaReminder.status.in_(("sent", "missed")))
+                                           AgendaReminder.status.in_(("sent", "missed", "error")))
                .order_by(AgendaReminder.remind_at.desc()).limit(15).all())
     return render_template("agenda/settings.html", s=s, mail=A.mail_status(current_user), pending=pending,
                            history=history)
+
+
+@bp.route("/agenda/mail/retry", methods=["POST"])
+@login_required
+def mail_retry():
+    """« Renvoyer les échecs » : renvoie tout de suite ses propres e-mails en échec encore utiles."""
+    from .mail import retry_failed_messages
+    retry_failed_messages(user=current_user)
+    return redirect(back_url(url_for("agenda.settings")))
 
 
 @bp.route("/agenda/summary")
