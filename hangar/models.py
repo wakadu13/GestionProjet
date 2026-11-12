@@ -1191,6 +1191,8 @@ class AgendaTask(db.Model):
     done_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=now)
     updated_at = db.Column(db.DateTime, default=now)
+    # Bloc de révision placé par « Planifier mes révisions » (hangar/controles.py) : replacé après un import
+    revision_auto = db.Column(db.Boolean, default=False)
 
     event = db.relationship("AgendaEvent")
     reminders = db.relationship("AgendaReminder", back_populates="task", cascade="all, delete-orphan",
@@ -1237,6 +1239,36 @@ class AgendaReminder(db.Model):
         if m % 60 == 0:
             return f"{m // 60} h avant"
         return f"{m} min avant"
+
+
+class AgendaGrade(db.Model):
+    """Note d'un contrôle (hangar/controles.py). La matière et la date sont recopiées : la note reste quand la
+    séance disparaît (annulation d'un import), et une note peut être saisie sans séance (sport, militaire…).
+
+    Une ligne sans note (`value` vide) peut exister : la maîtrise des QCM figée le jour du contrôle, en attente
+    de la note."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("agenda_event.id", ondelete="SET NULL"), index=True)
+    subject = db.Column(db.String(300), nullable=False)   # matière (titre de la séance)
+    label = db.Column(db.String(200), default="")         # précision libre (« CC1 », « oral »…)
+    day = db.Column(db.Date, nullable=False)
+    value = db.Column(db.Float)                           # note obtenue (vide : pas encore saisie)
+    scale = db.Column(db.Float, default=20)               # barème (sur 20, sur 10…)
+    coefficient = db.Column(db.Float, default=1)
+    skipped = db.Column(db.Boolean, default=False)        # « pas de note » : plus rappelé au tableau de bord
+    mastery = db.Column(db.Float)                         # maîtrise des QCM de la matière le jour du contrôle (%)
+    mastery_at = db.Column(db.DateTime)                   # quand elle a été figée (même s'il n'y avait pas de QCM)
+    created_at = db.Column(db.DateTime, default=now)
+    updated_at = db.Column(db.DateTime, default=now)
+
+    event = db.relationship("AgendaEvent")
+
+    @property
+    def sur_20(self) -> float | None:
+        if self.value is None or not self.scale:
+            return None
+        return self.value / self.scale * 20
 
 
 class AgendaSettings(db.Model):

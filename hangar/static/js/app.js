@@ -1676,10 +1676,24 @@
     $('[data-em-tasks]', emModal).innerHTML = ev.tasks.map((t) => `<button type="button" class="em-rem" data-edit-task="${t.id}" style="border:0;font:inherit;color:inherit;cursor:pointer;text-align:left">${t.done ? ICON.check : ICON.calendar}<span class="grow ${t.done ? 'muted' : ''}" style="${t.done ? 'text-decoration:line-through' : ''}">${esc(t.title)}</span><span class="muted small">${esc(t.date)}</span></button>`).join('');
     $('[data-em-add-task]', emModal).onclick = () => { emModal.close(); openTask({ date: ev.date, event: ev.id, start: '', title: '' }); };
     renderEventLinks(ev);
+    // Contrôle : page « Préparer ce contrôle » et, une fois passé, la note obtenue
+    const xs = $('[data-em-exam-section]', emModal);
+    if (xs) {
+      xs.hidden = !ev.prepare;
+      if (ev.prepare) $('[data-em-prepare]', xs).href = ev.prepare;
+      const gf = $('[data-em-grade-form]', xs);
+      gf.hidden = !ev.grade;
+      if (ev.grade) {
+        const f = (n) => gf.elements.namedItem(n);
+        gf.action = ev.grade.url; f('next').value = location.pathname + location.search;
+        f('value').value = ev.grade.value === null || ev.grade.value === undefined ? '' : String(ev.grade.value).replace('.', ',');
+        f('scale').value = ev.grade.scale; f('coef').value = ev.grade.coef;
+      }
+    }
     emModal.showModal();
   }
   H.openEvent = openEvent;
-  // Liens de la matière : collection du wiki et catégorie de QCM (+ date d'examen pour un contrôle)
+  // Liens de la matière : collection du wiki et catégorie de QCM (date d'examen : page « Préparer ce contrôle »)
   function renderEventLinks(ev) {
     const sec = $('[data-em-links-section]', emModal);
     const box = $('[data-em-links]', emModal);
@@ -1702,7 +1716,6 @@
     }
     if (L.qcm) {
       html += `<div class="em-link"><span class="em-link-k">QCM</span><a class="em-link-v" href="${esc(L.qcm.url)}">${esc(L.qcm.label)}</a>${L.qcm.due ? `<span class="badge badge-accent">${L.qcm.due} à revoir</span>` : ''}${form('qcm_category', '', 'Délier', 'btn btn-ghost btn-xs')}</div>`;
-      if (ev.exam && !ev.removed) html += `<form method="post" action="${esc(ev.urls.exam)}" class="em-link-exam"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><button class="btn btn-sm btn-primary">Préparer ce contrôle : date d’examen des QCM au ${esc(ev.date.split('-').reverse().join('/'))}</button></form>`;
     } else if (hasQcm) {
       html += `<div class="em-link"><span class="em-link-k">QCM</span><span class="em-link-sug">${(L.qcmSuggest || []).map((c) => form('qcm_category', c, `${esc(c)} ?`, 'btn btn-xs em-sug')).join('')}${picker('qcm_category', qcmAll, 'Choisir une catégorie de QCM…')}</span></div>`;
     }

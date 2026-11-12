@@ -126,10 +126,12 @@ def dashboard():
     ev1, tk1 = _week_objects(d["week"])
     ev2, tk2 = _items_objects(d["agenda_today"])
     tasks = tk1 + tk2 + [t for grp in d["groups"].values() for t in grp]
-    events = ev1 + ev2 + d["exams"] + d["changes"] + d["tomorrow_evs"] + [d["current"], d["next"]]
+    ctl = _controles.tableau_de_bord(d)  # statut des contrôles, contrôles passés sans note
+    events = (ev1 + ev2 + d["exams"] + d["changes"] + d["tomorrow_evs"] + [d["current"], d["next"]]
+              + ctl["a_noter"][:5])
     data, _ = _payloads(events, tasks)
     return render_template("agenda/dashboard.html", data=data, mail=A.mail_status(current_user),
-                           qcm=_qcm_resume(), tickets=_tickets_resume(d["today"]), **d)
+                           qcm=_qcm_resume(), tickets=_tickets_resume(d["today"]), **ctl, **d)
 
 
 def _tickets_resume(today: date) -> dict | None:
@@ -757,3 +759,7 @@ def settings_test():
     else:
         flash(f"Échec de l’envoi : {m.error or 'erreur inconnue'}", "error")
     return redirect(url_for("agenda.settings"))
+
+
+# « Préparer ce contrôle », révisions planifiées, notes et moyennes : routes ajoutées à ce blueprint
+from . import controles as _controles  # noqa: E402,F401

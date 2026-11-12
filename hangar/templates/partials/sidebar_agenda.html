@@ -7,6 +7,7 @@
   <a class="sb-link {% if ep == 'agenda.dashboard' %}active{% endif %}" href="{{ url_for('agenda.dashboard') }}">{{ icon('home') }} Tableau de bord</a>
   <a class="sb-link {% if ep == 'agenda.calendar' %}active{% endif %}" href="{{ url_for('agenda.calendar') }}">{{ icon('calendar') }} Calendrier</a>
   <a class="sb-link {% if ep == 'agenda.tasks' %}active{% endif %}" href="{{ url_for('agenda.tasks') }}">{{ icon('list-check') }} Tâches {% if agcfg.due %}<span class="sb-badge {% if agcfg.overdue %}danger{% endif %}" title="{{ agcfg.due }} pour aujourd’hui ou en retard">{{ agcfg.due }}</span>{% endif %}</a>
+  <a class="sb-link {% if ep == 'agenda.grades' %}active{% endif %}" href="{{ url_for('agenda.grades') }}">{{ icon('estimate') }} Mes notes</a>
   <a class="sb-link {% if ep.startswith('agenda.import') %}active{% endif %}" href="{{ url_for('agenda.imports') }}">{{ icon('upload') }} Emploi du temps</a>
   <a class="sb-link {% if ep == 'home.notifications' %}active{% endif %}" href="{{ url_for('home.notifications') }}">{{ icon('bell') }} Notifications {% if sb.unread %}<span class="sb-badge">{{ sb.unread if sb.unread < 100 else '99+' }}</span>{% endif %}</a>
   <div class="sb-section">
