@@ -170,6 +170,9 @@ class BlocsEtNotesTests(TC.ControlesTests):
 
     # -- Constat 2 : annuler un import rend les blocs supprimés --------------------------------------------
     def test_annuler_import_rend_les_blocs_supprimes(self):
+        # Heure de référence fixée tôt le matin : avec l'heure réelle, un bloc placé dans les 2 minutes
+        # serait « passé » au moment de l'annulation (à juste titre) et ne reviendrait pas.
+        self.at = datetime.combine(self.today, time(6))
         self.importer()
         self.relier()
         C.appliquer(self.user, self.ev("exam1"), self.at)
