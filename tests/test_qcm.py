@@ -505,8 +505,8 @@ class PagesTests(QcmTestCase):
         self.assertIn('class="math math-inline"', ohm["choix"][0])
         self.assertIn("<strong>U = RI</strong>", ohm["explication"])
         carte = next(q for q in donnees if q["id"] == "carte")
-        # Rendu du wiki quand il est présent (/fichiers/…), sinon rendu de repli du module QCM (/qcm/fichiers/…)
-        self.assertRegex(carte["enonce"], r'src="(/qcm)?/fichiers/Images/schema\.png"')
+        # Rendu par le moteur du wiki (/fichiers/…) : il n'y a plus de moteur de repli propre aux QCM
+        self.assertRegex(carte["enonce"], r'src="/fichiers/Images/schema\.png"')
         self.assertNotIn("data-expliquer-url", page)  # pas d'IA configurée : pas de bouton « Explique-moi »
         self.assertEqual(c.get("/qcm/jouer/?set=inconnu").status_code, 404)
         self.assertEqual(self.client("invite").get("/qcm/signalements/").status_code, 403)

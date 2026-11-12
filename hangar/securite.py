@@ -4,9 +4,9 @@
   ``#rrggbb``, celui des sélecteurs de couleur et des pastilles de l'interface.
 - ``local_url`` : adresse sur Hangar même (« /… »), en déjouant les formes qu'un navigateur lit comme une
   adresse externe (« // », « /\\ », tabulation ou retour à la ligne glissés dedans).
-- ``media_filter`` / ``ExternalImages`` : une image n'est chargée que si elle est sur Hangar ; une image
-  externe d'un texte Markdown devient un simple lien (rien n'est chargé sans clic), ou son seul texte si elle
-  est déjà dans un lien (badge, miniature cliquable).
+- ``ExternalImages`` : une image externe d'un texte Markdown devient un simple lien (rien n'est chargé sans
+  clic), ou son seul texte si elle est déjà dans un lien (badge, miniature cliquable). Le nettoyage du HTML
+  (médias locaux seulement) est commun à tout Hangar : voir ``hangar.nettoyage_html``.
 - ``attachment_type`` / ``protect_file`` : un fichier envoyé par un utilisateur n'est affiché dans le navigateur
   que si c'est une image sûre ou un PDF, d'après son extension, jamais d'après le type annoncé par
   l'expéditeur ; il ne peut jamais exécuter de script (nosniff, CSP « sandbox »).
@@ -53,16 +53,6 @@ def local_url(value, prefixes: tuple[str, ...] = ()) -> bool:
             return False
         return path.startswith(prefixes)
     return True
-
-
-MEDIA_ATTRS = {("img", "src"), ("audio", "src"), ("video", "src"), ("source", "src")}
-
-
-def media_filter(tag, attr, value):
-    """Filtre d'attributs nh3 : images et médias seulement depuis Hangar (aucune ressource externe)."""
-    if (tag, attr) in MEDIA_ATTRS and not local_url(value):
-        return None
-    return value
 
 
 class _ExternalImagesAsLinks(Treeprocessor):

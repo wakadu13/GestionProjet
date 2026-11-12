@@ -285,9 +285,10 @@ class PiecesJointesTests(Base):
         self.assertIn('src="/pdf/Cours/Signal.pdf?integre=1#page=2"',
                       sanitize('<iframe src="/pdf/Cours/Signal.pdf?integre=1#page=2"></iframe>'))
         self.assertIn('src="/fichiers/Cours/a.png"', sanitize('<iframe src="/fichiers/Cours/a.png"></iframe>'))
-        # Images : une adresse qui ressemble à une adresse locale mais part ailleurs est retirée
+        # Images : une adresse qui ressemble à une adresse locale mais part ailleurs n'est jamais chargée
+        # (« //site » devient un lien « Image externe ↗ », règle commune de nettoyage_html)
         for piege in ("/&#9;/evil.example/x.png", "/\\evil.example/x.png", "//evil.example/x.png"):
-            self.assertNotIn("evil.example", sanitize(f'<img src="{piege}">'), piege)
+            self.assertNotRegex(sanitize(f'<img src="{piege}">'), r"<img[^>]+evil\.example", piege)
         self.assertIn('src="/fichiers/a.png"', sanitize('<img src="/fichiers/a.png">'))
 
 

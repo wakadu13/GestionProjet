@@ -607,9 +607,18 @@ def scan(root):
     return tuple(sorted(files))
 
 
+def intervalle_verif():
+    """Délai (secondes) entre deux parcours du coffre, le même pour les pages et les QCM :
+    ``WIKI_VERIF_INTERVALLE`` (2 s par défaut). ``QCM_VERIF_INTERVALLE``, ancien réglage propre aux
+    QCM, reste accepté : s'il est plus court, il s'applique à tout le coffre."""
+    valeurs = [_config(nom) for nom in ("WIKI_VERIF_INTERVALLE", "QCM_VERIF_INTERVALLE")]
+    valeurs = [float(v) for v in valeurs if v is not None]
+    return min(valeurs) if valeurs else 2.0
+
+
 # Détection des changements du coffre. Parcourir tout le coffre à chaque requête
 # coûte ; le parcours, partagé par les pages et les QCM, est donc fait au plus toutes les
-# WIKI_VERIF_INTERVALLE secondes. Les écritures faites par le wiki lui-même sont
+# ``intervalle_verif()`` secondes. Les écritures faites par le wiki lui-même sont
 # vues tout de suite : pendant une requête POST le coffre est toujours relu
 # (crochets de requête du blueprint, voir views.py), et invalider() force le prochain parcours (après
 # la requête, ou après une écriture du fil de Claude).
@@ -639,11 +648,11 @@ class toujours_verifier:
 
 def signature_coffre(root, intervalle=None, suivre_ecritures=True):
     """Liste (chemin, date, taille) des fichiers du coffre, parcourue au plus toutes les
-    WIKI_VERIF_INTERVALLE secondes. Un seul parcours, partagé par les pages et les QCM : les QCM
-    (``qcm/coffre.signature``) passent leur propre intervalle et ``suivre_ecritures=False`` (pendant
-    une requête qui écrit, seul le wiki relit le coffre à chaque accès)."""
+    ``intervalle_verif()`` secondes. Un seul parcours, partagé par les pages et les QCM : la liste
+    des sets de QCM (``qcm/coffre.signature``) passe ``suivre_ecritures=False`` (pendant une requête
+    qui écrit, elle n'est relue qu'après un ``invalider()``, pas à chaque accès)."""
     if intervalle is None:
-        intervalle = float(_config("WIKI_VERIF_INTERVALLE", 2.0))
+        intervalle = intervalle_verif()
     maintenant = time.monotonic()
     root = Path(root)
     forcer = suivre_ecritures and getattr(_local, "forcer", 0)
@@ -665,13 +674,13 @@ _cache = {"root": None, "signature": None, "vault": None}
 
 def get_vault():
     """Renvoie le coffre, réindexé seulement si un fichier a changé (ou, tant qu'une note est
-    illisible, au plus toutes les WIKI_VERIF_INTERVALLE secondes, pour la relire dès que possible)."""
+    illisible, au plus toutes les ``intervalle_verif()`` secondes, pour la relire dès que possible)."""
     root = Path(current_app.config["WIKI_DIR"])
     signature = signature_coffre(root)
     with _lock:
         vault = _cache["vault"]
         relire = vault is not None and vault.illisibles and (
-            time.monotonic() - vault.lu_le >= float(_config("WIKI_VERIF_INTERVALLE", 2.0)))
+            time.monotonic() - vault.lu_le >= intervalle_verif())
         if vault is None or relire or _cache["root"] != root or _cache["signature"] != signature:
             _cache.update(root=root, signature=signature, vault=Vault(root, signature, previous=_cache["vault"]))
         return _cache["vault"]
