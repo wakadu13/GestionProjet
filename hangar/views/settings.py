@@ -132,11 +132,21 @@ make_backup = sauvegarde.make_backup
 
 
 def _nom_sauvegarde(name: str | None) -> str | None:
-    """Nom d'une sauvegarde de data/backups (base .db ou complète .zip), ou None s'il n'en est pas une."""
+    """Nom d'une sauvegarde de data/backups (base .db, complète .zip ou dossier de fichiers mis de côté
+    avant un effacement), ou None s'il n'en est pas une."""
     name = os.path.basename(name or "")
-    if name.endswith(".db") or sauvegarde.MOTIF_COMPLET.match(name):
+    if name.endswith(".db") or sauvegarde.MOTIF_COMPLET.match(name) or sauvegarde.MOTIF_FICHIERS.match(name):
         return name
     return None
+
+
+def _signaler_manquants(non_copies: list[str], ou: str) -> None:
+    """Prévient que des fichiers manquent dans une sauvegarde complète (verrouillés, illisibles…)."""
+    if non_copies:
+        flash(f"Sauvegarde incomplète : {len(non_copies)} fichier(s) n’ont pas pu être lus et manquent dans {ou} : "
+              + ", ".join(non_copies[:5]) + (" …" if len(non_copies) > 5 else "")
+              + f". La liste est dans {sauvegarde.MANQUANTS}, dans l’archive. Ferme les logiciels qui les "
+              "utilisent (Word, lecteur de PDF, Obsidian…), puis recommence.", "error")
 
 
 @bp.route("/backup", methods=["GET", "POST"])
@@ -157,15 +167,16 @@ def backup():
                 return redirect(url_for("settings.backup"))
             flash(f"Sauvegarde complète créée : {os.path.basename(bilan.chemin)} ({bilan.fichiers} fichiers).",
                   "success")
-            if bilan.non_copies:
-                flash(f"{len(bilan.non_copies)} fichier(s) n’ont pas pu être lus et manquent dans l’archive : "
-                      + ", ".join(bilan.non_copies[:5]), "error")
+            _signaler_manquants(bilan.non_copies, "l’archive")
         elif action == "delete":
             name = _nom_sauvegarde(request.form.get("name"))
-            path = os.path.join(folder, name or "")
-            if name and os.path.isfile(path):
-                os.remove(path)
-                flash("Sauvegarde supprimée.", "info")
+            try:
+                if name and sauvegarde.supprimer(folder, name):
+                    flash("Sauvegarde supprimée.", "info")
+            except OSError as exc:  # fichier ouvert dans un autre logiciel (Windows)…
+                fichier = os.path.basename(getattr(exc, "filename", None) or name)
+                flash(f"Suppression impossible : « {fichier} » est peut-être ouvert dans un autre logiciel. "
+                      "Ferme-le, puis recommence.", "error")
         elif action == "restore":
             name = os.path.basename(request.form.get("name", ""))
             path = os.path.join(folder, name)
@@ -181,6 +192,11 @@ def backup():
             src.close()
             dst.close()
             flash(f"Base restaurée depuis {name}. Une sauvegarde de l’état précédent a été créée.", "success")
+            cote = sauvegarde.dossier_fichiers(path)
+            if cote.is_dir():
+                flash(f"Les fichiers mis de côté avec cette sauvegarde (pièces jointes, sets perso…) sont dans "
+                      f"{cote} : Hangar arrêté, remets les dossiers qu’il contient dans {current_app.config['DATA_DIR']}.",
+                      "info")
             return redirect(url_for("auth.login"))
         return redirect(url_for("settings.backup"))
     files = [dict(f, size=human_size(f["octets"])) for f in sauvegarde.liste(folder)]
@@ -208,7 +224,7 @@ def backup_download():
             abort(404)
         return send_file(path, as_attachment=True, download_name=name)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return _envoyer(sauvegarde.fichier_temporaire(sans_secrets=True, complet=False), f"hangar_{stamp}.db",
+    return _envoyer(sauvegarde.fichier_temporaire(sans_secrets=True, complet=False)[0], f"hangar_{stamp}.db",
                     "application/vnd.sqlite3")
 
 
@@ -221,7 +237,9 @@ def backup_now():
     complet = request.form.get("format") != "db"
     sans_secrets = not request.form.get("secrets")
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    fichier = sauvegarde.fichier_temporaire(sans_secrets=sans_secrets, complet=complet)
+    fichier, bilan = sauvegarde.fichier_temporaire(sans_secrets=sans_secrets, complet=complet)
+    # Affiché au prochain chargement d'une page (le navigateur reste sur la page pendant le téléchargement)
+    _signaler_manquants(bilan.non_copies, "l’archive téléchargée")
     if complet:
         return _envoyer(fichier, f"hangar_complet_{stamp}.zip", "application/zip")
     return _envoyer(fichier, f"hangar_{stamp}.db", "application/vnd.sqlite3")

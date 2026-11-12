@@ -14,7 +14,13 @@ sauvegarde complète se fait à la main, appli arrêtée : voir ``LISEZMOI.txt``
 
 Une copie « sans secrets » vide le mot de passe SMTP et les clés d'API des fournisseurs d'IA
 (``SECRETS``), puis compacte la base pour que les anciennes valeurs ne restent pas dans les pages
-libérées du fichier.
+libérées du fichier. Un fichier illisible (verrouillé par un autre logiciel sous Windows…) n'arrête pas
+la sauvegarde : il est listé dans ``FICHIERS_MANQUANTS.txt``, dans l'archive.
+
+Avant d'effacer la base (``hangar reset``, ``hangar demo --force``), Hangar fait une sauvegarde
+``hangar_avant_effacement_<date>.db`` et range à côté, dans ``<même nom>_fichiers/``, les fichiers classés
+par compte (pièces jointes, sets perso…). Cette paire n'est jamais retirée par la rotation (``--garder``) ;
+supprimée depuis la page Sauvegardes, elle part en entier.
 """
 from __future__ import annotations
 
@@ -43,6 +49,13 @@ SECRETS = (("mail_config", "smtp_password"), ("ai_provider", "api_key"))
 
 MOTIF_BASE = re.compile(r"^hangar_(\d{8}_\d{6})(?:_(\d+))?\.db$")
 MOTIF_COMPLET = re.compile(r"^hangar_complet_(\d{8}_\d{6})(?:_(\d+))?\.zip$")
+# Sauvegarde de sécurité faite avant d'effacer la base, et dossier des fichiers mis de côté avec elle.
+PREFIXE_AVANT_EFFACEMENT = "hangar_avant_effacement"
+MOTIF_AVANT_EFFACEMENT = re.compile(r"^hangar_avant_effacement_(\d{8}_\d{6})(?:_(\d+))?\.db$")
+SUFFIXE_FICHIERS = "_fichiers"
+MOTIF_FICHIERS = re.compile(r"^hangar_(?:avant_effacement_)?\d{8}_\d{6}(?:_\d+)?_fichiers$")
+# Liste des fichiers illisibles, ajoutée dans l'archive quand il y en a.
+MANQUANTS = "FICHIERS_MANQUANTS.txt"
 
 
 @dataclass
@@ -103,14 +116,15 @@ def retirer_secrets(chemin: str | os.PathLike) -> None:
         con.close()
 
 
-def make_backup(dossier: str | os.PathLike | None = None) -> str:
+def make_backup(dossier: str | os.PathLike | None = None, prefixe: str = "hangar") -> str:
     """Copie de la base seule dans ``dossier`` (défaut : data/backups/) ; renvoie son chemin.
 
     Elle se restaure en un clic depuis la page Sauvegardes, mais ne contient ni le wiki, ni les sets de
-    QCM, ni les pièces jointes : voir ``make_full_backup``."""
-    dossier = Path(dossier or current_app.config["BACKUP_DIR"])
+    QCM, ni les pièces jointes : voir ``make_full_backup``. ``prefixe`` : ``PREFIXE_AVANT_EFFACEMENT`` pour
+    la sauvegarde de sécurité d'avant un effacement (jamais retirée par la rotation)."""
+    dossier = Path(dossier or current_app.config["BACKUP_DIR"]).expanduser()
     dossier.mkdir(parents=True, exist_ok=True)
-    dest = _chemin_libre(dossier, "hangar", "db")
+    dest = _chemin_libre(dossier, prefixe, "db")
     copier_base(dest)
     return str(dest)
 
@@ -131,7 +145,7 @@ def _exclus() -> set[Path]:
     return {Path(current_app.config["BACKUP_DIR"]).resolve(), data / "outbox", data}
 
 
-def _lisezmoi(sans_secrets: bool) -> str:
+def _lisezmoi(sans_secrets: bool, manquants: list[str] | None = None) -> str:
     data = Path(current_app.config["DATA_DIR"])
     coffre = Path(current_app.config["WIKI_DIR"])
     hors_data = coffre.resolve() != (data / "vault").resolve()
@@ -144,6 +158,18 @@ def _lisezmoi(sans_secrets: bool) -> str:
         f"Dossier des données d'origine : {data}",
         f"Coffre du wiki d'origine : {coffre}" + (" (réglé par HANGAR_VAULT)" if hors_data else ""),
         "",
+    ]
+    if manquants:
+        lignes += [
+            f"ATTENTION : SAUVEGARDE INCOMPLÈTE. {len(manquants)} fichier(s) n'ont pas pu être lus et ne sont pas",
+            "dans cette archive. Ferme les logiciels qui les utilisent (Word, un lecteur de PDF, Obsidian…),",
+            "puis refais une sauvegarde.",
+            *(f"- {nom}" for nom in manquants[:10]),
+            *([f"- … et {len(manquants) - 10} autre(s)."] if len(manquants) > 10 else []),
+            f"La liste complète est dans {MANQUANTS}.",
+            "",
+        ]
+    lignes += [
         "Contenu",
         "-------",
         "- hangar.db : la base (projets, tickets, agenda, progression des QCM, conversations avec l'IA,",
@@ -180,9 +206,29 @@ def _lisezmoi(sans_secrets: bool) -> str:
     return "\n".join(lignes) + "\n"
 
 
+def _liste_manquants(manquants: list[str]) -> str:
+    data = Path(current_app.config["DATA_DIR"])
+    lignes = [
+        "Fichiers absents de cette sauvegarde",
+        "====================================",
+        "",
+        f"Pendant la sauvegarde du {datetime.now():%d/%m/%Y à %H:%M}, ces fichiers n'ont pas pu être lus :",
+        "ouverts dans un autre logiciel, verrouillés, supprimés pendant la copie ou illisibles.",
+        "Ils ne sont PAS dans l'archive. Ferme les logiciels qui les utilisent, puis refais une sauvegarde.",
+        "",
+        f"vault/ est le coffre du wiki ({current_app.config['WIKI_DIR']}) ; les autres dossiers sont dans {data}.",
+        "",
+    ]
+    lignes += [f"- {nom}" for nom in manquants]
+    return "\n".join(lignes) + "\n"
+
+
 def ecrire_archive(fichier, sans_secrets: bool = False, ignorer: set[Path] | None = None) -> Bilan:
     """Écrit la sauvegarde complète dans ``fichier`` (chemin ou objet fichier ouvert en écriture binaire).
-    ``ignorer`` : fichiers à ne pas copier (l'archive en cours d'écriture, si elle est dans le coffre)."""
+    ``ignorer`` : fichiers à ne pas copier (l'archive en cours d'écriture, si elle est dans le coffre).
+
+    ``LISEZMOI.txt`` est écrit en dernier : s'il manque des fichiers, il le dit, et leur liste est ajoutée
+    dans ``FICHIERS_MANQUANTS.txt``. Une archive incomplète ne passe donc jamais pour complète."""
     bilan = Bilan()
     exclus = _exclus()
     ignorer = {p.resolve() for p in (ignorer or set())}
@@ -191,7 +237,6 @@ def ecrire_archive(fichier, sans_secrets: bool = False, ignorer: set[Path] | Non
         copier_base(copie, sans_secrets=sans_secrets)
         with zipfile.ZipFile(fichier, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6,
                              strict_timestamps=False) as zf:
-            zf.writestr("LISEZMOI.txt", _lisezmoi(sans_secrets))
             zf.write(copie, "hangar.db")
             bilan.fichiers, bilan.octets = 1, copie.stat().st_size
             for source, nom in _sources():
@@ -208,6 +253,9 @@ def ecrire_archive(fichier, sans_secrets: bool = False, ignorer: set[Path] | Non
                         if chemin.resolve() in ignorer or MOTIF_COMPLET.match(f.removesuffix(".partiel")):
                             continue  # une sauvegarde complète rangée dans le coffre n'est pas recopiée
                         _ajouter(zf, chemin, f"{nom}/{chemin.relative_to(source).as_posix()}", bilan)
+            if bilan.non_copies:
+                zf.writestr(MANQUANTS, _liste_manquants(bilan.non_copies))
+            zf.writestr("LISEZMOI.txt", _lisezmoi(sans_secrets, bilan.non_copies))
     return bilan
 
 
@@ -251,15 +299,23 @@ def make_full_backup(dossier: str | os.PathLike | None = None, sans_secrets: boo
     return bilan
 
 
+def dossier_fichiers(chemin: str | os.PathLike) -> Path:
+    """Dossier des fichiers mis de côté avec la sauvegarde de base ``chemin`` (qu'il existe ou non)."""
+    chemin = Path(chemin)
+    return chemin.with_name(chemin.stem + SUFFIXE_FICHIERS)
+
+
 def garder_dernieres(dossier: str | os.PathLike, n: int, motif: re.Pattern = MOTIF_COMPLET) -> list[str]:
     """Supprime les sauvegardes de ``dossier`` au-delà des ``n`` plus récentes. Seuls les fichiers dont le
-    nom suit ``motif`` (créés par Hangar) sont concernés : rien d'autre n'est jamais touché."""
+    nom suit ``motif`` (créés par Hangar) sont concernés : rien d'autre n'est jamais touché. Une base
+    accompagnée de fichiers mis de côté (``dossier_fichiers``) est toujours gardée : c'est l'état d'avant
+    un effacement, qu'aucune sauvegarde plus récente ne contient."""
     if n < 1:
         return []
     trouves = []
     for nom in os.listdir(dossier):
         m = motif.match(nom)
-        if m:
+        if m and not dossier_fichiers(Path(dossier) / nom).is_dir():
             trouves.append(((m.group(1), int(m.group(2) or 1)), nom))
     trouves.sort(reverse=True)
     supprimees = []
@@ -272,40 +328,82 @@ def garder_dernieres(dossier: str | os.PathLike, n: int, motif: re.Pattern = MOT
     return supprimees
 
 
+def _taille_dossier(dossier: Path) -> int:
+    total = 0
+    for racine, _sous, fichiers in os.walk(dossier):
+        for f in fichiers:
+            try:
+                total += os.path.getsize(os.path.join(racine, f))
+            except OSError:
+                pass
+    return total
+
+
 def liste(dossier: str | os.PathLike | None = None) -> list[dict]:
-    """Sauvegardes du dossier (base seule et complètes), la plus récente d'abord."""
+    """Sauvegardes du dossier, la plus récente d'abord : base seule (``kind`` « base », avec ``fichiers``,
+    le nom du dossier mis de côté qui l'accompagne s'il existe), complètes (« complet ») et dossiers de
+    fichiers mis de côté dont la base a disparu (« fichiers ») : rien n'est caché."""
     dossier = Path(dossier or current_app.config["BACKUP_DIR"])
     out = []
     for p in dossier.iterdir() if dossier.is_dir() else []:
-        if not p.is_file():
+        cote = None
+        if p.is_dir():
+            if not MOTIF_FICHIERS.match(p.name) or p.with_name(p.name.removesuffix(SUFFIXE_FICHIERS) + ".db").exists():
+                continue  # un dossier mis de côté avec une base est montré sur la ligne de celle-ci
+            kind, octets = "fichiers", _taille_dossier(p)
+        elif not p.is_file():
             continue
-        if p.suffix == ".db":
-            kind = "base"
+        elif p.suffix == ".db":
+            kind, octets = "base", p.stat().st_size
+            cote = dossier_fichiers(p)
+            cote = cote.name if cote.is_dir() else None
         elif MOTIF_COMPLET.match(p.name):
-            kind = "complet"
+            kind, octets = "complet", p.stat().st_size
         else:
             continue
-        st = p.stat()
-        out.append({"name": p.name, "kind": kind, "octets": st.st_size, "date": datetime.fromtimestamp(st.st_mtime)})
+        out.append({"name": p.name, "kind": kind, "octets": octets, "fichiers": cote,
+                    "avant_effacement": bool(MOTIF_AVANT_EFFACEMENT.match(p.name)),
+                    "date": datetime.fromtimestamp(p.stat().st_mtime)})
     out.sort(key=lambda f: (f["date"], f["name"]), reverse=True)
     return out
 
 
+def supprimer(dossier: str | os.PathLike, nom: str) -> bool:
+    """Supprime la sauvegarde ``nom`` de ``dossier`` ; pour une base, aussi le dossier de fichiers mis de
+    côté avec elle (en premier : si un fichier est verrouillé, la base reste et rien n'est orphelin).
+    ``nom`` doit déjà avoir été vérifié (nom simple d'une sauvegarde). Renvoie False s'il n'existe pas."""
+    chemin = Path(dossier) / nom
+    if MOTIF_FICHIERS.match(nom):
+        if not chemin.is_dir():
+            return False
+        shutil.rmtree(chemin)
+        return True
+    if not chemin.is_file():
+        return False
+    cote = dossier_fichiers(chemin)
+    if chemin.suffix == ".db" and cote.is_dir():
+        shutil.rmtree(cote)
+    chemin.unlink()
+    return True
+
+
 def fichier_temporaire(sans_secrets: bool = False, complet: bool = True):
     """Sauvegarde à télécharger, écrite dans un fichier temporaire anonyme (effacé à sa fermeture, rien
-    n'est gardé dans data/backups/). Renvoie le fichier ouvert, positionné au début."""
+    n'est gardé dans data/backups/). Renvoie ``(fichier ouvert positionné au début, Bilan)`` : le bilan
+    dit quels fichiers n'ont pas pu être lus, pour prévenir l'utilisateur."""
     out = tempfile.TemporaryFile()
     try:
         if complet:
-            ecrire_archive(out, sans_secrets=sans_secrets)
+            bilan = ecrire_archive(out, sans_secrets=sans_secrets)
         else:
             with tempfile.TemporaryDirectory(prefix="hangar-sauvegarde-") as tmp:
                 copie = Path(tmp) / "hangar.db"
                 copier_base(copie, sans_secrets=sans_secrets)
+                bilan = Bilan(fichiers=1, octets=copie.stat().st_size)
                 with open(copie, "rb") as fh:
                     shutil.copyfileobj(fh, out)
         out.seek(0)
-        return out
+        return out, bilan
     except BaseException:
         out.close()
         raise

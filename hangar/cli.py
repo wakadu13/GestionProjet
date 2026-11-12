@@ -102,6 +102,23 @@ def cmd_run(args):
         print("\n  Hangar arrêté.")
 
 
+def _confirmer(question: str) -> bool:
+    """Demande « oui » au clavier. Sans clavier (Planificateur de tâches, script, « < nul ») : message clair
+    et arrêt avec le code 1, pour qu'un script voie que rien n'a été fait."""
+    try:
+        ans = input(f"{question} Tape « oui » : ")
+    except EOFError:
+        print("\nAnnulé : aucune réponse. Ajoute --yes pour lancer la commande sans question.")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nAnnulé.")
+        return False
+    if ans.strip().lower() != "oui":
+        print("Annulé.")
+        return False
+    return True
+
+
 def _effacer_base(app, yes: bool, question: str) -> bool:
     """Après confirmation : sauvegarde la base, met de côté les fichiers rangés par compte, puis vide la base.
 
@@ -111,22 +128,20 @@ def _effacer_base(app, yes: bool, question: str) -> bool:
     from pathlib import Path
 
     from .extensions import db
+    from .sauvegarde import PREFIXE_AVANT_EFFACEMENT, dossier_fichiers
     from .views.settings import make_backup
-    if not yes:
-        ans = input(f"{question} Tape « oui » : ")
-        if ans.strip().lower() != "oui":
-            print("Annulé.")
-            return False
+    if not yes and not _confirmer(question):
+        return False
     data = Path(app.config["DATA_DIR"])
-    try:
-        copie = Path(make_backup())
+    try:  # nommée à part : la rotation (« backup --garder ») ne la retire jamais
+        copie = Path(make_backup(prefixe=PREFIXE_AVANT_EFFACEMENT))
     except Exception as exc:  # disque plein, base verrouillée… : surtout ne rien effacer
         print(f"✗ La sauvegarde de sécurité a échoué ({exc}) : rien n’a été effacé.")
         sys.exit(1)
     print(f"Sauvegarde de sécurité de la base : {copie}")
     # Ces dossiers sont rangés par numéro de compte : une base vidée redonne les mêmes numéros, et un nouveau
     # compte hériterait des fichiers de l'ancien. Ils sont mis de côté à côté de la sauvegarde.
-    cote = copie.with_name(copie.stem + "_fichiers")
+    cote = dossier_fichiers(copie)
     deplaces = []
     for nom in ("uploads", "qcm_perso", "copies", "agenda"):
         src = data / nom
@@ -191,11 +206,9 @@ def cmd_rebuild_docs(args):
             print("✗ Aucun projet. Lance d’abord « hangar demo ».")
             sys.exit(1)
         actor = project.lead or User.query.filter_by(role="admin").first()
-        if not args.yes:
-            ans = input(f"Remplacer tous les tickets de « {project.name} » par ceux issus des documents ? Tape « oui » : ")
-            if ans.strip().lower() != "oui":
-                print("Annulé.")
-                return
+        if not args.yes and not _confirmer(
+                f"Remplacer tous les tickets de « {project.name} » par ceux issus des documents ?"):
+            return
         print(f"Sauvegarde de sécurité : {make_backup()}")
         clear_project(project)
         load_documents(project, actor)
@@ -230,21 +243,22 @@ def cmd_backup(args):
     from . import create_app, sauvegarde
     from .utils import human_size
     app = create_app(args.data)
-    if args.vers:
+    vers = Path(args.vers).expanduser() if args.vers else None  # « ~/Sauvegardes » : le même dossier partout
+    if vers:
         try:  # crée le dernier dossier (ex. « Sauvegardes » sur la clé), pas un chemin entier mal tapé
-            Path(args.vers).expanduser().mkdir(exist_ok=True)
+            vers.mkdir(exist_ok=True)
         except OSError as exc:
             print(f"✗ Dossier de destination inaccessible : {args.vers} ({exc}). La clé ou le disque est-il branché ?")
             sys.exit(1)
     with app.app_context():
         try:
             if args.complet:
-                bilan = sauvegarde.make_full_backup(args.vers, sans_secrets=args.sans_secrets, garder=args.garder)
+                bilan = sauvegarde.make_full_backup(vers, sans_secrets=args.sans_secrets, garder=args.garder)
                 chemin, supprimees = bilan.chemin, bilan.supprimees
                 print(f"✓ Sauvegarde complète créée : {chemin} ({bilan.fichiers} fichiers, "
                       f"{human_size(bilan.octets)} avant compression)")
             else:
-                chemin = sauvegarde.make_backup(args.vers)
+                chemin = sauvegarde.make_backup(vers)
                 if args.sans_secrets:
                     sauvegarde.retirer_secrets(chemin)
                 supprimees = (sauvegarde.garder_dernieres(Path(chemin).parent, args.garder, sauvegarde.MOTIF_BASE)
@@ -262,6 +276,10 @@ def cmd_backup(args):
         print(f"! {len(bilan.non_copies)} fichier(s) illisible(s) ou verrouillé(s), absents de l’archive :")
         for nom in bilan.non_copies[:20]:
             print(f"  - {nom}")
+        if len(bilan.non_copies) > 20:
+            print(f"  … et {len(bilan.non_copies) - 20} autre(s).")
+        print(f"  La liste complète est dans {sauvegarde.MANQUANTS}, dans l’archive. Ferme les logiciels qui les "
+              "utilisent, puis recommence.")
         sys.exit(2)
 
 

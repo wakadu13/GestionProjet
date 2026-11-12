@@ -38,13 +38,16 @@
         <thead><tr><th>Fichier</th><th>Contenu</th><th>Date</th><th>Taille</th><th></th></tr></thead>
         <tbody>
         {% for f in files %}
-        <tr><td class="mono">{{ f.name }}</td>
-          <td>{% if f.kind == 'complet' %}<span class="badge badge-success">Complète</span>{% else %}<span class="badge">Base seule</span>{% endif %}</td>
+        <tr><td class="mono">{{ f.name }}
+            {% if f.fichiers %}<div class="help">+ dossier <code>{{ f.fichiers }}</code> : les pièces jointes, sets perso, copies et emplois du temps mis de côté avant l’effacement. Après une restauration, remets les dossiers qu’il contient dans <code>{{ data_dir }}</code>, Hangar arrêté.</div>{% endif %}
+            {% if f.kind == 'fichiers' %}<div class="help">Fichiers mis de côté avant un effacement, sans leur sauvegarde de la base. Ils ne sont dans aucune autre sauvegarde.</div>{% endif %}</td>
+          <td>{% if f.kind == 'complet' %}<span class="badge badge-success">Complète</span>{% elif f.kind == 'fichiers' %}<span class="badge">Fichiers mis de côté</span>{% else %}<span class="badge">Base seule</span>{% endif %}
+            {% if f.avant_effacement %}<span class="badge badge-warning">Avant effacement</span>{% endif %}</td>
           <td class="muted">{{ f.date|datetime }}</td><td class="muted">{{ f.size }}</td>
           <td class="right nowrap">
-            <a class="btn btn-xs" href="{{ url_for('settings.backup_download', name=f.name) }}" title="Télécharger">{{ icon('download', 13) }}</a>
+            {% if f.kind != 'fichiers' %}<a class="btn btn-xs" href="{{ url_for('settings.backup_download', name=f.name) }}" title="Télécharger">{{ icon('download', 13) }}</a>{% endif %}
             {% if f.kind == 'base' %}{{ ui.confirm_button(url_for('settings.backup'), 'Restaurer', 'Remplacer la base actuelle par cette sauvegarde ? (une sauvegarde de l’état actuel sera créée ; le wiki et les fichiers ne changent pas)', 'btn btn-xs', 'refresh', {'action': 'restore', 'name': f.name}) }}{% endif %}
-            {{ ui.confirm_button(url_for('settings.backup'), '', 'Supprimer cette sauvegarde ?', 'btn btn-xs btn-danger-ghost', 'trash', {'action': 'delete', 'name': f.name}) }}
+            {{ ui.confirm_button(url_for('settings.backup'), '', 'Supprimer cette sauvegarde et le dossier de fichiers mis de côté avec elle ?' if f.fichiers else ('Supprimer ces fichiers mis de côté ? Ils ne sont dans aucune autre sauvegarde.' if f.kind == 'fichiers' else 'Supprimer cette sauvegarde ?'), 'btn btn-xs btn-danger-ghost', 'trash', {'action': 'delete', 'name': f.name}) }}
           </td></tr>
         {% else %}<tr><td colspan="5" class="muted">Aucune sauvegarde pour l’instant.</td></tr>{% endfor %}
         </tbody>

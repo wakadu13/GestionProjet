@@ -429,6 +429,203 @@ class CommandesQuiEffacentTests(unittest.TestCase):
         self.assertTrue((self.data / "uploads").is_dir())
         self.assertTrue((self.data / "vault" / "Mon cours.md").exists())
 
+    def test_sans_clavier_message_clair(self):
+        """Planificateur de tâches, script, « < nul » : plus de trace Python, un message qui parle de --yes."""
+        for commande in (("demo", "--force"), ("reset",)):
+            out = io.StringIO()
+            code = None
+            with redirect_stdout(out), mock.patch("builtins.input", side_effect=EOFError):
+                try:
+                    cli.main(["--data", str(self.data), *commande])
+                except SystemExit as exc:
+                    code = exc.code
+            self.assertEqual(code, 1, out.getvalue())  # un script voit que rien n'a été fait
+            self.assertIn("--yes", out.getvalue())
+            self.assertEqual(self._comptes(), ["eleve"])
+            self.assertFalse((self.data / "backups").exists() and self._sauvegardes())
+            self.assertTrue((self.data / "uploads" / "1" / "pj.txt").exists())
+
+    def _admin(self, login="admin2"):
+        app = create_app(self.data, testing=True)
+        with app.app_context():
+            u = User(username=login, email=f"{login}@hangar.local", role="admin")
+            u.set_password("secret12")
+            db.session.add(u)
+            db.session.commit()
+        return app
+
+    def test_sauvegarde_d_avant_effacement_jamais_retiree_par_la_rotation(self):
+        """« reset » puis « backup --garder 1 » : avant, la base d'avant l'effacement disparaissait et ses
+        fichiers mis de côté restaient seuls, invisibles depuis la page Sauvegardes."""
+        sortie, code = _cli("--data", str(self.data), "reset", "--yes")
+        self.assertIsNone(code, sortie)
+        (securite,) = self._sauvegardes()
+        self.assertTrue(securite.name.startswith("hangar_avant_effacement_"), securite.name)
+        cote = securite.with_name(securite.stem + "_fichiers")
+        self.assertTrue((cote / "uploads" / "1" / "pj.txt").exists())
+        # Paire au nom ordinaire (faite par une version précédente) : protégée elle aussi
+        ancienne = self.data / "backups" / "hangar_20200101_000000.db"
+        shutil.copy(securite, ancienne)
+        (self.data / "backups" / "hangar_20200101_000000_fichiers" / "uploads").mkdir(parents=True)
+        for _ in range(3):
+            sortie, code = _cli("--data", str(self.data), "backup", "--garder", "1")
+            self.assertIsNone(code, sortie)
+        self.assertTrue(securite.exists(), sorted(os.listdir(self.data / "backups")))
+        self.assertTrue(cote.is_dir())
+        self.assertTrue(ancienne.exists())
+        routine = [p for p in self._sauvegardes() if p not in (securite, ancienne)]
+        self.assertEqual(len(routine), 1, routine)  # la rotation joue toujours sur les sauvegardes ordinaires
+
+        # La page montre la sauvegarde d'avant l'effacement ET le dossier qui l'accompagne
+        app = self._admin()
+        try:
+            c, _ = _connecter(app, "admin2", "secret12")
+            page = c.get("/settings/backup").get_data(as_text=True)
+            self.assertIn(securite.name, page)
+            self.assertIn(cote.name, page)
+            self.assertIn("Avant effacement", page)
+            # Supprimer la sauvegarde depuis la page retire aussi ses fichiers mis de côté
+            token = _csrf(c, "/settings/backup")
+            c.post("/settings/backup", data={"_csrf": token, "action": "delete", "name": securite.name})
+            self.assertFalse(securite.exists())
+            self.assertFalse(cote.exists())
+            self.assertTrue(routine[0].exists())
+        finally:
+            _fermer(app)
+
+    def test_dossier_de_fichiers_seul_visible_et_supprimable(self):
+        """Un dossier de fichiers mis de côté dont la base a disparu (supprimée à la main…) reste visible."""
+        sortie, code = _cli("--data", str(self.data), "reset", "--yes")
+        self.assertIsNone(code, sortie)
+        (securite,) = self._sauvegardes()
+        cote = securite.with_name(securite.stem + "_fichiers")
+        securite.unlink()
+        app = self._admin()
+        try:
+            c, _ = _connecter(app, "admin2", "secret12")
+            page = c.get("/settings/backup").get_data(as_text=True)
+            self.assertIn(cote.name, page)
+            self.assertIn("Fichiers mis de côté", page)
+            r = c.get(f"/settings/backup/download?name={cote.name}")
+            self.assertEqual(r.status_code, 404)  # un dossier ne se télécharge pas
+            r.close()
+            token = _csrf(c, "/settings/backup")
+            c.post("/settings/backup", data={"_csrf": token, "action": "delete", "name": cote.name})
+            self.assertFalse(cote.exists())
+            # Rien d'autre que ce qui suit le nom d'un dossier mis de côté ne peut être supprimé ainsi
+            (self.data / "backups" / "autre").mkdir()
+            c.post("/settings/backup", data={"_csrf": token, "action": "delete", "name": "autre"})
+            c.post("/settings/backup", data={"_csrf": token, "action": "delete", "name": "../uploads"})
+            self.assertTrue((self.data / "backups" / "autre").is_dir())
+            self.assertTrue((self.data / "uploads").is_dir())
+        finally:
+            _fermer(app)
+
+
+class RelectureSauvegardeTests(unittest.TestCase):
+    """Piste 1, après relecture : fichier illisible signalé partout ; « --vers ~/… » sans --complet."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="hangar-relecture-"))
+        self.data = self.tmp / "data"
+        self.app = create_app(self.data, testing=True)
+        with self.app.app_context():
+            u = User(username="moi", email="moi@hangar.local", role="admin")
+            u.set_password("secret12")
+            db.session.add(u)
+            db.session.commit()
+        self.coffre = Path(self.app.config["WIKI_DIR"])
+        for nom in ("Thermo.md", "verrouille.pdf"):
+            (self.coffre / "Cours").mkdir(parents=True, exist_ok=True)
+            (self.coffre / "Cours" / nom).write_text("contenu", encoding="utf-8")
+
+    def tearDown(self):
+        _fermer(self.app)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _verrou(self):
+        """Fichier ouvert dans un autre logiciel sous Windows : sa lecture échoue."""
+        ecrire = zipfile.ZipFile.write
+
+        def write(zf, filename, *args, **kwargs):
+            if str(filename).endswith("verrouille.pdf"):
+                raise PermissionError(13, "Le processus ne peut pas accéder au fichier", str(filename))
+            return ecrire(zf, filename, *args, **kwargs)
+        return mock.patch.object(zipfile.ZipFile, "write", write)
+
+    def _verifier_manquant(self, zf: zipfile.ZipFile):
+        noms = zf.namelist()
+        self.assertIn("vault/Cours/Thermo.md", noms)
+        self.assertNotIn("vault/Cours/verrouille.pdf", noms)
+        self.assertIn("FICHIERS_MANQUANTS.txt", noms)
+        self.assertIn("vault/Cours/verrouille.pdf", zf.read("FICHIERS_MANQUANTS.txt").decode("utf-8"))
+        lisezmoi = zf.read("LISEZMOI.txt").decode("utf-8")
+        self.assertIn("SAUVEGARDE INCOMPLÈTE", lisezmoi)
+        self.assertIn("vault/Cours/verrouille.pdf", lisezmoi)
+        self.assertIn("FICHIERS_MANQUANTS.txt", lisezmoi)
+
+    def test_tout_telecharger_signale_un_fichier_illisible(self):
+        c, _ = _connecter(self.app, "moi", "secret12")
+        token = _csrf(c, "/settings/backup")
+        r = c.post("/settings/backup/telecharger", data={"_csrf": token, "format": "zip"})
+        with zipfile.ZipFile(io.BytesIO(r.get_data())) as zf:  # tout est lisible : pas de liste
+            self.assertNotIn("FICHIERS_MANQUANTS.txt", zf.namelist())
+        r.close()
+        self.assertNotIn("verrouille.pdf", c.get("/settings/backup").get_data(as_text=True))
+
+        with self._verrou():
+            r = c.post("/settings/backup/telecharger", data={"_csrf": token, "format": "zip"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.mimetype, "application/zip")
+        with zipfile.ZipFile(io.BytesIO(r.get_data())) as zf:
+            self._verifier_manquant(zf)
+        r.close()
+        # Au prochain affichage de la page, l'élève est prévenu
+        self.assertIn("vault/Cours/verrouille.pdf", c.get("/settings/backup").get_data(as_text=True))
+
+    def test_sauvegarde_complete_gardee_et_commande_listent_le_fichier_illisible(self):
+        c, _ = _connecter(self.app, "moi", "secret12")
+        token = _csrf(c, "/settings/backup")
+        with self._verrou():
+            r = c.post("/settings/backup", data={"_csrf": token, "action": "create_full"}, follow_redirects=True)
+        self.assertIn("vault/Cours/verrouille.pdf", r.get_data(as_text=True))
+        (archive,) = (self.data / "backups").glob("hangar_complet_*.zip")
+        with zipfile.ZipFile(archive) as zf:
+            self._verifier_manquant(zf)
+        _fermer(self.app)
+        with self._verrou():
+            sortie, code = _cli("--data", str(self.data), "backup", "--complet", "--vers", str(self.tmp / "cle"))
+        self.assertEqual(code, 2, sortie)
+        self.assertIn("vault/Cours/verrouille.pdf", sortie)
+        (archive,) = (self.tmp / "cle").iterdir()
+        with zipfile.ZipFile(archive) as zf:
+            self._verifier_manquant(zf)
+
+    def test_vers_avec_tilde_sans_complet(self):
+        """« hangar backup --vers ~/Sauv » : la base va dans le dossier personnel, pas dans « ./~/Sauv »."""
+        maison, courant = self.tmp / "maison", self.tmp / "courant"
+        maison.mkdir()
+        courant.mkdir()
+        _fermer(self.app)
+        avant = os.getcwd()
+        os.chdir(courant)
+        try:
+            with mock.patch.dict(os.environ, {"HOME": str(maison), "USERPROFILE": str(maison)}):
+                sortie, code = _cli("--data", str(self.data), "backup", "--vers", "~/Sauv", "--garder", "1")
+                self.assertIsNone(code, sortie)
+                sortie, code = _cli("--data", str(self.data), "backup", "--vers", "~/Sauv", "--garder", "1")
+                self.assertIsNone(code, sortie)
+        finally:
+            os.chdir(avant)
+        self.assertEqual(list(courant.iterdir()), [])
+        copies = list((maison / "Sauv").iterdir())
+        self.assertEqual(len(copies), 1, copies)
+        self.assertRegex(copies[0].name, r"^hangar_\d{8}_\d{6}(_\d+)?\.db$")
+        # Clé débranchée : le dossier parent manque, rien n'est créé à sa place
+        sortie, code = _cli("--data", str(self.data), "backup", "--vers", str(self.tmp / "E" / "Sauv"))
+        self.assertEqual(code, 1, sortie)
+        self.assertFalse((self.tmp / "E").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
