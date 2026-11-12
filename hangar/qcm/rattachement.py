@@ -14,9 +14,13 @@ Les fichiers du coffre ne sont jamais modifiés.
   des accents. Un choix ambigu (deux copies identiques) est laissé à l'élève.
 - `rattacher(session, ancien, nouveau)` : progression (fusionnée question par question quand les
   deux en ont), réglages, signalements et explications suivent, pour tous les comptes ; l'alias
-  ancien → nouveau est gardé. Sert aussi à « Déplacer dans un dossier… » et à « Rattacher à… ».
-- `resoudre(library, set_id)` : identifiant actuel d'un set, pour les réponses envoyées plus tard
-  sous l'ancien (application hors ligne, page restée ouverte).
+  ancien → nouveau est gardé. Sert aussi à « Déplacer dans un dossier… » et à « Rattacher à… »
+  (avec `user_id` quand le rattachement ne vaut que pour ce compte : alias propre au compte).
+- `meme_set(session, set_id, element)` / `mettre_a_part(session, set_id)` : « Déplacer » vers un
+  chemin qui garde la progression d'un autre set, supprimé depuis : elle est mise à part (toujours
+  listée sur la page des statistiques) au lieu d'être versée dans le set déplacé.
+- `resoudre(library, set_id, user_id)` : identifiant actuel d'un set, pour les réponses envoyées
+  plus tard sous l'ancien (application hors ligne, page restée ouverte).
 - `attendu(library, user_id, set_id)` : set momentanément introuvable (fichier invalide, ou
   progression sans fichier pas encore rattachée ni oubliée) : la synchronisation hors ligne garde
   ses réponses sur l'appareil au lieu de les perdre.
@@ -72,6 +76,15 @@ def est_langue(element) -> bool:
 def _espace(set_id):
     """Espace d'un set : commun (""), ou espace personnel d'un compte (« ~<compte> »)."""
     return set_id.split("/", 1)[0] if set_id.startswith(quiz.PERSO) else ""
+
+
+def libelle(chemin):
+    """Chemin d'un set (ou d'un dossier) tel qu'on l'affiche : « Mon espace/… » pour l'espace
+    personnel du compte, plutôt que son identifiant technique « ~<compte>/… »."""
+    if not chemin.startswith(quiz.PERSO):
+        return chemin
+    reste = chemin.split("/", 1)[1] if "/" in chemin else ""
+    return "Mon espace" + ("/" + reste if reste else "")
 
 
 def _cle_casse(set_id):
@@ -152,7 +165,9 @@ def rattacher(session, ancien, nouveau, user_id=None):
     """Fait suivre au set `nouveau` tout ce qui était rangé sous `ancien`, pour tous les comptes :
     progression (fusionnée question par question si `nouveau` en a déjà), réglages (ceux de
     `nouveau` d'abord), signalements, explications de l'IA, empreinte ; garde l'alias ancien → nouveau.
-    Avec `user_id` : seulement la progression et les réglages de ce compte (pas d'alias).
+    Avec `user_id` : seulement la progression et les réglages de ce compte, et un alias propre à ce
+    compte (ses réponses hors ligne encore sous l'ancien nom suivent ; celles des autres comptes
+    attendent toujours leur propre rattachement).
     Rien n'est effacé, sauf les doublons fusionnés. Ne valide pas la transaction."""
     if not ancien or not nouveau or ancien == nouveau:
         return
@@ -184,6 +199,7 @@ def rattacher(session, ancien, nouveau, user_id=None):
         c.reponses_chronometrees = (c.reponses_chronometrees or 0) + (d.reponses_chronometrees or 0)
         session.delete(d)
     if user_id is not None:
+        _garder_alias(session, ancien, nouveau, user_id)
         session.flush()
         return
 
@@ -203,18 +219,70 @@ def rattacher(session, ancien, nouveau, user_id=None):
         else:
             session.delete(e_ancien)
 
-    # Alias : `nouveau` est le nom actuel (plus un alias) ; ceux qui menaient à `ancien` y mènent aussi.
-    for a in session.query(AliasSet).filter((AliasSet.ancien == nouveau) | (AliasSet.nouveau == ancien)).all():
+    _garder_alias(session, ancien, nouveau, None)
+    session.flush()
+
+
+def _garder_alias(session, ancien, nouveau, user_id):
+    """Alias ancien → nouveau, pour tous les comptes (`user_id` None) ou pour un seul. `nouveau` est
+    le nom actuel (plus un alias) ; ceux qui menaient à `ancien` y mènent aussi."""
+    q = session.query(AliasSet)
+    if user_id is not None:
+        q = q.filter(AliasSet.user_id == user_id)
+    for a in q.filter((AliasSet.ancien == nouveau) | (AliasSet.nouveau == ancien)).all():
         if a.ancien == nouveau:
             session.delete(a)
         else:
             a.nouveau = nouveau
-    a = session.query(AliasSet).filter_by(ancien=ancien).first()
+    a = session.query(AliasSet).filter_by(ancien=ancien, user_id=user_id).first()
     if a is None:
-        session.add(AliasSet(ancien=ancien, nouveau=nouveau))
+        session.add(AliasSet(ancien=ancien, nouveau=nouveau, user_id=user_id))
     else:
         a.nouveau = nouveau
+
+
+def meme_set(session, set_id, element) -> bool:
+    """La progression restée sous `set_id` sans fichier (set supprimé ou renommé hors de Hangar)
+    est-elle celle de `element`, qu'on s'apprête à ranger à ce chemin (« Déplacer ») ? Oui si
+    l'empreinte gardée de l'ancien set lui ressemble (au moins SEUIL_PROCHE des questions
+    inchangées) ; sans empreinte (set disparu avant cette version), si toutes les questions suivies
+    existent dans `element`. Les identifiants par défaut (q0, q1…) se ressemblent d'un set à
+    l'autre : seule l'empreinte, quand elle existe, tranche vraiment."""
+    e = session.query(EmpreinteSet).filter_by(set_id=set_id).first()
+    if e is not None:
+        return (bool(e.langue) == est_langue(element)
+                and _similarite(e.cles, set(empreinte(element)[1])) >= SEUIL_PROCHE)
+    items = element.exercices if est_langue(element) else element.questions
+    suivies = {q for (q,) in session.query(QuizProgress.question_id).filter_by(set_id=set_id).distinct()}
+    return suivies <= {it.id for it in items}
+
+
+def a_des_restes(session, set_id) -> bool:
+    """Reste-t-il quelque chose sous `set_id` (progression, réglages, signalements, explications) ?"""
+    return any(session.query(m.id).filter_by(set_id=set_id).first() is not None
+               for m in (QuizProgress, QuizDeck, Signalement, Explication))
+
+
+def mettre_a_part(session, set_id):
+    """Range sous un nom libre, « <set_id> (ancien) », tout ce qui reste sous `set_id` : progression,
+    réglages, signalements, explications de l'IA, empreinte, pour tous les comptes. Sert quand un
+    autre set prend ce chemin : rien n'est versé dans ce set ni effacé, et la progression reste
+    listée sur la page des statistiques (« Rattacher à… », « Oublier »). Renvoie le nom choisi.
+    Ne valide pas la transaction."""
+    pris = (_ids_avec_progression(session)
+            | {sid for (sid,) in session.query(EmpreinteSet.set_id)}
+            | {sid for (sid,) in session.query(Signalement.set_id).distinct()}
+            | {sid for (sid,) in session.query(Explication.set_id).distinct()})
+    a_part, n = f"{set_id} (ancien)", 1
+    while a_part in pris:
+        n += 1
+        a_part = f"{set_id} (ancien {n})"
+    for modele in (QuizProgress, QuizDeck, Signalement, Explication, EmpreinteSet):
+        session.query(modele).filter_by(set_id=set_id).update({"set_id": a_part}, synchronize_session=False)
+    # Les anciens noms qui menaient à cette progression y mènent toujours.
+    session.query(AliasSet).filter_by(nouveau=set_id).update({"nouveau": a_part}, synchronize_session=False)
     session.flush()
+    return a_part
 
 
 def _ids_avec_progression(session):
@@ -277,7 +345,7 @@ def _reconcilier(s, library):
     for a in s.query(AliasSet).all():
         if a.ancien in presents:
             s.delete(a)  # un fichier porte de nouveau ce nom : ce n'est plus un ancien nom
-        else:
+        elif a.user_id is None:  # un alias propre à un compte ne décide pas pour les autres
             alias[a.ancien] = a.nouveau
     par_casse: dict = {}
     for sid in presents:
@@ -314,13 +382,18 @@ def _reconcilier(s, library):
 # ---------------------------------------------------------------------------
 # Synchronisation et page des statistiques
 # ---------------------------------------------------------------------------
-def resoudre(library, set_id):
+def resoudre(library, set_id, user_id=None):
     """Identifiant actuel d'un set : le sien s'il est dans la bibliothèque, sinon celui auquel sa
-    progression a été rattachée (set déplacé ou renommé), s'il y en a un."""
+    progression a été rattachée (set déplacé ou renommé), s'il y en a un. L'alias propre au compte
+    `user_id` (« Rattacher à… » qui ne valait que pour lui) passe avant celui de tous les comptes."""
     vus = set()
     while set_id not in library.sets and set_id not in library.langues and set_id not in vus:
         vus.add(set_id)
-        a = AliasSet.query.filter_by(ancien=set_id).first()
+        a = None
+        if user_id is not None:
+            a = AliasSet.query.filter_by(ancien=set_id, user_id=user_id).first()
+        if a is None:
+            a = AliasSet.query.filter_by(ancien=set_id, user_id=None).first()
         if a is None:
             break
         set_id = a.nouveau
@@ -359,7 +432,8 @@ def _suggestion(sid, emp, cible_alias, elements, empreintes):
 
 def orphelins(user_id, library, suggestions=True):
     """Progressions d'un compte sans fichier dans le coffre (set renommé, déplacé ou supprimé hors
-    de Hangar, et pas reconnu tout seul) : [{id, nom, dossier, vues, derniere, suggestion}]."""
+    de Hangar, et pas reconnu tout seul) : [{id, libelle, nom, dossier, commun, vues, derniere,
+    suggestion}] (`libelle`, `dossier` : chemins affichés ; `commun` : hors de l'espace personnel)."""
     presents = set(library.sets) | set(library.langues)
     ecartes = presents | set(getattr(library, "ids_invalides", ()))
     infos: dict = {}
@@ -377,10 +451,15 @@ def orphelins(user_id, library, suggestions=True):
     if suggestions:
         elements = {**library.sets, **library.langues}
         empreintes = {e.set_id: e for e in EmpreinteSet.query}
-        alias = {a.ancien: a.nouveau for a in AliasSet.query.filter(AliasSet.ancien.in_(list(infos)))}
+        alias = {}
+        for a in (AliasSet.query.filter(AliasSet.ancien.in_(list(infos)))
+                  .filter((AliasSet.user_id == user_id) | AliasSet.user_id.is_(None))
+                  .order_by(AliasSet.user_id.is_(None).desc())):
+            alias[a.ancien] = a.nouveau  # celui du compte en dernier : il l'emporte
     for sid, info in infos.items():
         chemin = PurePosixPath(sid)
-        o = {"id": sid, "nom": chemin.name, "dossier": str(chemin.parent), **info, "suggestion": None}
+        o = {"id": sid, "libelle": libelle(sid), "nom": chemin.name, "dossier": libelle(str(chemin.parent)),
+             "commun": not _espace(sid), **info, "suggestion": None}
         if suggestions:
             o["suggestion"] = _suggestion(sid, empreintes.get(sid), alias.get(sid), elements, empreintes)
         out.append(o)

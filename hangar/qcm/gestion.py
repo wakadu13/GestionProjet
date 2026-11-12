@@ -190,8 +190,9 @@ def deplacer():
 
     Les sets d'une langue vont dans QCM/<langue>/<dossier>, les autres dans
     QCM/<dossier>. La progression suit le set (son identifiant change), avec les explications de
-    l'IA ; celle restée sous le nouveau nom (set renommé autrefois hors de Hangar) est fusionnée
-    question par question, plus effacée."""
+    l'IA. Celle restée sous le nouveau nom sans fichier n'est plus effacée : fusionnée question par
+    question si c'est celle de ce set (renommé autrefois hors de Hangar), mise à part sinon (un
+    autre set, supprimé depuis : toujours listée sur la page des statistiques)."""
     _exiger_modification()
     base = quiz.get_library()
     rattachement.verifier(base)  # renommages faits hors de Hangar d'abord
@@ -222,9 +223,16 @@ def deplacer():
     _retirer_dossiers_vides(source.parent, racine)
     invalider()
     nouvel_id = rel.with_suffix("").as_posix()
+    a_part = None
+    if rattachement.a_des_restes(db.session, nouvel_id) and not rattachement.meme_set(db.session, nouvel_id, element):
+        a_part = rattachement.mettre_a_part(db.session, nouvel_id)
     rattachement.rattacher(db.session, element.id, nouvel_id)
     db.session.commit()
     flash(f"« {element.titre} » rangé dans le dossier {dossier} ({rel}).", "success")
+    if a_part:
+        flash(f"Ce dossier gardait la progression d’un autre set « {rel.stem} », supprimé depuis : elle est "
+              f"gardée à part sous « {PurePosixPath(a_part).name} ». Retrouve-la dans les statistiques "
+              "pour la rattacher au bon set ou l’oublier.", "info")
     return redirect(retour.split("#")[0] + "#" + ancre(nouvel_id))
 
 
@@ -281,7 +289,7 @@ def progression_orpheline():
         QuizProgress.query.filter_by(user_id=uid, set_id=ancien).delete(synchronize_session=False)
         QuizDeck.query.filter_by(user_id=uid, set_id=ancien).delete(synchronize_session=False)
         db.session.commit()
-        flash(f"Progression de « {ancien} » oubliée.", "success")
+        flash(f"Progression de « {rattachement.libelle(ancien)} » oubliée.", "success")
         return redirect(retour)
     if action != "rattacher":
         abort(400)
@@ -291,7 +299,8 @@ def progression_orpheline():
     pour_tous = rattachement.rattachement_global(ancien, cible.id, uid, peut_modifier(current_user))
     rattachement.rattacher(db.session, ancien, cible.id, user_id=None if pour_tous else uid)
     db.session.commit()
-    flash(f"Progression de « {ancien} » rattachée à « {cible.titre} ».", "success")
+    flash(f"Progression de « {rattachement.libelle(ancien)} » rattachée à « {cible.titre} »"
+          + ("." if pour_tous else " (la tienne seulement)."), "success")
     return redirect(retour)
 
 

@@ -331,12 +331,15 @@ class EmpreinteSet(db.Model):
 class AliasSet(db.Model):
     """Ancien identifiant d'un set → identifiant actuel (set déplacé, renommé ou rattaché à la main) :
     les réponses envoyées plus tard sous l'ancien identifiant (application hors ligne, page restée
-    ouverte) rejoignent la bonne progression."""
+    ouverte) rejoignent la bonne progression. `user_id` vide : pour tous les comptes ; sinon, pour ce
+    compte seulement (« Rattacher à… » qui ne vaut que pour lui), et prioritaire pour lui."""
     __tablename__ = "qcm_alias"
+    __table_args__ = (db.UniqueConstraint("ancien", "user_id", name="uq_qcm_alias"),)
 
     id = db.Column(db.Integer, primary_key=True)
-    ancien = db.Column(db.String(500), nullable=False, unique=True)
+    ancien = db.Column(db.String(500), nullable=False, index=True)
     nouveau = db.Column(db.String(500), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), index=True)
     cree_le = db.Column(db.DateTime, default=quiz.maintenant)
 
     def __repr__(self):

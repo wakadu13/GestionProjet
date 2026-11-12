@@ -231,10 +231,12 @@ def objectifs_par_categorie(examens):
         groupes.setdefault(cle, []).append(x)
     out = []
     for (langue, cat, date_), xs in groupes.items():
-        statuts = [x["e"].get("statut") for x in xs]
+        en_retard = [x for x in xs if x["e"].get("statut") in ("retard", "impossible")]
         out.append({"categorie": cat, "langue": langue, "date": date_, "jours": xs[0]["jours"], "sets": xs,
                     "pret": all(x["e"].get("su") for x in xs),
-                    "retard": any(s in ("retard", "impossible") for s in statuts),
+                    "retard": bool(en_retard),
+                    # « Ajuster auto. » coché sur tous les sets en retard : quotas déjà augmentés.
+                    "auto": bool(en_retard) and all(x["e"].get("auto") for x in en_retard),
                     "a_commencer": any(x["e"].get("commencer_maintenant") for x in xs)})
     out.sort(key=lambda o: (o["date"], o["categorie"].lower()))
     return out
@@ -249,7 +251,8 @@ def resume_du_jour(user, jour=None) -> dict:
     `a_reviser` (taille de la révision intelligente), `serie`, `record`, `aujourdhui` (réponses du
     jour), `objectif` (réponses par jour) ; `par_matiere` [{matiere, cartes}], `par_set`
     [{titre, categorie, cartes, nouvelles, url}], `objectifs` [{titre, categorie, date, jours,
-    statut, url}] (examens à moins de 14 jours) ; `url` (/qcm/aujourdhui/), `url_reviser`.
+    statut, auto, url}] (examens à moins de 14 jours ; `auto` : « Ajuster auto. » coché) ;
+    `url` (/qcm/aujourdhui/), `url_reviser`.
 
     `jour` : le jour résumé (aujourd'hui par défaut) ; pour un autre jour, l'état est calculé
     à la fin de ce jour-là (cartes qui arriveront à échéance dans la journée comprises)."""
@@ -279,6 +282,7 @@ def resume_du_jour(user, jour=None) -> dict:
         exams.append({"titre": x["set"].titre, "categorie": x["set"].categorie, "date": x["date"],
                       "jours": (x["date"] - jour).days, "statut": "pret" if x["e"].get("su") else x["e"].get("statut"),
                       "commencer_maintenant": bool(x["e"].get("commencer_maintenant")),
+                      "auto": bool(x["e"].get("auto")),
                       "url": _url("qcm.planning_page") + "#" + ancre(x["set"].id)})
     nouvelles = e["nouvelles_prevues"]
     return {
@@ -354,7 +358,8 @@ def _digest_revisions(ctx):
         items = []
         for o in r["objectifs"][:6]:
             quand = "aujourd’hui" if o["jours"] == 0 else ("demain" if o["jours"] == 1 else f"dans {o['jours']} jours")
-            etat_txt = {"pret": "prêt ✓", "retard": "en retard", "impossible": "en retard",
+            en_retard = "en retard" + (" (quotas ajustés automatiquement)" if o.get("auto") else "")
+            etat_txt = {"pret": "prêt ✓", "retard": en_retard, "impossible": en_retard,
                         "ok": "à commencer" if o["commencer_maintenant"] else "dans les temps"}.get(o["statut"], "")
             items.append(f"Examen <b>{escape(o['titre'])}</b> ({escape(o['categorie'])}) {quand}"
                          + (f" — {etat_txt}" if etat_txt else ""))

@@ -328,7 +328,7 @@ def record():
         return jsonify(error="requête invalide"), 400
     uid = current_user.id
     library = bibliotheque(uid)
-    qset = library.get(rattachement.resoudre(library, set_id))  # set renommé depuis l'affichage de la page
+    qset = library.get(rattachement.resoudre(library, set_id, uid))  # set renommé depuis l'affichage de la page
     if qset is None or not any(q.id == question_id for q in qset.questions):
         return jsonify(error="question inconnue"), 404
     set_id = qset.id
@@ -365,7 +365,7 @@ def stats():
     # Progressions restées sans fichier (set renommé ou supprimé hors de Hangar) : « Rattacher à… ».
     can_edit = peut_modifier(current_user)
     orphelins = rattachement.orphelins(uid, library)
-    choix = [(el.id, f"{el.id} · {el.titre}")
+    choix = [(el.id, f"{rattachement.libelle(el.id)} · {el.titre}")
              for el in sorted((*library.sets.values(), *library.langues.values()), key=lambda el: el.id.lower())
              ] if orphelins else []
     return render_template(

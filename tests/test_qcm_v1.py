@@ -333,13 +333,17 @@ class RenommageHorsHangarTests(AppTestCase):
         self.assertEqual(self._lignes("QCM/B/elec"), ["ohm"])                           # la sienne
         self.assertEqual(self._lignes("QCM/Physique/elec", self.user.id), ["pairs"])   # pas celle des autres
         from hangar.qcm.models import AliasSet
-        self.assertEqual(AliasSet.query.filter_by(ancien="QCM/Physique/elec").count(), 0)
+        # Ancien nom gardé pour lui seul (ses réponses hors ligne), pas pour tous les comptes.
+        self.assertEqual(AliasSet.query.filter_by(ancien="QCM/Physique/elec", user_id=None).count(), 0)
+        self.assertEqual(AliasSet.query.filter_by(ancien="QCM/Physique/elec", user_id=self.invite.id).one().nouveau,
+                         "QCM/B/elec")
         # Un admin, lui, rattache pour tout le monde (avec l'ancien nom, pour les réponses hors ligne).
         c = self.client()
         c.post("/qcm/progression-orpheline/", data={"_csrf": self.token, "action": "rattacher",
                                                    "ancien": "QCM/Physique/elec", "nouveau": "QCM/A/elec"})
         self.assertEqual(self._lignes("QCM/A/elec"), ["pairs"])
-        self.assertEqual(AliasSet.query.filter_by(ancien="QCM/Physique/elec").one().nouveau, "QCM/A/elec")
+        self.assertEqual(AliasSet.query.filter_by(ancien="QCM/Physique/elec", user_id=None).one().nouveau,
+                         "QCM/A/elec")
 
 
 class AppariementTests(unittest.TestCase):
@@ -490,6 +494,173 @@ class SynchroHorsLigneTests(AppTestCase):
         res = self._synchro(c, [{"uid": "w", "set_id": "QCM/Physique/elec", "question_id": "ohm", "correct": True,
                                  "date": recente}])
         self.assertEqual(res["enregistrees"], 1)  # un long stage sans réseau reste accepté
+
+
+# ---------------------------------------------------------------------------
+# Relecture des pistes 3 et 8
+# ---------------------------------------------------------------------------
+class RelectureQuotaAutoTests(AppTestCase):
+    """Piste 3 : « Ajuster auto. » vaut aussi hors ligne, et se voit partout où « en retard » s'affiche."""
+
+    def _gros_set(self, auto=True):
+        self._ecrire("QCM/Examen/gros.json", {"titre": "Gros", "questions": [
+            {"type": "FLASHCARD", "question": f"Question {i}", "verso": "R"} for i in range(150)]})
+        db.session.add(QuizDeck(user_id=self.user.id, set_id="QCM/Examen/gros", nouvelles_jour=10, revisions_jour=40,
+                                auto_quota=auto, date_objectif=quiz.jour(quiz.maintenant()) + timedelta(days=7)))
+        db.session.commit()
+
+    def test_appli_hors_ligne_recoit_les_quotas_ajustes(self):
+        self._gros_set()
+        c = self.client()
+        data = c.get("/qcm/hors-ligne/sets/?id=QCM/Examen/gros").get_json()
+        # Avant : les quotas saisis à la main ({10, 40}) ; le téléphone ne proposait que 10 nouvelles par jour.
+        self.assertEqual(data["sets"][0]["quotas"], {"nouvelles_jour": 25, "revisions_jour": None})
+        # Case décochée : les quotas saisis.
+        QuizDeck.query.filter_by(set_id="QCM/Examen/gros").one().auto_quota = False
+        db.session.commit()
+        data = c.get("/qcm/hors-ligne/sets/?id=QCM/Examen/gros").get_json()
+        self.assertEqual(data["sets"][0]["quotas"], {"nouvelles_jour": 10, "revisions_jour": 40})
+        # Set sans réglages : pas de quota.
+        data = c.get("/qcm/hors-ligne/sets/?id=QCM/Physique/meca").get_json()
+        self.assertEqual(data["sets"][0]["quotas"], {"nouvelles_jour": None, "revisions_jour": None})
+
+    def test_accueil_et_resume_par_e_mail_disent_que_l_ajustement_est_actif(self):
+        from hangar import digest
+        self._gros_set()
+        c = self.client()
+        page = c.get("/qcm/").get_data(as_text=True)
+        examen = page[page.index('class="qcm-exams"'):]
+        examen = examen[:examen.index("</div>")]
+        self.assertIn("en retard", examen)
+        self.assertIn("ajustement auto.", examen)  # avant : « en retard » seul
+        section = services._digest_revisions(digest.Contexte(user=self.user, jour=date.today(), at=datetime.now()))
+        self.assertIn("en retard (quotas ajustés automatiquement)", section.html)
+        # Case décochée : « en retard » seul.
+        QuizDeck.query.filter_by(set_id="QCM/Examen/gros").one().auto_quota = False
+        db.session.commit()
+        page = c.get("/qcm/").get_data(as_text=True)
+        self.assertNotIn("ajustement auto.", page[page.index('class="qcm-exams"'):])
+        section = services._digest_revisions(digest.Contexte(user=self.user, jour=date.today(), at=datetime.now()))
+        self.assertIn("en retard", section.html)
+        self.assertNotIn("quotas ajustés automatiquement", section.html)
+
+
+class RelectureRattachementTests(AppTestCase):
+    """Piste 8 : rattachement propre à un compte, « Déplacer » sur la progression d'un autre set, textes."""
+
+    def _copies_ambigues(self):
+        (self.vault / "QCM/Physique/elec.json").unlink()
+        self._ecrire("QCM/A/elec.json", SET_ELEC)
+        self._ecrire("QCM/B/elec.json", SET_ELEC)
+
+    def test_invite_reponses_hors_ligne_suivent_son_rattachement(self):
+        self._progresser("QCM/Physique/elec", ["ohm"], user_id=self.invite.id)
+        self._progresser("QCM/Physique/elec", ["pairs"])
+        self.lib()
+        self._copies_ambigues()  # rattachement ambigu : laissé à chacun
+        c = self.client("invite")
+        res = self._synchro(c, [self._reponse("u1", "QCM/Physique/elec", "trou")])
+        self.assertEqual((res["traitees"], res["en_attente"]), ([], ["u1"]))
+        r = c.post("/qcm/progression-orpheline/", data={"_csrf": self.token, "action": "rattacher",
+                                                       "ancien": "QCM/Physique/elec", "nouveau": "QCM/B/elec"})
+        self.assertEqual(r.status_code, 302)
+        # Avant : {"traitees": ["u1"], "enregistrees": 0}, la réponse était effacée du téléphone sans être gardée.
+        res = self._synchro(c, [self._reponse("u1", "QCM/Physique/elec", "trou")])
+        self.assertEqual((res["traitees"], res["enregistrees"]), (["u1"], 1))
+        self.assertEqual(self._lignes("QCM/B/elec", self.invite.id), ["ohm", "trou"])
+        # Le téléphone reprend le set sous le nom choisi.
+        data = c.get("/qcm/hors-ligne/sets/?id=QCM/Physique/elec").get_json()
+        self.assertEqual(data["renommes"], {"QCM/Physique/elec": "QCM/B/elec"})
+        # Les autres comptes ne sont pas concernés : leurs réponses attendent leur propre choix.
+        c = self.client()
+        res = self._synchro(c, [self._reponse("u2", "QCM/Physique/elec", "carte")])
+        self.assertEqual((res["traitees"], res["en_attente"]), ([], ["u2"]))
+        self.assertEqual(self._lignes("QCM/B/elec", self.user.id), [])
+        self.assertEqual(self._lignes("QCM/Physique/elec", self.user.id), ["pairs"])
+
+    def test_membre_rattache_un_set_commun_a_son_set_perso(self):
+        self._progresser("QCM/Physique/elec", ["ohm"], user_id=self.autre.id)
+        self._progresser("QCM/Physique/elec", ["pairs"])
+        self.lib()
+        (self.vault / "QCM/Physique/elec.json").unlink()
+        perso = quiz.dossier_perso(self.autre.id) / "Mes sets" / "elec2.json"
+        perso.parent.mkdir(parents=True, exist_ok=True)
+        perso.write_text(json.dumps(SET_ELEC | {"titre": "Elec perso"}, ensure_ascii=False), encoding="utf-8")
+        perso_id = f"~{self.autre.id}/Mes sets/elec2"
+        c = self.client("camarade")
+        page = c.get("/qcm/stats/").get_data(as_text=True)
+        # Libellés lisibles : « Mon espace/… » plutôt que l'identifiant technique « ~<compte>/… ».
+        self.assertRegex(page, re.escape(f'<option value="{perso_id}"') + r"( selected)?"
+                         + re.escape(">Mon espace/Mes sets/elec2 · Elec perso</option>"))
+        self.assertNotRegex(page, r'<option value="[^"]*">~')
+        # La bulle ne promet plus « pour tous les comptes » sans nuance.
+        self.assertIn("pour tous les comptes si c’est un set commun, seulement les tiens si c’est un set de ton espace",
+                      page)
+        c.post("/qcm/progression-orpheline/", data={"_csrf": self.token, "action": "rattacher",
+                                                   "ancien": "QCM/Physique/elec", "nouveau": perso_id})
+        self.assertEqual(self._lignes(perso_id), ["ohm"])
+        self.assertEqual(self._lignes("QCM/Physique/elec"), ["pairs"])  # celle des autres reste
+        res = self._synchro(c, [self._reponse("u1", "QCM/Physique/elec", "trou")])
+        self.assertEqual(res["enregistrees"], 1)
+        self.assertEqual(self._lignes(perso_id), ["ohm", "trou"])
+        # Un invité : sa progression seulement, dit sans détour.
+        self._progresser("QCM/Physique/elec", ["ohm"], user_id=self.invite.id)
+        page = self.client("invite").get("/qcm/stats/").get_data(as_text=True)
+        self.assertIn('title="Ta progression, tes quotas et ta date d’examen passent sur ce set"', page)
+
+    def test_deplacer_ne_verse_pas_la_progression_d_un_autre_set(self):
+        maths = {"titre": "Maths chap 1", "questions": [
+            {"type": "FLASHCARD", "question": f"Dérivée {i}", "verso": "x"} for i in range(5)]}
+        physique = {"titre": "Physique chap 1", "questions": [
+            {"type": "FLASHCARD", "question": f"Force {i}", "verso": "y"} for i in range(5)]}
+        self._ecrire("QCM/Maths/chap1.json", maths)
+        self._ecrire("QCM/Physique/chap1.json", physique)
+        self.lib()  # empreintes connues
+        for qid in ("q1", "q2", "q3"):  # identifiants par défaut, les mêmes dans les deux sets
+            p = QuizProgress(user_id=self.user.id, set_id="QCM/Maths/chap1", question_id=qid)
+            p.record(False, quand=datetime.now().replace(microsecond=0) - timedelta(days=3))
+            db.session.add(p)
+        db.session.add(Explication(set_id="QCM/Maths/chap1", question_id="q1", texte="Dérivée de x²."))
+        db.session.commit()
+        (self.vault / "QCM/Maths/chap1.json").unlink()  # supprimé dans Obsidian
+        c = self.client()
+        r = c.post("/qcm/deplacer/", data={"_csrf": self.token, "set": "QCM/Physique/chap1", "dossier": "Maths"},
+                   follow_redirects=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("gardée à part sous « chap1 (ancien) »", r.get_data(as_text=True))
+        # Avant : q1, q2, q3 « vues et ratées » dans le set de physique, jamais révisé.
+        self.assertEqual(self._lignes("QCM/Maths/chap1"), [])
+        self.assertEqual(Explication.query.filter_by(set_id="QCM/Maths/chap1").count(), 0)
+        # Rien n'est perdu : la progression des maths reste à rattacher ou à oublier.
+        self.assertEqual(self._lignes("QCM/Maths/chap1 (ancien)"), ["q1", "q2", "q3"])
+        self.assertEqual(Explication.query.filter_by(set_id="QCM/Maths/chap1 (ancien)").count(), 1)
+        page = c.get("/qcm/stats/").get_data(as_text=True)
+        self.assertIn("Progression sans fichier", page)
+        self.assertIn("chap1 (ancien)", page)
+        # Le fichier de maths revient ailleurs : sa progression le retrouve toute seule (empreinte gardée).
+        self._ecrire("QCM/Archives/chap1.json", maths)
+        self.lib()
+        self.assertEqual(self._lignes("QCM/Archives/chap1"), ["q1", "q2", "q3"])
+
+    def test_deplacer_fusionne_si_l_empreinte_ressemble(self):
+        self._progresser("QCM/Electro/elec", ["trou"])
+        self._ecrire("QCM/Electro/elec.json", SET_ELEC)
+        self.lib()  # empreinte de QCM/Electro/elec connue
+        (self.vault / "QCM/Electro/elec.json").unlink()
+        self._progresser("QCM/Physique/elec", ["ohm"])
+        c = self.client()
+        r = c.post("/qcm/deplacer/", data={"_csrf": self.token, "set": "QCM/Physique/elec", "dossier": "Electro"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self._lignes("QCM/Electro/elec"), ["ohm", "trou"])
+        self.assertEqual(QuizProgress.query.filter(QuizProgress.set_id.like("%(ancien%")).count(), 0)
+
+    def test_message_hors_ligne_accorde_au_singulier(self):
+        js = (Path(__file__).resolve().parent.parent / "hangar/static/qcm/qcm_hors_ligne.js").read_text(encoding="utf-8")
+        debut = js.index("if (envoi.restantes)")
+        bloc = js[debut:js.index("}", debut)]
+        # Avant : « 1 réponse gardée sur l'appareil : leur set est introuvable… Elles partiront… ».
+        for attendu in ('"leur" : "son"', '"Elles partiront" : "Elle partira"'):
+            self.assertIn(attendu, bloc)
 
 
 class CompatibiliteTests(AppTestCase):

@@ -520,9 +520,10 @@
       // Réponses non acquittées par le serveur : leur set est momentanément introuvable (fichier renommé,
       // déplacé ou en cours de modification) ; elles restent dans la file et repartiront plus tard.
       if (envoi.restantes) {
-        avis.push(pluriel(envoi.restantes, "réponse") + " gardée" + (envoi.restantes > 1 ? "s" : "") + " sur l'appareil : "
-          + "leur set est introuvable sur le serveur pour l'instant (fichier renommé, déplacé ou en cours de modification). "
-          + "Elles partiront dès qu'il sera retrouvé ou rattaché (page des statistiques).");
+        const plus = envoi.restantes > 1;
+        avis.push(pluriel(envoi.restantes, "réponse") + " gardée" + (plus ? "s" : "") + " sur l'appareil : "
+          + (plus ? "leur" : "son") + " set est introuvable sur le serveur pour l'instant (fichier renommé, déplacé ou en cours de modification). "
+          + (plus ? "Elles partiront" : "Elle partira") + " dès qu'il sera retrouvé ou rattaché (page des statistiques).");
       }
       if (envoi.autres) avis.push(pluriel(envoi.autres, "réponse") + " d'un autre compte en attente : elles seront envoyées quand ce compte se reconnectera.");
       alerte(avis.join(" "));

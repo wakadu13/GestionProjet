@@ -147,7 +147,7 @@ def langue_play(langue):
 def _exercice(data, user_id=None):
     """(set, exercice) désignés par la requête, ou une réponse d'erreur."""
     library = services.bibliotheque(user_id)
-    set_langue = library.langues.get(rattachement.resoudre(library, str(data.get("set_id", ""))))
+    set_langue = library.langues.get(rattachement.resoudre(library, str(data.get("set_id", "")), user_id))
     exo = set_langue.exercice(str(data.get("exo_id", ""))) if set_langue else None
     if exo is None:
         return None, None, (jsonify(error="exercice inconnu"), 404)

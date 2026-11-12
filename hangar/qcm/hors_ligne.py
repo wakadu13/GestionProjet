@@ -132,7 +132,7 @@ def hl_sets():
     demandes = request.args.getlist("id")[:MAX_SETS]
     envoyes = set()
     for set_id in demandes:
-        actuel = rattachement.resoudre(library, set_id)
+        actuel = rattachement.resoudre(library, set_id, uid)
         if actuel != set_id and (actuel in library.sets or actuel in library.langues):
             manquants.append(set_id)
             renommes[set_id] = actuel
@@ -149,6 +149,8 @@ def hl_sets():
             continue
         progress = QuizProgress.map_for(uid, qset.id)
         deck = decks.get(qset.id)
+        # Quotas du jour comme en ligne : « Ajuster auto. » (examen proche) compris.
+        quota_n, quota_r = planning.quotas_effectifs(qset, progress, deck, quiz.maintenant())
         sets.append({
             "id": qset.id,
             "titre": qset.titre,
@@ -163,8 +165,7 @@ def hl_sets():
                       "decouverte": _date_iso(p.decouverte), "oublis": p.oublis, "last_correct": p.last_correct}
                 for qid, p in progress.items()
             },
-            "quotas": {"nouvelles_jour": deck.nouvelles_jour if deck else None,
-                       "revisions_jour": deck.revisions_jour if deck else None},
+            "quotas": {"nouvelles_jour": quota_n, "revisions_jour": quota_r},
         })
     extra = {k: v for k, v in (("renommes", renommes), ("indisponibles", indisponibles)) if v}
     return _sans_cache(jsonify(joueur=current_user.username, sets=sets, manquants=manquants, **extra))
@@ -226,7 +227,7 @@ def hl_synchro():
             traitees.append(cle)
             continue
         if envoye not in actuels:
-            actuels[envoye] = rattachement.resoudre(library, envoye)
+            actuels[envoye] = rattachement.resoudre(library, envoye, uid)
         set_id = actuels[envoye]
         if set_id not in attendus:
             attendus[set_id] = rattachement.attendu(library, uid, set_id)
