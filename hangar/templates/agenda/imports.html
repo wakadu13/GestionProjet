@@ -81,7 +81,7 @@
       <button class="btn btn-sm" type="button" data-copy="{{ feed.url }}">{{ icon('copy', 13) }} Copier</button>
     </div>
     {% if feed.warning %}<div class="ag-warn" style="margin-top:8px">{{ icon('alert', 15) }}<span>{{ feed.warning }}</span></div>{% endif %}
-    {% if feed.local %}<p class="help">Le téléphone doit être sur le même Wi-Fi que cet ordinateur, allumé avec Hangar lancé. Sur iPhone : Réglages › Calendrier › Comptes › Ajouter un calendrier avec abonnement. Sur Android : l’appli gratuite ICSx⁵ (Google Agenda ne lit pas une adresse du réseau local).</p>{% endif %}
+    {% if feed.local %}<p class="help">Le téléphone doit être sur le même Wi-Fi que cet ordinateur, allumé avec Hangar lancé. Sur iPhone : Réglages › Calendrier › Comptes › Ajouter un calendrier avec abonnement. Sur Android : l’appli gratuite ICSx⁵ (Google Agenda ne lit pas une adresse du réseau local).{% if feed.https %} L’adresse est en https : installe d’abord sur le téléphone le certificat de Hangar (<a href="{{ url_for('settings.profile') }}#telephone">Réglages › Profil › Sur ton téléphone</a>), sinon l’agenda refusera de la lire.{% endif %}</p>{% endif %}
     <div class="flex gap mt">
       <form method="post" action="{{ url_for('agenda.feed_regenerate') }}" data-confirm="Créer une nouvelle adresse ? L’ancienne ne marchera plus.">{{ ui.csrf() }}<button class="btn btn-sm">{{ icon('refresh', 13) }} Nouvelle adresse</button></form>
       <form method="post" action="{{ url_for('agenda.feed_disable') }}" data-confirm="Couper l’abonnement ? L’adresse ne marchera plus.">{{ ui.csrf() }}<button class="btn btn-sm btn-ghost">Couper l’abonnement</button></form>

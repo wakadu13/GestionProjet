@@ -7,7 +7,8 @@ du code) sont regroupées et comptées. Une erreur réglée qui revient est rouv
 Valeurs sensibles : le moteur de base est créé avec ``hide_parameters`` (``hangar/__init__.py``), donc les
 valeurs des requêtes SQL ne sont plus dans les messages ; ``masquer`` retire en plus, à l'enregistrement ET à
 l'affichage (erreurs gardées par une version plus ancienne), les paramètres SQL, les mots de passe, jetons et
-clés écrits « nom=valeur » (adresse, formulaire) et les en-têtes d'authentification.
+clés écrits « nom=valeur » (adresse, formulaire), les en-têtes d'authentification et le jeton des adresses
+d'abonnement à l'agenda (``/agenda/flux/<jeton>.ics``).
 
 Rien ici ne doit lui-même lever d'exception : une base indisponible ne doit pas cacher l'erreur d'origine.
 L'enregistrement passe par une session à part (sa propre connexion) : il n'emporte jamais les écritures
@@ -40,6 +41,9 @@ _MOTIFS = (
     (re.compile(r"(?im)^(\s*(?:authorization|proxy-authorization|cookie|set-cookie|x-csrf-token|x-api-key)\s*:\s*)"
                 r"[^\n]*"), r"\1" + MASQUE),
     (re.compile(r"(?i)\b(Bearer|Basic)\s+[\w.~+/=-]+"), r"\1 " + MASQUE),
+    # Jeton d'abonnement à l'agenda, écrit dans le chemin (/agenda/flux/<jeton>.ics) et non en « nom=valeur » :
+    # il donne la lecture de tout l'agenda du compte. Les routes /agenda/flux/regenerer et /couper restent lisibles.
+    (re.compile(r"(/agenda/flux/)(?!(?:regenerer|couper)\b)[\w-]+"), r"\1" + MASQUE),
     # « 'password': 'valeur' » (dictionnaire, JSON)
     (re.compile(r"""(?i)(['"]""" + _SENSIBLE + r"""['"]\s*:\s*)('[^']*'|"[^"]*")"""), r"\1'" + MASQUE + "'"),
 )

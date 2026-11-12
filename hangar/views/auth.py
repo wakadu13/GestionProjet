@@ -28,8 +28,15 @@ def _validate_user_fields(form, require_password=True):
 
 def _depuis_cet_ordinateur() -> bool:
     """Requête faite sur l'ordinateur où tourne Hangar, sans passer par un proxy ni un tunnel (Caddy de
-    --lan-https, Cloudflare…) : ceux-ci tournent aussi sur cet ordinateur, mais pour le compte d'un visiteur."""
+    --lan-https, Cloudflare…) : ceux-ci tournent aussi sur cet ordinateur, mais pour le compte d'un visiteur.
+
+    Décidé d'abord sur la configuration, pas seulement sur les en-têtes : avec --behind-proxy ou --cloudflare,
+    un proxy mal réglé (nginx sans X-Forwarded-For) fait arriver chaque visiteur d'Internet en 127.0.0.1 sans
+    en-tête ; on refuse donc toujours (même règle que ``_montrer_comptes``). Seule exception : le Caddy de
+    --lan-https, qui écrit toujours X-Forwarded-For ; une requête sans en-tête vient alors bien de ce PC."""
     from ..en_ligne import ENTETES_PROXY
+    if current_app.config.get("HANGAR_PROXY") and not current_app.config.get("HANGAR_PROXY_LAN"):
+        return False
     return blocage._bouclage(blocage.ip_client()) and not any(h in request.headers for h in ENTETES_PROXY)
 
 
@@ -53,6 +60,12 @@ def setup():
     if not _depuis_cet_ordinateur():
         # Sinon, le premier venu sur le réseau (ou sur Internet) deviendrait administrateur d'un Hangar neuf.
         g.sans_bouton_connexion = True  # /login renverrait ici, vers le même refus
+        if current_app.config.get("HANGAR_PROXY") and not current_app.config.get("HANGAR_PROXY_LAN"):
+            abort(403, description="Hangar n’est pas encore installé, et il est lancé derrière un proxy ou un "
+                                   "tunnel (--behind-proxy, --cloudflare) : la page d’installation est fermée, même "
+                                   "sur cet ordinateur. Crée le premier compte avec « uv run hangar create-admin », "
+                                   "ou relance Hangar une fois sans ces options pour l’installer sur "
+                                   f"http://127.0.0.1:{_port_local()}.")
         abort(403, description="Hangar n’est pas encore installé. La première installation se fait sur "
                                f"l’ordinateur où il tourne : ouvre http://127.0.0.1:{_port_local()} sur cet "
                                "ordinateur (ou crée le compte avec « uv run hangar create-admin »).")

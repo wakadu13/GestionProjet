@@ -217,7 +217,8 @@ class LancementLanHttps(unittest.TestCase):
         self.assertIn("▀", sortie)  # QR code dans la console
         self.assertIn("certificat", sortie)
         self.assertTrue(faux.arrete)  # Caddy arrêté avec Hangar
-        self.assertEqual(self.apps[0].config["PARTAGE"], {"host": "127.0.0.1", "port": 5000, "https_port": 5443})
+        self.assertEqual(self.apps[0].config["PARTAGE"], {"host": "127.0.0.1", "port": 5000, "https_port": 5443,
+                                                            "lan_https": True})
 
     def test_sans_caddy_reste_local_et_explique(self):
         sortie, serve, _ = self.lancer(caddy=None)
@@ -225,6 +226,7 @@ class LancementLanHttps(unittest.TestCase):
         self.assertIn("Caddy n’est pas installé", sortie)
         self.assertIn("partager-en-https.bat", sortie)
         self.assertIsNone(self.apps[0].config["PARTAGE"]["https_port"])
+        self.assertTrue(self.apps[0].config["PARTAGE"]["lan_https"])  # l'intention reste connue de la page d'abonnement
 
     def test_caddy_qui_s_arrete_au_demarrage(self):
         # Un « Caddy » qui s'arrête aussitôt (ici Python, qui ne trouve pas le fichier « run ») : message clair

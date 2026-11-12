@@ -42,7 +42,7 @@
       <div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>
     </form>
 
-    <h2 id="password">Mot de passe</h2><p class="help">8 caractères minimum. Le changer déconnecte tes autres navigateurs (et leurs cookies « Rester connecté »), ainsi que l’application Android.</p>
+    <h2 id="password">Mot de passe</h2><p class="help">8 caractères minimum. Le changer déconnecte tes autres navigateurs (et leurs cookies « Rester connecté »), ainsi que l’application Android. Il ne change pas l’adresse d’abonnement à ton agenda : l’agenda du téléphone continue de se mettre à jour. Appareil perdu ou volé ? Clique aussi « Déconnecter mes autres appareils » ci-dessous.</p>
     <form method="post" action="{{ url_for('settings.password') }}" class="panel panel-b">
       {{ ui.csrf() }}
       <div class="field"><label>Mot de passe actuel</label><input class="input" type="password" name="current" required autocomplete="current-password"></div>
@@ -54,8 +54,8 @@
     </form>
 
     <h2 id="sessions" class="mt-lg">Navigateurs connectés</h2>
-    <p class="help">Tu as oublié de te déconnecter sur un autre ordinateur ? Ferme toutes tes sessions sauf celle-ci. Les jetons d’API (Réglages › Jetons d’API) se révoquent à part.</p>
-    <form method="post" action="{{ url_for('settings.fermer_sessions') }}" class="panel panel-b" data-confirm="Déconnecter tous tes autres navigateurs ?">
+    <p class="help">Tu as oublié de te déconnecter sur un autre ordinateur ? Ferme toutes tes sessions sauf celle-ci. Les jetons d’API (Réglages › Jetons d’API) se révoquent à part. Si tu as une adresse d’abonnement à ton agenda, ce bouton la change aussi : l’ancienne ne marche plus, recopie la nouvelle dans ton téléphone (<a href="{{ url_for('agenda.imports') }}#abonnement">Emploi du temps › S’abonner</a>).</p>
+    <form method="post" action="{{ url_for('settings.fermer_sessions') }}" class="panel panel-b" data-confirm="Déconnecter tous tes autres navigateurs ? Si tu as une adresse d’abonnement à ton agenda, elle changera aussi : recopie la nouvelle dans ton téléphone.">
       {{ ui.csrf() }}
       <label class="checkbox mb"><input type="checkbox" name="appareils" value="1"> Déconnecter aussi l’application Android</label>
       <div class="form-actions"><button class="btn">{{ icon('x', 14) }} Déconnecter mes autres appareils</button></div>

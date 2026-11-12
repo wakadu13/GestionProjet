@@ -105,8 +105,14 @@ def password():
         u.set_password(request.form["new"])
         u.must_change_password = False
         db.session.commit()
+        # L'adresse d'abonnement à l'agenda est gardée : un changement de routine (mot de passe imposé au premier
+        # lancement…) ne doit pas casser sans bruit l'agenda du téléphone. En cas de vol, « Déconnecter mes
+        # autres appareils » la change (fermer_sessions), et la page Profil le dit.
+        abonnement = _a_un_abonnement(u)  # avant _garder_cette_session, qui remplace l'utilisateur courant
         _garder_cette_session(u)  # les autres navigateurs et cookies « Rester connecté » sont déconnectés
-        flash("Mot de passe modifié. Tes autres navigateurs sont déconnectés.", "success")
+        flash("Mot de passe modifié. Tes autres navigateurs sont déconnectés."
+              + (" L’adresse d’abonnement à ton agenda, elle, marche toujours : si un appareil a été perdu ou volé, "
+                 "clique aussi « Déconnecter mes autres appareils » (Mon profil)." if abonnement else ""), "success")
         return redirect(url_for("agenda.dashboard"))
     return redirect(url_for("settings.profile", must_change=1 if u.must_change_password else None))
 
@@ -126,6 +132,13 @@ def _garder_cette_session(u) -> None:
         session[SESSION_JETON] = jeton
 
 
+def _a_un_abonnement(u) -> bool:
+    """Le compte a-t-il une adresse d'abonnement à l'agenda active ? (sans créer ses réglages d'agenda)"""
+    from ..models import AgendaSettings
+    s = db.session.get(AgendaSettings, u.id)
+    return bool(s and s.feed_token)
+
+
 @bp.route("/sessions/fermer", methods=["POST"])
 @login_required
 def fermer_sessions():
@@ -137,10 +150,17 @@ def fermer_sessions():
     if request.form.get("appareils"):
         from ..appareils import JetonAppareil
         n = JetonAppareil.query.filter_by(user_id=u.id).delete(synchronize_session=False)
+    # L'adresse d'abonnement .ics (lecture de tout l'agenda) est un accès de plus d'un appareil : on la change
+    # (jamais on n'en crée une), sinon un téléphone perdu ou volé continuerait de recevoir l'agenda.
+    abonnement = _a_un_abonnement(u)
     db.session.commit()
+    if abonnement:
+        from ..agenda import regenerate_feed_token
+        regenerate_feed_token(u)
     _garder_cette_session(u)
     flash("Tes autres navigateurs sont déconnectés" + (f", ainsi que {n} application(s) Android" if n else "")
-          + ".", "success")
+          + "." + (" L’adresse d’abonnement à ton agenda a changé : recopie la nouvelle dans ton téléphone "
+                   "(Emploi du temps › S’abonner depuis mon téléphone)." if abonnement else ""), "success")
     return redirect(url_for("settings.profile") + "#sessions")
 
 
