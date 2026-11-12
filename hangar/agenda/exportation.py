@@ -49,7 +49,9 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
               if include_events else [])
     tasks = (AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.due_date.isnot(None),
                                      AgendaTask.done_at.is_(None)).all() if include_tasks else [])
-    # Années couvertes par le VTIMEZONE : celles des heures écrites (la dernière règle continue au-delà)
+    # Années couvertes par le VTIMEZONE : celles des heures écrites. ics.vtimezone ramène la fenêtre entre 1900
+    # et 9998 (dates saisies sans borne) et reconnaît chaque règle sur 28 ans de plus : la dernière règle
+    # continue ensuite, juste aussi pour « vendredi avant le dernier dimanche » (tâches répétées sans fin)
     annees = [at.year] + [ev.start.year for ev in events] + [t.due_date.year for t in tasks if t.start_time]
     vtz = ics.vtimezone(tz, min(annees), max(annees) + 2)
     lines += vtz

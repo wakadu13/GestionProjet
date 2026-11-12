@@ -41,13 +41,24 @@ def _lecteur_vtimezone(bloc: list[str]):
             debuts.append((d0, cur["TZOFFSETTO"]))
             if "RRULE" in cur:
                 r = dict(x.split("=") for x in cur["RRULE"].split(";"))
-                mois, rang, jour = int(r["BYMONTH"]), int(r["BYDAY"][:-2]), jours.index(r["BYDAY"][-2:])
+                mois, jour = int(r.get("BYMONTH", 1)), jours.index(r["BYDAY"][-2:])
+                rang = int(r["BYDAY"][:-2] or 0)  # 0 : jour choisi parmi BYMONTHDAY ou BYYEARDAY
+                jours_mois = [int(x) for x in r["BYMONTHDAY"].split(",")] if "BYMONTHDAY" in r else []
+                jours_an = [int(x) for x in r["BYYEARDAY"].split(",")] if "BYYEARDAY" in r else []
                 de = cur["TZOFFSETFROM"]
                 ecart = timedelta(hours=int(de[1:3]), minutes=int(de[3:5])) * (-1 if de[0] == "-" else 1)
                 jusqu = datetime.strptime(r["UNTIL"], "%Y%m%dT%H%M%SZ") if "UNTIL" in r else None
                 for an in range(d0.year + 1, 2041):
                     premier = datetime(an, mois, 1, d0.hour, d0.minute, d0.second)
-                    if rang > 0:
+                    if jours_an:
+                        d = next(x for x in (datetime(an, 1, 1, d0.hour, d0.minute, d0.second)
+                                             + timedelta(days=j - 1) if j > 0
+                                             else datetime(an, 12, 31, d0.hour, d0.minute, d0.second)
+                                             + timedelta(days=j + 1) for j in jours_an) if x.weekday() == jour)
+                    elif jours_mois:
+                        d = next(premier.replace(day=j) for j in jours_mois
+                                 if premier.replace(day=j).weekday() == jour)
+                    elif rang > 0:
                         d = premier + timedelta(days=(jour - premier.weekday()) % 7 + 7 * (rang - 1))
                     else:
                         dernier = datetime(an + mois // 12, mois % 12 + 1, 1, d0.hour, d0.minute) - timedelta(days=1)
@@ -272,6 +283,53 @@ class ExportIcsAutreFuseauTests(unittest.TestCase):
                 self.assertEqual(decalage(local.replace(tzinfo=None)),
                                  ics._decalage_ics(local.utcoffset()), (nom, local))
                 u += timedelta(hours=7)
+
+    def _conforme(self, nom, debut, fin, de, a, pas=7):
+        """Le décalage lu dans ics.vtimezone(nom, debut, fin) est celui de zoneinfo de l'an `de` à l'an `a`."""
+        from datetime import timedelta, timezone
+        from zoneinfo import ZoneInfo
+        from hangar import ics
+        zone = ZoneInfo(nom)
+        decalage = _lecteur_vtimezone(ics.vtimezone(nom, debut, fin))
+        u = datetime(de, 1, 1, 12)
+        while u < datetime(a + 1, 1, 1):
+            local = u.replace(tzinfo=timezone.utc).astimezone(zone)
+            naif = local.replace(tzinfo=None, fold=0)
+            if naif.replace(tzinfo=zone).utcoffset() == naif.replace(tzinfo=zone, fold=1).utcoffset():  # univoque
+                self.assertEqual(decalage(naif), ics._decalage_ics(local.utcoffset()), (nom, local))
+            u += timedelta(hours=pas)
+
+    def test_regles_hors_dimanche_justes_apres_la_fenetre(self):
+        """Relecture v3 : « vendredi avant le dernier dimanche » (Israël), « samedi avant le dernier dimanche »
+        (Nuuk, Gaza), « dimanche à partir du 2 » (Chili) : une tâche répétée au-delà de la fenêtre garde le bon
+        décalage, au lieu d'une règle figée sur le rang de la dernière année (BYDAY=4FR)."""
+        for nom in ("Asia/Jerusalem", "America/Nuuk", "Asia/Gaza", "America/Santiago", "Africa/Cairo"):
+            self._conforme(nom, 2026, 2028, 2026, 2040)
+
+    def test_annees_extremes_sans_erreur(self):
+        """Relecture v3 : des dates saisies en 9998 ou en l'an 1 ne font plus planter le VTIMEZONE (ValueError,
+        OverflowError) ; les années hors de la fenêtre restent couvertes par les règles."""
+        from hangar import ics
+        self.assertIn("TZID:America/Montreal", ics.vtimezone("America/Montreal", 2026, 9999))
+        self.assertIn("TZID:America/Montreal", ics.vtimezone("America/Montreal", 1, 2028))
+        self.assertIn("TZID:America/Montreal", ics.vtimezone("America/Montreal", 9999, 9999))
+        self._conforme("America/Montreal", 1, 9999, 2020, 2032, pas=11)
+
+    def test_export_avec_une_tache_en_9998(self):
+        """Relecture v3 : l'export (et l'abonnement) ne renvoie plus d'erreur 500 pour une tâche le 31/12/9998."""
+        extra = ("from hangar.models import AgendaTask\n"
+                 "            from datetime import time as heure_fixe\n"
+                 "            db.session.add(AgendaTask(user_id=u.id, title='Loin', due_date=date(9998, 12, 31),"
+                 " start_time=heure_fixe(10)))\n"
+                 "            db.session.commit()")
+        with tempfile.TemporaryDirectory() as d:
+            texte = self._export(d, extra)
+        lignes = texte.replace("\n ", "").splitlines()
+        self.assertIn("DTSTART;TZID=America/Montreal:99981231T100000", lignes)
+        bloc = lignes[lignes.index("BEGIN:VTIMEZONE"):lignes.index("END:VTIMEZONE")]
+        decalage = _lecteur_vtimezone(bloc)
+        self.assertEqual(decalage(datetime(2026, 7, 1, 9)), "-0400")
+        self.assertEqual(decalage(datetime(2027, 1, 15, 9)), "-0500")
 
     def test_sans_vtimezone_les_heures_sont_ecrites_en_utc(self):
         with tempfile.TemporaryDirectory() as d:
