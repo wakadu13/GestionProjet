@@ -235,11 +235,15 @@ LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1", "[::1]")
 
 def feed_address(token: str) -> dict:
     """Adresse à coller dans le téléphone, et l'éventuel obstacle : l'adresse publique de Hangar si elle est
-    réglée (e-mails automatiques), sinon celle de ce PC sur le réseau local (127.0.0.1 ne marche que sur le PC)."""
+    réglée (e-mails automatiques), sinon celle de ce PC sur le réseau local (127.0.0.1 ne marche que sur le PC).
+
+    Sur le PC, l'adresse vient de ``reseau_local.adresse_telephone``, comme sur Réglages › Profil : avec
+    --lan-https, c'est l'adresse https de Caddy (Hangar lui-même n'écoute alors que 127.0.0.1)."""
     from urllib.parse import urlsplit
 
     from flask import current_app
 
+    from .. import reseau_local
     from ..cli import _lan_ip
     from ..models import MailConfig
 
@@ -255,6 +259,10 @@ def feed_address(token: str) -> dict:
         return {"url": base + path, "warning": "", "local": False}
     if hostname(request.host_url) not in LOCAL_HOSTS:  # page ouverte par l'adresse du réseau : la même convient
         return {"url": request.host_url.rstrip("/") + path, "warning": "", "local": False}
+    telephone = reseau_local.adresse_telephone(current_app, request)
+    if telephone:  # partage lancé par « hangar run » : --lan-https (Caddy), ou --host 0.0.0.0
+        return {"url": telephone["url"].rstrip("/") + path, "warning": "", "local": True,
+                "https": telephone["https"]}
     try:
         port = urlsplit(request.host_url).port
     except ValueError:
@@ -263,10 +271,15 @@ def feed_address(token: str) -> dict:
     url = f"http://{ip}{f':{port}' if port else ''}{path}" if ip else request.host_url.rstrip("/") + path
     listen = current_app.config.get("HANGAR_HOST")
     warning = ""
-    if listen is None or listen in LOCAL_HOSTS:
+    if (current_app.config.get("PARTAGE") or {}).get("https_port"):  # --lan-https, mais aucune IP sur le réseau
+        warning = ("Cet ordinateur n’est relié à aucun réseau (Wi-Fi coupé ?) : le téléphone ne pourra pas lire "
+                   "cette adresse. Connecte-le au même Wi-Fi que le téléphone, puis recharge cette page.")
+    elif listen is None or listen in LOCAL_HOSTS:
+        # Pas de « --host 0.0.0.0 » : l'agenda et le jeton de l'adresse passeraient en clair sur le Wi-Fi.
         warning = ("Pour l’instant, Hangar n’accepte que les connexions de cet ordinateur : le téléphone ne pourra pas "
-                   "lire cette adresse. Relance Hangar avec « uv run hangar run --host 0.0.0.0 » (même Wi-Fi que le "
-                   "téléphone, ordinateur allumé).")
+                   "lire cette adresse. Lance plutôt Hangar avec scripts\\partager-en-https.bat (ou « uv run hangar "
+                   "run --lan-https ») : le téléphone passe alors par une adresse https, chiffrée. Reviens ensuite "
+                   "sur cette page copier la nouvelle adresse (même Wi-Fi que le téléphone, ordinateur allumé).")
     return {"url": url, "warning": warning, "local": True}
 
 
