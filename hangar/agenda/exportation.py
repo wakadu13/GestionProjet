@@ -25,7 +25,8 @@ RRULES = {"daily": "FREQ=DAILY", "weekdays": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
 def export_ics(user: User, include_events: bool = True, include_tasks: bool = True,
                at: datetime | None = None, include_team: bool = True) -> str:
     """Agenda au format iCalendar (RFC 5545) : lignes repliées à 75 octets, textes échappés, DTSTAMP en UTC,
-    fuseau Europe/Paris décrit (VTIMEZONE), fin de répétition en UTC pour une tâche à heure fixe, rappels
+    fuseau de l'agenda décrit (VTIMEZONE : Europe/Paris, ou HANGAR_TZ calculé avec zoneinfo ; à défaut, heures
+    en UTC « Z »), fin de répétition en UTC pour une tâche à heure fixe, rappels
     des tâches sans heure calés sur l'heure de référence (8 h par défaut) comme dans Hangar."""
     at = at or A.now()
     stamp = ics.utc_stamp()
@@ -44,9 +45,24 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
 
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Hangar//Agenda//FR", "CALSCALE:GREGORIAN",
              "METHOD:PUBLISH", f"X-WR-CALNAME:{esc('Agenda de ' + user.display_name)}", f"X-WR-TIMEZONE:{tz}"]
-    lines += ics.vtimezone(tz)
+    events = (AgendaEvent.query.filter_by(user_id=user.id, status="active").order_by(AgendaEvent.start).all()
+              if include_events else [])
+    tasks = (AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.due_date.isnot(None),
+                                     AgendaTask.done_at.is_(None)).all() if include_tasks else [])
+    # Années couvertes par le VTIMEZONE : celles des heures écrites (la dernière règle continue au-delà)
+    annees = [at.year] + [ev.start.year for ev in events] + [t.due_date.year for t in tasks if t.start_time]
+    vtz = ics.vtimezone(tz, min(annees), max(annees) + 2)
+    lines += vtz
+
+    def heure_ics(prop: str, quand: datetime) -> str:
+        """DTSTART/DTEND à heure fixe : avec TZID décrit par le VTIMEZONE, sinon en UTC (« Z »), car un TZID
+        sans définition est interdit (RFC 5545) et lu de travers par Outlook."""
+        if vtz:
+            return f"{prop};TZID={tz}:{quand:%Y%m%dT%H%M%S}"
+        return f"{prop}:{ics.utc_value(ics.local_to_utc(quand, tz))}"
+
     if include_events:
-        for ev in AgendaEvent.query.filter_by(user_id=user.id, status="active").order_by(AgendaEvent.start):
+        for ev in events:
             if ev.cancelled:
                 continue
             desc = "\n".join(x for x in (
@@ -57,9 +73,9 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
                 end = ev.end if ev.end.date() > ev.start.date() else ev.start + timedelta(days=1)
                 lines += [f"DTSTART;VALUE=DATE:{ev.start:%Y%m%d}", f"DTEND;VALUE=DATE:{end:%Y%m%d}"]
             else:
-                lines.append(f"DTSTART;TZID={tz}:{ev.start:%Y%m%dT%H%M%S}")
+                lines.append(heure_ics("DTSTART", ev.start))
                 if ev.end > ev.start:  # sans DTEND : séance d'un instant (une fin égale au début est interdite)
-                    lines.append(f"DTEND;TZID={tz}:{ev.end:%Y%m%dT%H%M%S}")
+                    lines.append(heure_ics("DTEND", ev.end))
             title = ev.title + (f" ({A.kind_label(ev.kind, True)})" if ev.kind else "")
             lines += [f"SUMMARY:{esc(title)}", f"LOCATION:{esc(ev.location)}", f"DESCRIPTION:{esc(desc)}"]
             if ev.tentative:
@@ -71,15 +87,14 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
                     lines += alarm(title, fixed(r))
             lines.append("END:VEVENT")
     if include_tasks:
-        for t in AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.due_date.isnot(None),
-                                         AgendaTask.done_at.is_(None)):
+        for t in tasks:
             lines += ["BEGIN:VEVENT", f"UID:tache-{t.id}@hangar", f"DTSTAMP:{stamp}"]
             if t.start_time:
                 st = datetime.combine(t.due_date, t.start_time)
                 en = A.task_end(t)
-                lines.append(f"DTSTART;TZID={tz}:{st:%Y%m%dT%H%M%S}")
+                lines.append(heure_ics("DTSTART", st))
                 if en and en > st:
-                    lines.append(f"DTEND;TZID={tz}:{en:%Y%m%dT%H%M%S}")
+                    lines.append(heure_ics("DTEND", en))
             else:
                 lines += [f"DTSTART;VALUE=DATE:{t.due_date:%Y%m%d}",
                           f"DTEND;VALUE=DATE:{t.due_date + timedelta(days=1):%Y%m%d}"]

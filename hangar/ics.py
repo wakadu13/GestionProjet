@@ -473,10 +473,101 @@ def trigger(minutes_after_start: int) -> str:
     return f"TRIGGER:{'-' if m < 0 else ''}PT{abs(m)}M"
 
 
-def vtimezone(tz_name: str = DEFAULT_TZ) -> list[str]:
-    """Définition du fuseau Europe/Paris (exigée par la RFC pour chaque TZID, utile à Outlook)."""
+_JOURS_ICS = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+
+
+def _decalage_ics(d: timedelta) -> str:
+    """Décalage UTC au format iCalendar : « +0100 », « -0430 », « +053328 » (secondes si besoin)."""
+    s = int(d.total_seconds())
+    signe, s = ("-" if s < 0 else "+"), abs(s)
+    h, m, sec = s // 3600, s % 3600 // 60, s % 60
+    return f"{signe}{h:02d}{m:02d}" + (f"{sec:02d}" if sec else "")
+
+
+def _transitions(zone, debut: int, fin: int) -> list[tuple[datetime, timedelta, timedelta, bool, str]]:
+    """Changements d'heure de `zone` du 1er janvier `debut` au 31 décembre `fin` :
+    [(instant UTC naïf, décalage avant, décalage après, heure d'été après ?, abréviation après)]."""
+    def info(u: datetime):
+        loc = u.replace(tzinfo=timezone.utc).astimezone(zone)
+        return loc.utcoffset(), bool(loc.dst()), loc.tzname() or ""
+    out = []
+    u, fin_u = datetime(debut, 1, 1), datetime(fin + 1, 1, 1)
+    avant = info(u)
+    while u < fin_u:
+        v = min(u + timedelta(hours=12), fin_u)
+        apres = info(v)
+        if apres != avant:
+            bas, haut = u, v  # premier instant au nouveau décalage, à la seconde près
+            while haut - bas > timedelta(seconds=1):
+                milieu = (bas + (haut - bas) / 2).replace(microsecond=0)
+                if info(milieu) == avant:
+                    bas = milieu
+                else:
+                    haut = milieu
+            nouveau = info(haut)
+            if nouveau[0] != avant[0] or nouveau[1] != avant[1]:
+                out.append((haut, avant[0], nouveau[0], nouveau[1], nouveau[2]))
+            avant = nouveau
+            u = haut
+            continue
+        u = v
+    return out
+
+
+def _vtimezone_zoneinfo(tz_name: str, zone, debut: int, fin: int) -> list[str]:
+    """VTIMEZONE d'un fuseau quelconque, calculé avec zoneinfo : une observance par règle annuelle (« dernier
+    dimanche de mars à 2 h »…) ; la dernière règle reste valable après `fin` (tâches répétées sans fin)."""
+    def observance(ete, de, vers, nom, debut_local, rrule=None):
+        lignes = ["BEGIN:DAYLIGHT" if ete else "BEGIN:STANDARD", f"TZOFFSETFROM:{_decalage_ics(de)}",
+                  f"TZOFFSETTO:{_decalage_ics(vers)}"]
+        lignes += [f"TZNAME:{escape_text(nom)}"] if nom else []
+        lignes.append(f"DTSTART:{debut_local:%Y%m%dT%H%M%S}")
+        lignes += [f"RRULE:{rrule}"] if rrule else []
+        return lignes + ["END:DAYLIGHT" if ete else "END:STANDARD"]
+
+    base = datetime(debut, 1, 1).replace(tzinfo=timezone.utc).astimezone(zone)
+    out = ["BEGIN:VTIMEZONE", f"TZID:{tz_name}", f"X-LIC-LOCATION:{tz_name}"]
+    out += observance(bool(base.dst()), base.utcoffset(), base.utcoffset(), base.tzname(), datetime(debut, 1, 1))
+    # Regroupe les changements qui suivent la même règle d'une année sur l'autre
+    regles: list[dict] = []
+    for utc, de, vers, ete, nom in _transitions(zone, debut, fin):
+        local = utc + de  # heure affichée juste avant le changement (2 h au passage à l'heure d'été)
+        dernier = local.day + 7 > (date(local.year + local.month // 12, local.month % 12 + 1, 1)
+                                   - timedelta(days=1)).day
+        rang = -1 if dernier else (local.day - 1) // 7 + 1
+        cle = (ete, de, vers, nom, local.month, local.weekday(), rang, local.time())
+        suite = next((r for r in regles if r["cle"] == cle and r["fin"].year == local.year - 1 and r["ouverte"]),
+                     None)
+        if suite:
+            suite["fin"], suite["fin_utc"], suite["n"] = local, utc, suite["n"] + 1
+        else:
+            for r in regles:
+                if r["cle"][0] == ete:
+                    r["ouverte"] = False  # une nouvelle règle remplace l'ancienne
+            regles.append({"cle": cle, "debut": local, "fin": local, "fin_utc": utc, "n": 1, "ouverte": True})
+    for r in regles:
+        ete, de, vers, nom, mois, jour, rang, _ = r["cle"]
+        if r["n"] == 1 and (r["fin"].year < fin or not r["ouverte"]):
+            out += observance(ete, de, vers, nom, r["debut"])
+            continue
+        rrule = f"FREQ=YEARLY;BYMONTH={mois};BYDAY={rang}{_JOURS_ICS[jour]}"
+        if not (r["ouverte"] and r["fin"].year >= fin):
+            rrule += f";UNTIL={utc_value(r['fin_utc'])}"
+        out += observance(ete, de, vers, nom, r["debut"], rrule)
+    return out + ["END:VTIMEZONE"]
+
+
+def vtimezone(tz_name: str = DEFAULT_TZ, debut: int | None = None, fin: int | None = None) -> list[str]:
+    """Définition du fuseau (exigée par la RFC pour chaque TZID, utile à Outlook). Europe/Paris : règle
+    européenne fixe. Autre fuseau (HANGAR_TZ) : calculé avec zoneinfo pour les années `debut` à `fin` (la
+    dernière règle d'heure d'été continue au-delà) ; [] si la base des fuseaux ne le connaît pas."""
     if tz_name != "Europe/Paris":
-        return []
+        zone = _zone(tz_name)
+        if zone is None:
+            return []
+        annee = heure.today().year
+        debut = debut or annee - 1
+        return _vtimezone_zoneinfo(tz_name, zone, debut, max(fin or annee + 2, debut))
     return ["BEGIN:VTIMEZONE", "TZID:Europe/Paris", "X-LIC-LOCATION:Europe/Paris",
             "BEGIN:DAYLIGHT", "TZOFFSETFROM:+0100", "TZOFFSETTO:+0200", "TZNAME:CEST", "DTSTART:19700329T020000",
             "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU", "END:DAYLIGHT",

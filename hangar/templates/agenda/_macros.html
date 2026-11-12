@@ -23,7 +23,7 @@
 {% macro ticket_item(it, cls='ag-chip', style='') -%}
 <div class="{{ cls }} ticket {{ it.kind }} {% if it.overdue %}overdue{% endif %}" style="--tc: {{ it.color }};{{ style }}">
   <a class="ellipsis ticket-link" href="{{ it.url }}" title="{{ it.label }} · {{ it.title }}{% if it.overdue %} (en retard){% endif %}">{{ icon('flag' if it.kind == 'sprint' else 'layers', 11) }} {% if it.kind == 'ticket' %}<b>{{ it.label }}</b> {% endif %}{{ it.title }}</a>
-  {% if it.kind == 'ticket' %}<button type="button" class="ticket-slot" data-new-task data-date="{{ (A.date.today() if it.overdue else it.date).isoformat() }}" data-title="{{ it.label }} · {{ it.title }}" data-notes="{{ it.notes }}" title="Bloquer un créneau pour ce ticket">{{ icon('plus', 11) }}<span class="sr-only">Bloquer un créneau</span></button>{% endif %}
+  {% if it.kind == 'ticket' %}<button type="button" class="ticket-slot" data-new-task data-date="{{ (A.today() if it.overdue else it.date).isoformat() }}" data-title="{{ it.label }} · {{ it.title }}" data-notes="{{ it.notes }}" title="Bloquer un créneau pour ce ticket">{{ icon('plus', 11) }}<span class="sr-only">Bloquer un créneau</span></button>{% endif %}
 </div>
 {%- endmacro %}
 

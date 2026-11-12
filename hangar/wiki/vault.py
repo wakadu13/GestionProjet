@@ -20,13 +20,14 @@ import time
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import cached_property, lru_cache
 from pathlib import Path, PurePosixPath
 
 import yaml
 from flask import current_app, has_app_context
 
+from .. import heure
 from ..texte import UN_POUR_UN, cle_tri
 from .liens import wiki_url
 
@@ -253,8 +254,9 @@ class Note:
 
     @property
     def modified(self):
-        """Date de modification, en heure locale naïve (comme le reste de Hangar)."""
-        return datetime.fromtimestamp(self.mtime)
+        """Date de modification, en heure naïve de l'agenda (hangar.heure, comme le reste de Hangar), quel que
+        soit le fuseau de la machine."""
+        return heure.vers_agenda(datetime.fromtimestamp(self.mtime, timezone.utc))
 
     @cached_property
     def url(self):

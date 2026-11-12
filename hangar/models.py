@@ -722,7 +722,7 @@ class WorkLog(db.Model):
     issue_id = db.Column(db.Integer, db.ForeignKey("issue.id", ondelete="CASCADE"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     minutes = db.Column(db.Integer, nullable=False)
-    date = db.Column(db.Date, default=date.today)
+    date = db.Column(db.Date, default=heure.today)
     description = db.Column(db.String(255), default="")
     created_at = db.Column(db.DateTime, default=now)
 
