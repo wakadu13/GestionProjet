@@ -311,6 +311,41 @@ class Signalement(db.Model):
         return f"<Signalement {self.set_id} » {self.question_id}>"
 
 
+class EmpreinteSet(db.Model):
+    """Empreinte du contenu d'un set ou d'un paquet de langue (identifiants et textes des questions),
+    pour le retrouver quand son fichier est renommé ou déplacé hors de Hangar (rattachement.py)."""
+    __tablename__ = "qcm_empreinte"
+
+    id = db.Column(db.Integer, primary_key=True)
+    set_id = db.Column(db.String(500), nullable=False, unique=True)
+    empreinte = db.Column(db.String(64), nullable=False, index=True)  # de tout le set
+    questions = db.Column(db.Text, default="")      # empreintes courtes des questions, séparées par des espaces
+    langue = db.Column(db.Boolean, default=False)   # paquet de langue (sinon set de QCM)
+    disparu_le = db.Column(db.DateTime)             # fichier absent du coffre depuis…
+
+    @property
+    def cles(self) -> set:
+        return set((self.questions or "").split())
+
+
+class AliasSet(db.Model):
+    """Ancien identifiant d'un set → identifiant actuel (set déplacé, renommé ou rattaché à la main) :
+    les réponses envoyées plus tard sous l'ancien identifiant (application hors ligne, page restée
+    ouverte) rejoignent la bonne progression. `user_id` vide : pour tous les comptes ; sinon, pour ce
+    compte seulement (« Rattacher à… » qui ne vaut que pour lui), et prioritaire pour lui."""
+    __tablename__ = "qcm_alias"
+    __table_args__ = (db.UniqueConstraint("ancien", "user_id", name="uq_qcm_alias"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    ancien = db.Column(db.String(500), nullable=False, index=True)
+    nouveau = db.Column(db.String(500), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"), index=True)
+    cree_le = db.Column(db.DateTime, default=quiz.maintenant)
+
+    def __repr__(self):
+        return f"<AliasSet {self.ancien} → {self.nouveau}>"
+
+
 class TempsRevision(_Defauts, db.Model):
     """Temps passé à réviser, par compte, jour et matière (catégorie de QCM, ou langue)."""
     __tablename__ = "qcm_temps"

@@ -203,8 +203,14 @@ def estimer(qset, progress, deck, now):
         # petit nombre de nouvelles questions par jour qui suffit (dichotomie).
         meilleur = duree(total, total)
         if not meilleur or meilleur[0] > dispo:
+            # Même sans limite, pas le temps de tout savoir : le mieux est d'avoir vu toutes les
+            # questions avant la veille de l'examen (gardée pour les révisions), révisions sans limite.
             e["statut"] = "impossible"
             e["jours_min"] = meilleur[0] if meilleur else None
+            e["nouvelles_conseillees"] = nouvelles_avant_la_veille(qset, progress, dispo, deja[0])
+            e["nouvelles_auto"] = (None if deck.nouvelles_jour is None
+                                   else max(deck.nouvelles_jour, e["nouvelles_conseillees"]))
+            e["revisions_limitees"] = bool(deck.revisions_jour)
             return e
         bas, haut = 1, total
         while bas < haut:
@@ -215,21 +221,32 @@ def estimer(qset, progress, deck, now):
             else:
                 bas = milieu + 1
         e["statut"] = "retard"
-        e["nouvelles_conseillees"] = haut
+        e["nouvelles_conseillees"] = e["nouvelles_auto"] = haut
         e["questions_conseillees"] = par_jour(meilleur)
         e["minutes_conseillees"] = minutes(meilleur)
         e["revisions_limitees"] = bool(deck.revisions_jour)
     return e
 
 
+def nouvelles_avant_la_veille(qset, progress, dispo, deja_nouvelles=0):
+    """Nouvelles questions par jour pour avoir vu tout le set avant la veille de l'examen (la veille
+    reste pour les révisions ; examen demain : tout aujourd'hui). `dispo` : jours d'ici l'examen.
+    Les nouvelles déjà découvertes aujourd'hui comptent dans le quota du jour : il ne baisse pas
+    au fil de la journée."""
+    a_voir = sum(1 for q in qset.questions if q.id not in progress) + deja_nouvelles
+    return math.ceil(a_voir / max(1, dispo - 1))
+
+
 def quotas_effectifs(qset, progress, deck, now):
     """Quotas du jour : ceux du set, ou, si l'ajustement automatique est coché et que
     l'estimation dit « en retard » pour l'examen, les nouvelles conseillées et des
-    révisions sans limite. Renvoie (nouvelles_jour, revisions_jour)."""
+    révisions sans limite. Quand l'examen est trop proche pour tout savoir (« impossible »),
+    les nouvelles restantes sont étalées jusqu'à la veille de l'examen (au moins le quota du set),
+    toujours sans limite de révisions. Renvoie (nouvelles_jour, revisions_jour)."""
     if deck is None:
         return None, None
     if deck.auto_quota and deck.date_objectif:
         e = estimer(qset, progress, deck, now)
-        if e.get("statut") == "retard":
-            return e["nouvelles_conseillees"], None
+        if e.get("statut") in ("retard", "impossible"):
+            return e["nouvelles_auto"], None
     return deck.nouvelles_jour, deck.revisions_jour

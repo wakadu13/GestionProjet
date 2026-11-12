@@ -10,6 +10,8 @@ Modules :
 - `coffre` (fichiers du coffre), `rendu` (Markdown + LaTeX, moteur du wiki s'il est là) ;
 - `models` (progression FSRS, réglages, activité, temps, objectifs, signalements, explications de l'IA) ;
 - `services` : `resume_du_jour(user)`, section « qcm.revisions » du résumé quotidien, contexte du panneau IA ;
+- `rattachement` : la progression suit un set renommé ou déplacé, même hors de Hangar (empreinte du
+  contenu, anciens noms pour les réponses hors ligne, « Progression sans fichier » des statistiques) ;
 - `views`, `gestion`, `langues_views`, `masque_views` : les pages ; `cli` : `hangar qcm-verifier`,
   `hangar qcm-rappels`, `hangar connexions-debloquer` ;
 - `hors_ligne` : application hors ligne /qcm/hors-ligne/ (catalogue, sets, synchro, /qcm/sw.js, manifeste),

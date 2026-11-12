@@ -16,6 +16,37 @@
     <div class="stat {% if activite.trente_jours and activite.justes_trente_jours * 100 >= activite.trente_jours * 80 %}success{% endif %}"><div class="v">{% if activite.trente_jours %}{{ (100 * activite.justes_trente_jours / activite.trente_jours)|round|int }} %{% else %}—{% endif %}</div><div class="l">Réponses justes (30 j)</div><div class="sub">{{ activite.justes_trente_jours }} sur {{ activite.trente_jours }}</div></div>
   </div>
 
+  {% if orphelins %}
+  <div class="panel mb" id="orphelins">
+    <div class="panel-h">{{ icon('alert', 16) }}<h3>Progression sans fichier</h3><span class="muted small right">{{ orphelins|length }}</span></div>
+    <div class="panel-b">
+      <p class="muted small">Ces progressions n’ont plus de fichier dans le coffre : le set a sans doute été renommé, déplacé ou supprimé hors de Hangar (Obsidian, explorateur de fichiers). Rattache chacune au bon set pour retrouver tes révisions, ou oublie-la. D’ici là, les réponses faites hors ligne sur ces sets restent sur ton téléphone.</p>
+      <ul class="qcm-list">
+        {% for o in orphelins %}
+        <li style="flex-wrap:wrap"><span class="t">{{ o.nom }} <span class="muted small">({{ o.dossier }})</span></span>
+          <span class="m">{% if o.vues %}{{ o.vues }} question{{ 's' if o.vues > 1 }} vue{{ 's' if o.vues > 1 }}{% else %}quotas ou date d’examen{% endif %}{% if o.derniere %} · dernière révision le {{ o.derniere|date }}{% endif %}</span>
+          <span class="r flex gap wrap">
+            <form method="post" action="{{ url_for('qcm.progression_orpheline') }}" class="flex gap wrap">
+              {{ ui.csrf() }}<input type="hidden" name="action" value="rattacher"><input type="hidden" name="ancien" value="{{ o.id }}">
+              <input type="hidden" name="next" value="{{ url_for('qcm.stats') }}">
+              <select class="input input-sm" name="nouveau" required aria-label="Set auquel rattacher la progression de {{ o.libelle }}">
+                <option value="">Rattacher à…</option>
+                {% for sid, libelle in choix_rattachement %}<option value="{{ sid }}"{% if sid == o.suggestion %} selected{% endif %}>{{ libelle }}</option>{% endfor %}
+              </select>
+              <button class="btn btn-sm btn-primary" type="submit" title="{% if can_edit and o.commun %}La progression, les quotas et la date d’examen passent sur ce set : pour tous les comptes si c’est un set commun, seulement les tiens si c’est un set de ton espace{% else %}Ta progression, tes quotas et ta date d’examen passent sur ce set{% endif %}">Rattacher</button>
+            </form>
+            <form method="post" action="{{ url_for('qcm.progression_orpheline') }}" data-confirm="Oublier ta progression de « {{ o.libelle }} » ? Elle sera effacée.">
+              {{ ui.csrf() }}<input type="hidden" name="action" value="oublier"><input type="hidden" name="ancien" value="{{ o.id }}">
+              <input type="hidden" name="next" value="{{ url_for('qcm.stats') }}">
+              <button class="btn btn-sm btn-ghost" type="submit">Oublier</button>
+            </form>
+          </span></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="panel">
     <div class="panel-h">{{ icon('calendar', 16) }}<h3>Activité</h3><span class="muted small right">26 dernières semaines</span></div>
     <div class="panel-b">

@@ -401,16 +401,21 @@
   }
 
   // Télécharge des sets (questions, progression du serveur, quotas) ; les réponses encore en
-  // attente sont ré-appliquées par-dessus la progression reçue.
+  // attente sont ré-appliquées par-dessus la progression reçue. Un set renommé ou déplacé sur le
+  // serveur revient sous son nouvel identifiant (data.renommes) ; un set momentanément introuvable
+  // (data.indisponibles : fichier en cours de modification…) reste sur l'appareil.
+  // Renvoie {retires, indisponibles} : titres des sets retirés, et de ceux gardés faute de mieux.
   async function telecharger(ids) {
     const attente = await A.tous("attente");
-    const retires = [];
+    const retires = [], indisponibles = [];
     for (let i = 0; i < ids.length; i += 40) {
       const params = new URLSearchParams();
       ids.slice(i, i + 40).forEach((id) => params.append("id", id));
       const data = await A.lireJson(await A.requete(app.dataset.setsUrl + "?" + params, { credentials: "same-origin", cache: "no-store" }));
+      const renommes = data.renommes || {};
       for (const set of data.sets) {
-        const miennes = attente.filter((r) => r.set_id === set.id && (!r.joueur || r.joueur === data.joueur))
+        const siens = [set.id, ...Object.keys(renommes).filter((ancien) => renommes[ancien] === set.id)];
+        const miennes = attente.filter((r) => siens.includes(r.set_id) && (!r.joueur || r.joueur === data.joueur))
           .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
         if (estLangue(set)) {
           if (!L) continue;
@@ -426,12 +431,16 @@
       }
       for (const id of data.manquants) {
         const set = etat.sets.get(id);
-        if (set) retires.push(set.titre);
+        if (set && !renommes[id]) retires.push(set.titre);
         await A.effacer("sets", id);
         etat.sets.delete(id);
       }
+      for (const id of data.indisponibles || []) {
+        const set = etat.sets.get(id);
+        if (set) indisponibles.push(set.titre);
+      }
     }
-    return retires;
+    return { retires, indisponibles };
   }
 
   // Images des questions (servies par Hangar) gardées dans le cache du service worker.
@@ -501,12 +510,23 @@
       etat.catalogue = cat.sets.concat(cat.langues || []);
       await reprendreAttenteEnLigne(cat);
       const envoi = await A.envoyer(cat);
-      const retires = etat.sets.size ? await telecharger([...etat.sets.keys()]) : [];
+      const { retires, indisponibles } = etat.sets.size ? await telecharger([...etat.sets.keys()]) : { retires: [], indisponibles: [] };
       etat.meta.derniereSynchro = new Date().toISOString();
       await sauverMeta();
       etat.attente = (await A.tous("attente")).length;
-      alerte(retires.length ? "Retirés de l'appareil (supprimés du serveur) : " + retires.join(", ") : "");
-      if (envoi.autres) alerte(pluriel(envoi.autres, "réponse") + " d'un autre compte en attente : elles seront envoyées quand ce compte se reconnectera.");
+      const avis = [];
+      if (retires.length) avis.push("Retirés de l'appareil (supprimés du serveur) : " + retires.join(", ") + ".");
+      if (indisponibles.length) avis.push("Introuvables sur le serveur pour l'instant, gardés sur l'appareil : " + indisponibles.join(", ") + ".");
+      // Réponses non acquittées par le serveur : leur set est momentanément introuvable (fichier renommé,
+      // déplacé ou en cours de modification) ; elles restent dans la file et repartiront plus tard.
+      if (envoi.restantes) {
+        const plus = envoi.restantes > 1;
+        avis.push(pluriel(envoi.restantes, "réponse") + " gardée" + (plus ? "s" : "") + " sur l'appareil : "
+          + (plus ? "leur" : "son") + " set est introuvable sur le serveur pour l'instant (fichier renommé, déplacé ou en cours de modification). "
+          + (plus ? "Elles partiront" : "Elle partira") + " dès qu'il sera retrouvé ou rattaché (page des statistiques).");
+      }
+      if (envoi.autres) avis.push(pluriel(envoi.autres, "réponse") + " d'un autre compte en attente : elles seront envoyées quand ce compte se reconnectera.");
+      alerte(avis.join(" "));
       if (envoi.envoyees) message = pluriel(envoi.envoyees, "réponse") + " synchronisée" + (envoi.envoyees > 1 ? "s" : "") + ".";
     } catch (e) {
       if (e instanceof A.Deconnecte) alerte("Session expirée : tes réponses restent sur l'appareil.", true);

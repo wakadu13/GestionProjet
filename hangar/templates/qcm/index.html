@@ -57,7 +57,7 @@
     <a class="qcm-exam {% if x.retard %}retard{% elif x.a_commencer or x.jours <= 7 %}urgent{% endif %}" href="{{ url_for('qcm.planning_page') }}#cat-{{ x.categorie|qcm_slug }}" title="{{ x.sets|length }} set(s) de « {{ x.categorie }} »">
       {{ icon('target', 14) }}<span>Examen <b>{{ x.categorie }}</b> · {{ x.date|date }}</span>
       <span class="j">{% if x.jours == 0 %}aujourd’hui{% elif x.jours == 1 %}demain{% else %}J-{{ x.jours }}{% endif %}</span>
-      {% if x.pret %}<span class="qcm-plan-badge ok">prêt</span>{% elif x.retard %}<span class="qcm-plan-badge retard">en retard</span>{% endif %}
+      {% if x.pret %}<span class="qcm-plan-badge ok">prêt</span>{% elif x.retard %}<span class="qcm-plan-badge retard">en retard</span>{% if x.auto %} <span class="qcm-plan-badge" title="« Ajuster auto. » est coché : les nouvelles questions du jour sont augmentées pour être prêt à temps (ou toutes vues avant la veille de l’examen) et les révisions ne sont plus limitées">ajustement auto.</span>{% endif %}{% endif %}
     </a>
     {% endfor %}
   </div>
@@ -67,6 +67,12 @@
   <div class="qcm-callout warning">{{ icon('alert', 16) }}<div><b>Fichiers ignorés (JSON invalide)</b>
     <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     <div class="small muted">Vérifie-les avec <code>uv run hangar qcm-verifier</code>.</div></div></div>
+  {% endif %}
+
+  {% if orphelins %}
+  <div class="qcm-callout warning">{{ icon('alert', 16) }}<div><b>{{ orphelins }} progression{{ 's' if orphelins > 1 }} sans fichier</b> :
+    un set a sans doute été renommé, déplacé ou supprimé hors de Hangar.
+    <a href="{{ url_for('qcm.stats') }}#orphelins">Rattache-l{{ 'es' if orphelins > 1 else 'a' }} au bon set</a> pour retrouver tes révisions.</div></div>
   {% endif %}
 
   {% if total_sets or total_paquets %}
