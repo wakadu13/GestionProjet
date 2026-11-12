@@ -1,7 +1,8 @@
 [project]
 name = "hangar"
-version = "1.1.0"
-description = "Hangar : agenda personnel (emploi du temps .ics, tâches, rappels par e-mail) et gestion de projet, 100 % local"
+# Numéro de version : écrit une seule fois, dans hangar/__init__.py (__version__), lu ici par hatchling.
+dynamic = ["version"]
+description = "Hangar : agenda, wiki de cours (Obsidian), QCM, assistant IA et gestion de projet, 100 % local"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,6 +20,10 @@ dependencies = [
     "pypdf>=7.0.1",
     "pillow>=13.0.0",
     "pywebpush>=2.5.0",
+    # Importés directement par hangar/qcm/push.py (notifications des QCM) : déclarés, pas seulement tirés par pywebpush
+    "py-vapid>=1.9.0",
+    "cryptography>=42.0",
+    "requests>=2.31",
 ]
 
 [project.scripts]
@@ -27,6 +32,22 @@ hangar = "hangar.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "hangar/__init__.py"
+
+[tool.uv]
+# La version est lue dans hangar/__init__.py : uv réinstalle le paquet quand ce fichier change.
+cache-keys = [{ file = "pyproject.toml" }, { file = "hangar/__init__.py" }]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# Erreurs certaines seulement (noms inconnus, imports inutiles, syntaxe) : lancé par la CI
+# (« uvx ruff check »). Les règles B (pièges courants) et BLE (except trop larges) viendront ensuite.
+select = ["F", "E9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["hangar"]

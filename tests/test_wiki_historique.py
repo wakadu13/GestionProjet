@@ -308,9 +308,9 @@ class AffichageTests(HistoriqueTestCase):
         db.session.commit()
         client_autre = self.login("autre")
         self.write("Note.md", "départ")
-        r = self.enregistrer("Note", "par moi", self.ouvrir("Note"))
+        self.enregistrer("Note", "par moi", self.ouvrir("Note"))
         self.avancer(minutes=1)
-        r = self.enregistrer("Note", "par autre", self.ouvrir("Note", client_autre), client=client_autre)
+        self.enregistrer("Note", "par autre", self.ouvrir("Note", client_autre), client=client_autre)
         self.assertEqual(self.textes("Note.md"), ["départ", "par moi"])
         self.assertEqual([v["auteur"] for v in historique.lister("Note.md")], ["autre", "moi"])
 

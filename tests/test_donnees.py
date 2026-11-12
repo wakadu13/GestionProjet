@@ -24,7 +24,7 @@ from unittest import mock
 from hangar import cli, create_app
 from hangar.ai.models import AIProvider
 from hangar.extensions import db
-from hangar.models import AgendaTask, Issue, MailConfig, User
+from hangar.models import AgendaTask, MailConfig, User
 
 SMTP_SECRET = "SECRET-SMTP-PW-42"
 CLE_SECRETE = "sk-ant-SECRET-KEY-4242"

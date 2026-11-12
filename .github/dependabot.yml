@@ -1,0 +1,18 @@
+# Mises à jour proposées chaque semaine par GitHub (une PR par paquet, testée par la CI) :
+# - uv : dépendances Python figées dans uv.lock (failles corrigées dans Pillow, pypdf, Flask…) ;
+# - github-actions : versions des actions utilisées par .github/workflows/tests.yml.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      dependances-python:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

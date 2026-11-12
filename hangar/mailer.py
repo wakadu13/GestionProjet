@@ -584,7 +584,7 @@ def send_digests(cfg: MailConfig, today: date) -> int:
             Notification.created_at.desc()).all()
         if not (open_ or done or unread):
             continue
-        stats = (f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 4px"><tr>'
+        stats = ('<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 4px"><tr>'
                  + "".join(f'<td style="padding:8px 14px;border:1px solid #e4e7ec;border-radius:8px;text-align:center">'
                            f'<div style="font-size:20px;font-weight:700;color:{c}">{v}</div>'
                            f'<div style="font-size:11.5px;color:#6b7280">{lab}</div></td><td width="8"></td>'

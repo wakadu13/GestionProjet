@@ -12,7 +12,8 @@ import sqlite3
 import tempfile
 import unittest
 import zipfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from unittest import mock
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
@@ -194,7 +195,13 @@ class FsrsTests(QcmTestCase):
         self.assertGreater(p.stabilite, 14)  # stabilité estimée d'après la boîte
 
 
+def _midi():
+    """Midi aujourd'hui : « + 11 minutes » reste le même jour, quelle que soit l'heure où la suite tourne."""
+    return datetime.combine(date.today(), time(12))
+
+
 class ReponsesTests(QcmTestCase):
+    @mock.patch.object(quiz, "maintenant", _midi)
     def test_reponses_enregistrees_et_file_du_jour(self):
         c = self.client()
         h = {"X-CSRF-Token": self.token}

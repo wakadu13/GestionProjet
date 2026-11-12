@@ -19,7 +19,7 @@ from . import commun, installation
 from .commun import can_edit, render
 from .render import render_note
 from .vault import CODE_RE, Note, get_vault, split_frontmatter
-from .views import PUBLICS, bp
+from .views import bp
 
 DOCS_DIR = Path(__file__).resolve().parent / "docs"
 

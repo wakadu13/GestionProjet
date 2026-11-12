@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from .extensions import db
 from .models import (
-    MODULE_STATUS_COLORS, PRIORITIES, PRIORITY_ORDER, STATE_GROUP_ORDER, STATE_GROUPS, Cycle, Issue,
+    MODULE_STATUS_COLORS, PRIORITIES, PRIORITY_ORDER, STATE_GROUPS, Cycle, Issue,
     Label, Module, Project, State, User, issue_subscribers,
 )
 from .utils import cle_tri, contient, week_bounds

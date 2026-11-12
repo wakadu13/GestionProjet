@@ -1,4 +1,4 @@
-"""Hangar : agenda personnel (emploi du temps, tâches, rappels) et gestion de projet, 100 % local."""
+"""Hangar : agenda, wiki de cours (Obsidian), QCM, assistant IA et gestion de projet, 100 % local."""
 from __future__ import annotations
 
 import os
@@ -10,6 +10,7 @@ from flask_login import current_user
 
 from .extensions import db, login_manager
 
+# Seul endroit où le numéro de version est écrit : pyproject.toml le lit ici (version dynamique de hatchling).
 __version__ = "1.1.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -138,6 +139,8 @@ def _auto_migrate() -> list[str]:
                     default = " DEFAULT '" + v.replace("'", "''") + "'"
             db.session.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {coltype}{default}'))
             changements.append(f"colonne {table.name}.{col.name}")
+            if not default:
+                _remplir_colonne_ajoutee(table, col)
         for c in colonnes:
             if c["name"] not in table.columns and not c.get("nullable", True) and c.get("default") is None:
                 logging.getLogger(__name__).warning(
@@ -156,6 +159,22 @@ def _auto_migrate() -> list[str]:
                     continue
                 changements.append(f"index {index.name}")
     return changements
+
+
+def _remplir_colonne_ajoutee(table, col) -> None:
+    """Colonne tout juste ajoutée dont la valeur par défaut est calculée en Python (``default=now``, ``dict``,
+    ``list``…) ou n'a pas d'équivalent SQL : les lignes existantes reçoivent cette valeur au lieu de rester
+    vides (NULL), comme une ligne créée par l'application."""
+    d = col.default
+    if d is None or getattr(d, "is_sequence", False) or getattr(d, "is_clause_element", False):
+        return
+    try:
+        valeur = d.arg(None) if getattr(d, "is_callable", False) else d.arg
+    except Exception:  # noqa: BLE001 - défaut qui dépend des autres colonnes de la ligne : laissé vide
+        return
+    if valeur is None:
+        return
+    db.session.execute(table.update().where(col.is_(None)).values({col.name: valeur}))
 
 
 def _register_blueprints(app: Flask) -> None:

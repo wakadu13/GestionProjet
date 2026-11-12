@@ -19,7 +19,7 @@ from flask import url_for
 
 from hangar import create_app
 from hangar.extensions import db
-from hangar.models import AgendaEvent, AgendaSubjectLink, AgendaTask, Comment, Cycle, Label, Module, Page, Project, User
+from hangar.models import AgendaEvent, AgendaSubjectLink, AgendaTask, Cycle, Label, Module, Page, User
 from hangar.services import create_issue, create_project, ensure_member
 from hangar.texte import cle_tri, comparer, contient_sql, plier
 

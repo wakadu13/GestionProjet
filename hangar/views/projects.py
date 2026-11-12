@@ -9,7 +9,7 @@ from ..models import (
     ESTIMATE_TYPES, PALETTE, ROLES, STATE_GROUP_LABELS, Issue, Label, Project, ProjectMember, State, User, now,
 )
 from ..securite import clean_color
-from ..services import create_project, ensure_member, log_activity, to_int, unsubscribe_from_project
+from ..services import create_project, ensure_member, to_int, unsubscribe_from_project
 from ..utils import back_url, contient_plie, get_project, parse_date, project_role, tri_fr, visible_projects
 
 bp = Blueprint("projects", __name__, url_prefix="/projects")

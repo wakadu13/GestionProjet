@@ -17,7 +17,7 @@ from hangar import create_app
 from hangar.extensions import db
 from hangar.models import (
     Attachment, Cycle, EmailMessage, Favorite, Issue, IssueRelation, MailConfig, Module, Notification, Page,
-    ProjectMember, SavedView, State, User, now,
+    ProjectMember, SavedView, User, now,
 )
 from hangar.services import create_issue, create_project, update_issue
 
