@@ -1056,6 +1056,7 @@ class AgendaImport(db.Model):
     details_json = db.Column(db.Text, default="[]")
     warnings = db.Column(db.Text, default="")
     exam_notes = db.Column(db.Text, default="")  # dates d'examen des QCM recalées par cet import (une par ligne)
+    exam_quota_sets = db.Column(db.Text, default="")  # sets dont cet import a coupé l'ajustement auto (un par ligne)
     created_at = db.Column(db.DateTime, default=now, index=True)
     undone_at = db.Column(db.DateTime)
 

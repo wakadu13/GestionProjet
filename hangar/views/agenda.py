@@ -673,10 +673,7 @@ def settings():
         s.reminder_channel = f.get("reminder_channel") if f.get("reminder_channel") in ("email", "app") else "email"
         mode = f.get("daily_mode") if f.get("daily_mode") in ("off", "morning", "evening") else "off"
         new_hour = hour("daily_hour", 7)
-        if mode != s.daily_mode or new_hour != s.daily_hour:
-            # pas d'envoi immédiat à l'activation si l'heure choisie est déjà passée : premier envoi demain
-            s.last_daily_date = date.today() if datetime.now().hour >= new_hour else None
-        s.daily_mode, s.daily_hour = mode, new_hour
+        A.set_daily_schedule(s, mode, new_hour, now())  # pas d'envoi immédiat si l'heure est déjà passée
         s.import_email = bool(f.get("import_email"))
         s.weekly_import_nudge = bool(f.get("weekly_import_nudge"))
         er = to_int(f.get("exam_reminder")) or 0

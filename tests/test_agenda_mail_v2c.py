@@ -222,6 +222,44 @@ class RattrapageTests(Base):
         self.assertNotIn("Reste à faire aujourd’hui", html)
         self.assertNotIn("Reste à rendre aujourd’hui", html)
 
+    def _post_settings(self, at, mode, hour):
+        from unittest import mock
+        c, token = self.login()
+        with mock.patch("hangar.views.agenda.now", return_value=at):
+            r = c.post("/agenda/settings", data={"_csrf": token, "daily_mode": mode, "daily_hour": str(hour),
+                                                 "contact_email": "moi@exemple.fr", "default_reminder": "-1",
+                                                 "reminder_channel": "email"})
+        self.assertEqual(r.status_code, 302)
+        db.session.expire_all()
+
+    def test_activation_apres_l_heure_meme_avec_un_historique(self):
+        """Réactiver le résumé du matin après l'heure : rien tout de suite, même si un résumé est déjà parti
+        avec cette version (last_daily_day rempli)."""
+        self.settings(daily_mode="morning", daily_hour=7)
+        A.send_daily_programs(datetime(2026, 11, 2, 7, 5))
+        self.assertEqual(A.settings_of(self.user).last_daily_day, date(2026, 11, 2))
+        self.settings(daily_mode="off")
+        self._post_settings(datetime(2026, 11, 12, 9, 0), "morning", 0)
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 12, 10, 0)), 0)
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 13, 0, 30)), 1)  # premier envoi le lendemain
+        # Mode soir activé à 20 h pour 19 h : rien ce soir, le résumé du surlendemain part demain soir
+        self.settings(daily_mode="off")
+        self._post_settings(datetime(2026, 11, 13, 20, 0), "evening", 19)
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 13, 20, 5)), 0)
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 14, 7, 0)), 0)
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 14, 19, 5)), 1)
+
+    def test_changer_l_heure_ne_renvoie_pas_le_resume_du_jour(self):
+        self.settings(daily_mode="morning", daily_hour=7)
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 12, 7, 5)), 1)
+        self._post_settings(datetime(2026, 11, 12, 7, 30), "morning", 8)  # 8 h pas encore passée
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 12, 8, 5)), 0)  # déjà reçu aujourd'hui
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 13, 8, 5)), 1)
+
+    def test_activation_avant_l_heure_envoie_le_jour_meme(self):
+        self._post_settings(datetime(2026, 11, 12, 6, 0), "morning", 7)
+        self.assertEqual(A.send_daily_programs(datetime(2026, 11, 12, 7, 5)), 1)
+
     def _cfg(self):
         cfg = MailConfig.get()
         cfg.enabled = True
@@ -360,6 +398,31 @@ class DateExamenTests(Base):
             self.assertIsNone(d.date_objectif)
             self.assertFalse(d.auto_quota)
         self.assertIn("date d’examen effacée", imp.exam_notes)
+
+    def test_annuler_l_import_remet_l_ajustement_automatique(self):
+        A.set_exam_objective(self.user, AgendaEvent.query.filter_by(uid="exam1").one())
+        d0, d1 = self.decks()
+        d0.auto_quota, d1.auto_quota = True, False  # un set avec l'ajustement, l'autre sans
+        db.session.commit()
+        imp = A.import_calendar(self.user, exam_ics(None), at=self.at + timedelta(hours=1))
+        self.assertEqual([d.auto_quota for d in self.decks()], [False, False])
+        notes = A.undo_import(imp, at=self.at + timedelta(hours=2))
+        d0, d1 = self.decks()
+        self.assertEqual((d0.date_objectif, d0.auto_quota), (date(2026, 11, 19), True))
+        self.assertEqual((d1.date_objectif, d1.auto_quota), (date(2026, 11, 19), False))
+        self.assertTrue(any("Ajustement automatique (« Ajuster auto. ») réactivé pour 1 set" in n for n in notes), notes)
+
+    def test_controle_retire_report_au_suivant(self):
+        extra = ("BEGIN:VEVENT\nDTSTART:20261126T101500\nDTEND:20261126T121500\nUID:exam2\n"
+                 "SUMMARY:Techniques numériques 16 CO_ECRIT\nEND:VEVENT\n")
+        A.import_calendar(self.user, exam_ics(date(2026, 11, 19), extra), at=self.at)
+        A.set_exam_objective(self.user, AgendaEvent.query.filter_by(uid="exam1").one())
+        db.session.commit()
+        imp = A.import_calendar(self.user, exam_ics(None, extra), at=self.at + timedelta(hours=1))
+        self.assertEqual([d.date_objectif for d in self.decks()], [date(2026, 11, 26)] * 2)
+        self.assertNotIn("déplacé", imp.exam_notes)
+        self.assertIn("contrôle du 19/11 retiré : date d’examen reportée au prochain contrôle (26/11)",
+                      imp.exam_notes)
 
     def test_nouveau_controle_prepare_sans_clic(self):
         self.assertEqual(self.decks(), [])

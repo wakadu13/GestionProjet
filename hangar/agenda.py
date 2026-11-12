@@ -338,7 +338,9 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
         _revive_reminders(ev, since, at)
     ensure_exam_reminders(user, at)
     db.session.flush()
-    imp.exam_notes = "\n".join(sync_exam_objectives(user, at, exam_changes(details)))
+    quota_off: list[str] = []
+    imp.exam_notes = "\n".join(sync_exam_objectives(user, at, exam_changes(details), quota_off))
+    imp.exam_quota_sets = "\n".join(quota_off)
     db.session.commit()
     if s.import_email and imp.changed:
         queue_import_email(user, imp, at)
@@ -380,6 +382,7 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
         ensure_exam_reminders(user, at)
         db.session.flush()
         notes = sync_exam_objectives(user, at, exam_changes(imp.details, undo=True))
+        notes += _restore_auto_quota(user, (imp.exam_quota_sets or "").splitlines())
     db.session.commit()
     return notes
 
@@ -1108,6 +1111,20 @@ def daily_target(s: AgendaSettings, at: datetime) -> date | None:
     return day
 
 
+def set_daily_schedule(s: AgendaSettings, mode: str, hour: int, at: datetime) -> None:
+    """Change le mode ou l'heure du résumé quotidien sans envoi immédiat : le jour que le résumé couvrirait
+    tout de suite est noté comme déjà couvert (activé à 10 h pour 7 h : premier résumé demain). Un jour déjà
+    couvert le reste (changer l'heure après avoir reçu le résumé du jour ne le renvoie pas)."""
+    if mode == s.daily_mode and hour == s.daily_hour:
+        return
+    covered = daily_covered(s)
+    sent_on, s.last_daily_date, s.last_daily_day = s.last_daily_date, None, None
+    s.daily_mode, s.daily_hour = mode, hour
+    target = daily_target(s, at)
+    s.last_daily_date = sent_on
+    s.last_daily_day = max((d for d in (covered, target) if d is not None), default=None)
+
+
 def send_daily_programs(at: datetime | None = None) -> int:
     """Envoie le résumé quotidien aux comptes qui l'ont activé (une fois par jour résumé, voir `daily_target`).
 
@@ -1818,13 +1835,29 @@ def exam_changes(details: list, undo: bool = False) -> dict[str, dict]:
     return out
 
 
-def sync_exam_objectives(user, at: datetime, changes: dict[str, dict]) -> list[str]:
+def _restore_auto_quota(user, set_ids: list[str]) -> list[str]:
+    """Annulation d'un import : remet l'ajustement automatique des sets que cet import avait coupé (quand ils
+    ont retrouvé une date d'examen)."""
+    if not set_ids:
+        return []
+    from .qcm.models import QuizDeck
+    n = 0
+    for deck in QuizDeck.query.filter(QuizDeck.user_id == user.id, QuizDeck.set_id.in_(set_ids)):
+        if deck.date_objectif is not None and not deck.auto_quota:
+            deck.auto_quota = True
+            n += 1
+    return [f"Ajustement automatique (« Ajuster auto. ») réactivé pour {n} set(s) de QCM."] if n else []
+
+
+def sync_exam_objectives(user, at: datetime, changes: dict[str, dict],
+                         quota_off: list[str] | None = None) -> list[str]:
     """Fait suivre le planning à la date d'examen des sets de QCM des matières reliées (sans valider la base).
 
     Pour chaque matière touchée (voir `exam_changes`) et reliée à une catégorie de QCM, on vise le prochain
     contrôle à venir :
     - une date d'examen qui valait l'ancien jour d'un contrôle déplacé suit le contrôle ;
-    - un contrôle retiré sans autre contrôle à venir : la date est effacée et l'ajustement automatique coupé ;
+    - un contrôle retiré : la date passe au prochain contrôle ; s'il n'y en a plus, elle est effacée et
+      l'ajustement automatique coupé (les sets concernés sont ajoutés à `quota_off`, pour l'annulation) ;
     - un set sans date (ou avec une date passée) est préparé pour le prochain contrôle ;
     - une date saisie à la main (qui ne vaut aucun ancien jour de contrôle) n'est jamais modifiée.
     Retourne les phrases à afficher dans le compte rendu de l'import."""
@@ -1855,18 +1888,21 @@ def sync_exam_objectives(user, at: datetime, changes: dict[str, dict]) -> list[s
         except Exception:  # noqa: BLE001 - module QCM indisponible : l'import passe quand même
             current_app.logger.exception("Dates d'examen des QCM après un import")
             continue
-        moved, prepared, cleared = {}, 0, 0
+        moved, carried, prepared, cleared = {}, {}, 0, 0
         for deck in decks:
             d = deck.date_objectif
             if d in old:  # la date suivait un contrôle qui a bougé ou disparu
                 target = row["moves"].get(d)
+                bucket = moved if target in dates else carried  # contrôle déplacé, ou retiré
                 target = target if target in dates else nxt
                 if target is None:
+                    if deck.auto_quota and quota_off is not None:
+                        quota_off.append(deck.set_id)
                     deck.date_objectif, deck.auto_quota = None, False
                     cleared += 1
                 else:
                     deck.date_objectif = target
-                    moved[(d, target)] = moved.get((d, target), 0) + 1
+                    bucket[(d, target)] = bucket.get((d, target), 0) + 1
             elif touched and nxt is not None and (d is None or d < today):
                 deck.date_objectif = nxt
                 prepared += 1
@@ -1874,6 +1910,9 @@ def sync_exam_objectives(user, at: datetime, changes: dict[str, dict]) -> list[s
         for (d, target), n in sorted(moved.items()):
             notes.append(f"{name} : contrôle déplacé du {d:%d/%m} au {target:%d/%m}, date d’examen recalée pour "
                          f"{n} set(s) de QCM.")
+        for (d, target), n in sorted(carried.items()):
+            notes.append(f"{name} : contrôle du {d:%d/%m} retiré : date d’examen reportée au prochain contrôle "
+                         f"({target:%d/%m}) pour {n} set(s) de QCM.")
         if prepared:
             notes.append(f"{name} : date d’examen fixée au {nxt:%d/%m} (prochain contrôle) pour {prepared} set(s) "
                          "de QCM.")
