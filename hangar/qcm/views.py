@@ -179,7 +179,7 @@ def index():
                         "categories": par_langue.get(nom, []),
                         "noms_dossiers": sorted({d["nom"] for d in dossiers} | {c["nom"] for c in par_langue.get(nom, [])}, key=str.lower)})
     act = Activite.resume(uid, quiz.jour(now))
-    examens = services.objectifs_par_categorie(services.objectifs(uid, library, e["decks"], now, 60))
+    examens = services.objectifs_par_categorie(services.objectifs(uid, library, e["decks"], now, 60, tous=e["tous"]))
     return render_template(
         "qcm/index.html", categories=categories, langues=langues, total_sets=len(library.sets),
         total_paquets=len(library.langues), etat=e, act=act, examens=examens[:4], errors=library.errors, q=q,
@@ -356,7 +356,7 @@ def stats():
     for x in e["sets"]:
         categories.setdefault(x["set"].categorie, []).append({"set": x["set"], "summary": x["summary"]})
     aujourdhui = quiz.jour(now)
-    prev = services.previsions(uid, library, now)
+    prev = services.previsions(uid, library, now, tous=e["tous"])
     semaines, temps, temps_totaux = TempsRevision.tableau(uid, aujourdhui)
     calendrier = Activite.calendrier(uid, aujourdhui)
     temps_max = max([l["total"] for l in temps] + [1])
@@ -403,10 +403,10 @@ def aujourdhui():
     e = services.etat_page(uid)
     sets_dus = sorted((x for x in e["sets"] if x["summary"]["a_reviser"]),
                       key=lambda x: (-x["revisions"], -x["summary"]["a_reviser"], x["set"].titre.lower()))
-    examens = services.objectifs(uid, e["library"], e["decks"], now)
+    examens = services.objectifs(uid, e["library"], e["decks"], now, tous=e["tous"])
     activite = Activite.resume(uid, jour)
     objectif = ObjectifRevision.de(uid)
-    prev = services.previsions(uid, e["library"], now, 7)
+    prev = services.previsions(uid, e["library"], now, 7, tous=e["tous"])
     return render_template(
         "qcm/aujourdhui.html", jour=jour, etat=e, sets_dus=sets_dus[:10], autres_sets=max(0, len(sets_dus) - 10),
         langues=e["langues"], examens=examens, activite=activite, objectif=objectif,
@@ -459,11 +459,14 @@ def planning_page():
         return redirect(retour)
     now = quiz.maintenant()
     e = services.etat_page(uid)
-    tous = QuizProgress.map_all(uid)
+    tous = e["tous"]  # progression déjà lue par etat()
+    estimations = {}
     categories: dict = {}
     for x in e["sets"]:
         deck = QuizDeck.pour(e["decks"], uid, x["set"].id)
         est = planning.estimer(x["set"], tous.get(x["set"].id, {}), deck, now) if deck.configure else None
+        if est is not None:
+            estimations[x["set"].id] = est
         cat = categories.setdefault((x["set"].langue, x["set"].categorie), {
             "nom": x["set"].categorie, "langue": x["set"].langue, "sets": [], "dates": set()})
         cat["sets"].append({"set": x["set"], "summary": x["summary"], "deck": deck, "e": est, "ancre": ancre(x["set"].id)})
@@ -475,7 +478,9 @@ def planning_page():
         c["configures"] = sum(1 for s in c["sets"] if s["deck"].configure)
         c["ancre"] = "cat-" + ancre(c["nom"])[4:]
         cats.append(c)
-    examens = services.objectifs_par_categorie(services.objectifs(uid, e["library"], e["decks"], now))
+    # Les sets datés ont déjà leur estimation (boucle ci-dessus) : pas de seconde simulation.
+    examens = services.objectifs_par_categorie(services.objectifs(uid, e["library"], e["decks"], now, tous=tous,
+                                                                  estimations=estimations))
     return render_template("qcm/planning.html", categories=cats, examens=examens, today=quiz.jour(now))
 
 

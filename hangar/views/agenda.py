@@ -69,15 +69,23 @@ def _agenda_context():
 
 def _payloads(events=(), tasks=()):
     recent = A.recent_import_ids(current_user)
+    # Rappels, tâches liées et liens de matière de toute la page : quelques requêtes, pas trois par séance.
+    pre = A.preload_payloads(current_user, events, tasks)
     evs = {}
     for e in events:
         if e is not None and e.id not in evs:
-            evs[e.id] = A.event_payload(e, recent, url_for)
+            evs[e.id] = A.event_payload(e, recent, url_for, pre)
     tks = {}
     for t in tasks:
         if t is not None and t.id not in tks:
             tks[t.id] = A.task_payload(t, url_for)
-    return {"events": evs, "tasks": tks}, recent
+    data = {"events": evs, "tasks": tks}
+    if evs:
+        try:  # listes des fenêtres de détail (collections du wiki, catégories de QCM), une seule fois
+            data.update(A.subject_lists(current_user))
+        except Exception:  # noqa: BLE001 - la fenêtre de détail reste utilisable sans les listes
+            pass
+    return data, recent
 
 
 def _week_objects(w):
@@ -118,8 +126,9 @@ def dashboard():
 def _qcm_resume():
     """Révisions du jour (module QCM) pour le tableau de bord ; None si le module est indisponible."""
     try:
-        from ..qcm.services import resume_du_jour
-        return resume_du_jour(current_user)
+        from ..qcm.services import etat_du_jour_page, resume_du_jour
+        # État des QCM partagé avec les liens des séances (cartes dues par catégorie) : calculé une fois.
+        return resume_du_jour(current_user, e=etat_du_jour_page(current_user.id))
     except Exception:  # le tableau de bord ne doit jamais tomber à cause d'un module
         from flask import current_app
         current_app.logger.exception("Résumé des QCM pour le tableau de bord")

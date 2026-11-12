@@ -1435,8 +1435,11 @@
     const sec = $('[data-em-links-section]', emModal);
     const box = $('[data-em-links]', emModal);
     const L = ev.links || {};
-    const hasWiki = L.wiki || (L.wikiAll || []).length;
-    const hasQcm = L.qcm || (L.qcmAll || []).length;
+    // Listes complètes : une seule fois à la racine des données de la page (sinon dans la séance)
+    const wikiAll = L.wikiAll || (L.subject !== undefined && !L.wiki ? AG().wikiAll || [] : []);
+    const qcmAll = L.qcmAll || (L.subject !== undefined && !L.qcm ? AG().qcmAll || [] : []);
+    const hasWiki = L.wiki || wikiAll.length;
+    const hasQcm = L.qcm || qcmAll.length;
     sec.hidden = !(hasWiki || hasQcm);
     if (sec.hidden) { box.innerHTML = ''; return; }
     const next = esc(location.pathname + location.search);
@@ -1446,13 +1449,13 @@
     if (L.wiki) {
       html += `<div class="em-link"><span class="em-link-k">Cours</span><a class="em-link-v" href="${esc(L.wiki.url)}">${esc(L.wiki.label)}</a>${form('wiki_path', '', 'Délier', 'btn btn-ghost btn-xs')}</div>`;
     } else if (hasWiki) {
-      html += `<div class="em-link"><span class="em-link-k">Cours</span><span class="em-link-sug">${(L.wikiSuggest || []).map((p) => form('wiki_path', p, `${esc(p.split('/').pop())} ?`, 'btn btn-xs em-sug')).join('')}${picker('wiki_path', L.wikiAll || [], 'Choisir une collection du wiki…')}</span></div>`;
+      html += `<div class="em-link"><span class="em-link-k">Cours</span><span class="em-link-sug">${(L.wikiSuggest || []).map((p) => form('wiki_path', p, `${esc(p.split('/').pop())} ?`, 'btn btn-xs em-sug')).join('')}${picker('wiki_path', wikiAll, 'Choisir une collection du wiki…')}</span></div>`;
     }
     if (L.qcm) {
       html += `<div class="em-link"><span class="em-link-k">QCM</span><a class="em-link-v" href="${esc(L.qcm.url)}">${esc(L.qcm.label)}</a>${L.qcm.due ? `<span class="badge badge-accent">${L.qcm.due} à revoir</span>` : ''}${form('qcm_category', '', 'Délier', 'btn btn-ghost btn-xs')}</div>`;
       if (ev.exam && !ev.removed) html += `<form method="post" action="${esc(ev.urls.exam)}" class="em-link-exam"><input type="hidden" name="_csrf" value="${esc(H.csrf)}"><input type="hidden" name="next" value="${next}"><button class="btn btn-sm btn-primary">Préparer ce contrôle : date d’examen des QCM au ${esc(ev.date.split('-').reverse().join('/'))}</button></form>`;
     } else if (hasQcm) {
-      html += `<div class="em-link"><span class="em-link-k">QCM</span><span class="em-link-sug">${(L.qcmSuggest || []).map((c) => form('qcm_category', c, `${esc(c)} ?`, 'btn btn-xs em-sug')).join('')}${picker('qcm_category', L.qcmAll || [], 'Choisir une catégorie de QCM…')}</span></div>`;
+      html += `<div class="em-link"><span class="em-link-k">QCM</span><span class="em-link-sug">${(L.qcmSuggest || []).map((c) => form('qcm_category', c, `${esc(c)} ?`, 'btn btn-xs em-sug')).join('')}${picker('qcm_category', qcmAll, 'Choisir une catégorie de QCM…')}</span></div>`;
     }
     box.innerHTML = html;
   }

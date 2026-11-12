@@ -528,6 +528,24 @@ class IssueRelation(db.Model):
     related = db.relationship("Issue", foreign_keys=[related_id])
 
 
+def blockers_map(issue_ids) -> dict:
+    """{id du ticket : bloqueurs encore ouverts}, comme `Issue.blockers`, mais en une requête pour
+    tous les tickets affichés (tableau kanban, bilan) au lieu d'une par ticket."""
+    from sqlalchemy.orm import selectinload
+    ids = sorted(set(issue_ids))
+    out = {i: [] for i in ids}
+    for k in range(0, len(ids), 500):  # limite de paramètres d'une requête SQLite
+        rels = (IssueRelation.query
+                .filter(IssueRelation.issue_id.in_(ids[k:k + 500]), IssueRelation.relation_type == "blocked_by")
+                .options(selectinload(IssueRelation.related).selectinload(Issue.state),
+                         selectinload(IssueRelation.related).selectinload(Issue.project))
+                .order_by(IssueRelation.id))
+        for r in rels:
+            if r.related is not None and not r.related.is_closed:
+                out[r.issue_id].append(r.related)
+    return out
+
+
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     issue_id = db.Column(db.Integer, db.ForeignKey("issue.id", ondelete="CASCADE"), nullable=False, index=True)

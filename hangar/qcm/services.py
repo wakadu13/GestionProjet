@@ -123,13 +123,19 @@ def dossier_de(set_langue):
     return (set_langue.path.parent.name if set_langue.path else "") or quiz.CATEGORIE_DEFAUT
 
 
-def previsions(user_id, library, now, jours=JOURS_PREVISION):
-    """Révisions à venir (QCM et langues) : une case par jour, les retards comptés aujourd'hui."""
+def previsions(user_id, library, now, jours=JOURS_PREVISION, tous=None):
+    """Révisions à venir (QCM et langues) : une case par jour, les retards comptés aujourd'hui.
+
+    `tous` : progression du compte déjà chargée (`etat()["tous"]`), sinon relue ici."""
     aujourdhui = quiz.jour(now)
     compteurs = [0] * jours
     connus = set(library.sets) | set(library.langues)
-    for p in QuizProgress.query.filter(QuizProgress.user_id == user_id, QuizProgress.last_review.isnot(None)):
-        if p.set_id not in connus:
+    if tous is not None:
+        lignes = (p for d in tous.values() for p in d.values())
+    else:
+        lignes = QuizProgress.query.filter(QuizProgress.user_id == user_id, QuizProgress.last_review.isnot(None))
+    for p in lignes:
+        if p.last_review is None or p.set_id not in connus:
             continue
         echeance = p.echeance or (p.last_review + timedelta(days=quiz.INTERVALLES_JOURS.get(p.box, 30)))
         d = (quiz.jour(echeance) - aujourdhui).days
@@ -165,7 +171,8 @@ def etat_page(user_id):
 
 
 def etat(user_id, now=None, library=None):
-    """Tout ce qui est dû pour un compte : par set, par langue, totaux."""
+    """Tout ce qui est dû pour un compte : par set, par langue, totaux. `tous` : la progression lue
+    ({set_id: {question_id: QuizProgress}}), que la page peut réutiliser sans relire la table."""
     now = now or quiz.maintenant()
     library = library or bibliotheque(user_id)
     decks = QuizDeck.map_for(user_id)
@@ -197,13 +204,16 @@ def etat(user_id, now=None, library=None):
     out = {"sets": sets, "langues": langs, **tot,
            "langues_a_revoir": sum(l["a_revoir"] for l in langs),
            "langues_nouveaux": sum(l["nouveaux"] for l in langs),
-           "decks": decks, "library": library}
+           "decks": decks, "library": library, "tous": tous}
     out["cartes_dues"] = out["revisions"] + out["langues_a_revoir"]
     return out
 
 
-def objectifs(user_id, library, decks, now, jours_max=None):
-    """Examens à venir (date d'examen d'un set), avec l'estimation du planning."""
+def objectifs(user_id, library, decks, now, jours_max=None, tous=None, estimations=None):
+    """Examens à venir (date d'examen d'un set), avec l'estimation du planning.
+
+    `tous` : progression du compte déjà chargée (`etat()["tous"]`) ; `estimations` : {set_id :
+    estimation} déjà calculées par la page (planning), pour ne pas refaire la simulation."""
     jour = quiz.jour(now)
     out = []
     for deck in decks.values():
@@ -214,7 +224,10 @@ def objectifs(user_id, library, decks, now, jours_max=None):
         qset = library.get(deck.set_id)
         if qset is None:
             continue
-        e = planning.estimer(qset, QuizProgress.map_for(user_id, qset.id), deck, now)
+        e = (estimations or {}).get(qset.id)
+        if e is None:
+            progress = tous.get(qset.id, {}) if tous is not None else QuizProgress.map_for(user_id, qset.id)
+            e = planning.estimer(qset, progress, deck, now)
         out.append({"set": qset, "date": deck.date_objectif, "jours": (deck.date_objectif - jour).days, "e": e})
     out.sort(key=lambda x: (x["date"], x["set"].titre.lower()))
     return out
@@ -237,7 +250,50 @@ def objectifs_par_categorie(examens):
     return out
 
 
-def resume_du_jour(user, jour=None) -> dict:
+def _fin_de_journee(jour=None, maintenant=None):
+    """(jour, instant du calcul) : `jour` (aujourd'hui par défaut) est résumé à sa fin, pour compter
+    les cartes qui arrivent à échéance plus tard dans la journée comme dues « ce jour-là »."""
+    maintenant = maintenant or quiz.maintenant()
+    jour = jour or maintenant.date()
+    return jour, max(maintenant, datetime.combine(jour, time(23, 59)))
+
+
+def etat_du_jour(user_id, jour=None):
+    """`etat()` à la fin du jour `jour` (aujourd'hui par défaut) : celui du résumé du jour."""
+    return etat(user_id, _fin_de_journee(jour)[1])
+
+
+def etat_du_jour_page(user_id):
+    """`etat_du_jour()` d'aujourd'hui, calculé une fois par requête : le tableau de bord de l'agenda
+    (résumé des QCM) et les liens des séances (cartes dues par catégorie) le partagent."""
+    if not has_request_context():
+        return etat_du_jour(user_id)
+    deja = getattr(request, "_qcm_etat_jour", None)  # sur la requête (g peut survivre à plusieurs requêtes)
+    if deja is not None and deja[0] == user_id:
+        return deja[1]
+    e = etat_du_jour(user_id)
+    request._qcm_etat_jour = (user_id, e)
+    return e
+
+
+def cartes_du_set(x) -> int:
+    """Cartes à réviser aujourd'hui pour une ligne de `etat()["sets"]` : révisions dues et nouvelles
+    prévues par le quota du set."""
+    return x["revisions"] + (x["summary"]["nouvelles"] if x["summary"]["quota_nouvelles"] else 0)
+
+
+def cartes_par_categorie(e) -> dict:
+    """{catégorie : cartes à réviser} d'après `etat_du_jour()` (même compte que `par_set` du résumé
+    du jour, sans l'estimation des examens)."""
+    out: dict = {}
+    for x in e["sets"]:
+        n = cartes_du_set(x)
+        if n:
+            out[x["set"].categorie] = out.get(x["set"].categorie, 0) + n
+    return out
+
+
+def resume_du_jour(user, jour=None, e=None) -> dict:
     """Ce qu'il y a à réviser pour un compte (tableau de bord de l'agenda, résumé quotidien).
 
     Clés : `cartes_dues` (révisions dues : cartes déjà vues revenues à échéance, QCM et langues),
@@ -249,17 +305,17 @@ def resume_du_jour(user, jour=None) -> dict:
     statut, url}] (examens à moins de 14 jours) ; `url` (/qcm/aujourdhui/), `url_reviser`.
 
     `jour` : le jour résumé (aujourd'hui par défaut) ; pour un autre jour, l'état est calculé
-    à la fin de ce jour-là (cartes qui arriveront à échéance dans la journée comprises)."""
+    à la fin de ce jour-là (cartes qui arriveront à échéance dans la journée comprises).
+    `e` : `etat_du_jour()` de ce jour déjà calculé par la page, sinon calculé ici."""
     maintenant = quiz.maintenant()
-    jour = jour or maintenant.date()
-    # Cartes qui arrivent à échéance plus tard dans la journée : dues « ce jour-là ».
-    now = max(maintenant, datetime.combine(jour, time(23, 59)))
-    e = etat(user.id, now)
+    jour, now = _fin_de_journee(jour, maintenant)
+    if e is None:
+        e = etat(user.id, now)
     act = Activite.resume(user.id, maintenant.date())
     par_matiere: dict = {}
     par_set = []
     for x in e["sets"]:
-        cartes = x["revisions"] + (x["summary"]["nouvelles"] if x["summary"]["quota_nouvelles"] else 0)
+        cartes = cartes_du_set(x)
         if not cartes:
             continue
         par_matiere[matiere_de(x["set"])] = par_matiere.get(matiere_de(x["set"]), 0) + cartes
@@ -272,7 +328,7 @@ def resume_du_jour(user, jour=None) -> dict:
             par_matiere[l["nom"]] = par_matiere.get(l["nom"], 0) + l["a_revoir"]
     par_set.sort(key=lambda s: (-s["cartes"], s["titre"].lower()))
     exams = []
-    for x in objectifs(user.id, e["library"], e["decks"], now, JOURS_EXAMEN_PROCHE):
+    for x in objectifs(user.id, e["library"], e["decks"], now, JOURS_EXAMEN_PROCHE, tous=e.get("tous")):
         exams.append({"titre": x["set"].titre, "categorie": x["set"].categorie, "date": x["date"],
                       "jours": (x["date"] - jour).days, "statut": "pret" if x["e"].get("su") else x["e"].get("statut"),
                       "commencer_maintenant": bool(x["e"].get("commencer_maintenant")),

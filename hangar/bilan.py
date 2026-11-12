@@ -10,10 +10,11 @@ import io
 from datetime import date, datetime, timedelta
 
 from flask import url_for
+from sqlalchemy.orm import selectinload
 
 from .models import (
-    PRIORITY_LABELS, PRIORITY_ORDER, Activity, Comment, Issue, IssueRelation, Page,
-    Project, WorkLog,
+    PRIORITY_LABELS, PRIORITY_ORDER, Activity, Comment, Issue, Page,
+    Project, WorkLog, blockers_map,
 )
 from .utils import MONTHS_FULL, fmt_date, fmt_minutes, week_bounds
 
@@ -98,7 +99,12 @@ def compute_bilan(projects: list[Project], start: date, end: date, label: str | 
     pids = [p.id for p in projects] or [0]
     s_dt = datetime.combine(start, datetime.min.time())
     e_dt = datetime.combine(end, datetime.max.time())
-    issues = (Issue.query.filter(Issue.project_id.in_(pids), Issue.is_visible_clause()).all())
+    # Relations lues pour chaque ticket (assignés, étiquettes, modules…) chargées d'avance : quelques
+    # requêtes en tout au lieu de plusieurs par ticket.
+    issues = (Issue.query.filter(Issue.project_id.in_(pids), Issue.is_visible_clause())
+              .options(selectinload(Issue.assignees), selectinload(Issue.labels), selectinload(Issue.modules),
+                       selectinload(Issue.state), selectinload(Issue.project))
+              .all())
     live = [i for i in issues if i.archived_at is None]
     counted = [i for i in issues if i.state_group != "cancelled"]
 
@@ -115,9 +121,9 @@ def compute_bilan(projects: list[Project], start: date, end: date, label: str | 
     upcoming = sorted([i for i in open_now if i.target_date and max(today, start) <= i.target_date <= horizon],
                       key=lambda i: (i.target_date, PRIORITY_ORDER.get(i.priority, 9)))
     blocked = []
+    bloqueurs = blockers_map(i.id for i in open_now)
     for i in open_now:
-        bl = [r.related for r in IssueRelation.query.filter_by(issue_id=i.id, relation_type="blocked_by")
-              if not r.related.is_closed]
+        bl = bloqueurs[i.id]
         if bl:
             blocked.append({**_issue(i, today), "blockers": [b.key for b in bl]})
     unassigned_hot = [i for i in open_now if not i.assignees and i.priority in ("urgent", "high")]
