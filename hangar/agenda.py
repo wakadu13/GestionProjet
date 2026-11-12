@@ -1480,7 +1480,7 @@ def check_source(user: User, at: datetime | None = None, force: bool = False) ->
         cal = ics.parse(raw)
         if not cal.events:
             raise ics.ICSError("aucune séance dans le fichier")
-    except ics.ICSError as exc:
+    except ics.ICSError:
         return fail(f"le fichier {filename} n’est pas un emploi du temps lisible.")
     fp = calendar_fingerprint(cal)
     s.source_error = ""

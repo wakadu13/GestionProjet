@@ -5,14 +5,14 @@ import re
 import shutil
 import tempfile
 import unittest
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from hangar import agenda as A
 from hangar import controles as C
 from hangar import create_app, digest
 from hangar.extensions import db
-from hangar.models import AgendaEvent, AgendaGrade, AgendaSettings, AgendaTask, User
+from hangar.models import AgendaEvent, AgendaGrade, AgendaTask, User
 
 TITRE = "Techniques numériques"
 

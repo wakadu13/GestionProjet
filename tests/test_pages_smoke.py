@@ -43,6 +43,8 @@ SAUTEES = {
     "ai.provider_models": "tests/test_ai.py test_test_connection_and_model_lists (fournisseur d'IA simulé)",
     "ai.copie_photo": "tests/test_ai_revision.py test_copie",
     "ai.relire": "tests/test_ai_revision.py test_generer_qcm_brouillon_relecture_publication",
+    "agenda.feed": "tests/test_agenda_flux.py test_feed_by_secret_token",
+    "agenda.event_prepare": "tests/test_controles.py test_page_preparer",
 }
 
 # Pages qui ne répondent pas 200 dans le parcours, volontairement.
@@ -56,9 +58,10 @@ NON_200 = {
     "/aujourdhui/": 302, "/claude/reglages/": 302, "/compte/": 302, "/compte/mot-de-passe/": 302,
     "/connexion/": 302, "/inscription/": 302, "/utilisateurs/": 302,
     "/settings/backup/download": 302,  # sans ?name= : retour à la page des sauvegardes (la copie demande un POST)
-    "/qcm/generer/": 302, "/qcm/importer-vocabulaire/": 302,  # aucune IA réglée : renvoi vers les réglages
+    "/qcm/generer/": 302, "/qcm/importer-vocabulaire/": 302, "/ia/kit/": 302,  # aucune IA réglée : renvoi vers les réglages
     # Sans ?set= ni coffre de QCM : page introuvable (avec un set : tests/test_qcm.py)
     "/qcm/jouer/": 404, "/qcm/exporter/": 404,
+    "/settings/certificat-hangar.crt": 404,  # Caddy jamais lancé : aucun certificat (tests/test_reseau_https.py)
     "/hors-ligne/dossier.json": 404,  # sans coffre prêt pour le hors-ligne (tests/test_wiki_parite.py)
 }
 
@@ -70,6 +73,7 @@ PUBLIQUES = {
     "/hors-connexion/",       # page affichée par le service worker quand le serveur ne répond pas
     "/sw.js", "/qcm/sw.js", "/manifest.webmanifest", "/qcm/manifest.webmanifest",
     "/icones.svg",
+    "/settings/certificat-hangar.crt",  # certificat public de Caddy, à installer sur le téléphone avant de se connecter
     "/connexion/", "/inscription/",  # alias de /login et /signup
 }
 

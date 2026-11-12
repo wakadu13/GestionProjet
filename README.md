@@ -19,6 +19,8 @@ Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochai
 
 Il affiche aussi « Mes tickets » : tes tickets de projet en retard ou à rendre dans les 7 jours. L'icône « Travail » porte une pastille pour les tickets en retard ou à rendre aujourd'hui.
 
+L'agenda montre aussi le travail d'équipe : les échéances de tes tickets ouverts et la fin des sprints de tes projets s'affichent dans le bandeau « journée » de la semaine, dans les vues mois et liste et dans « Aujourd'hui ». Le « + » d'un ticket (ou « Bloquer un créneau » sur sa fiche) crée une tâche avec le titre et le lien du ticket.
+
 **Importer l'emploi du temps chaque semaine** (menu *Emploi du temps*, ou le bandeau du tableau de bord)
 - Dépose le fichier `.ics` exporté de ton planning. **Le dernier fichier importé fait foi** :
   - chaque séance est reconnue par son identifiant (`UID`) : si l'horaire, la salle ou l'intervenant changent, elle est **mise à jour** et marquée « modifiée » (avant → après) ;
@@ -28,15 +30,17 @@ Il affiche aussi « Mes tickets » : tes tickets de projet en retard ou à rendr
   - chaque import a sa page de détail (ajouts, modifications, retraits) et le **dernier import peut être annulé** (les rappels des séances, y compris celui des contrôles, reviennent aussi). Le fichier d'origine est conservé.
 - Format de l'école reconnu : `Réseaux avancés 3 CM` → matière, n° de séance, type (CM, TD/TP, contrôle écrit, sport, militaire, conférence…) ; `(PREVISION)` → séance prévisionnelle (hachurée) ; rubriques `Apprenants` et `Intervenants` de la description. Les autres fichiers `.ics` (Google Agenda, Outlook…) fonctionnent aussi.
 - En ligne de commande : `uv run hangar agenda-import planning.ics` (option `--mode future` pour remplacer tout le planning à venir, `--mode merge` pour ne rien retirer).
+- **Récupération automatique** (administrateur, *Emploi du temps › Récupérer le planning tout seul*) : Hangar surveille un dossier (par exemple Téléchargements ; le fichier `.ics` le plus récent compte) ou lit l'adresse d'abonnement `.ics` de l'école toutes les 3 heures, tant qu'il est lancé. Chaque nouveau fichier est importé comme un dépôt à la main (le dernier fait foi), avec une notification « Emploi du temps mis à jour : … ». Un planning identique n'est pas réimporté. Une invitation à une réunion (`METHOD:REQUEST` avec une ou deux séances) ou un `.ics` qui ne ressemble pas à ton emploi du temps est laissé de côté, pour ne rien retirer par erreur. Le bandeau « Nouveau planning ? » ne revient que si la source est muette depuis une semaine.
+- Une invitation importée à la main est seulement ajoutée : elle ne retire jamais les autres séances de sa semaine.
 
-**Calendrier** : vues semaine (grille horaire, ligne « maintenant »), mois et liste ; clic sur une séance pour ses détails, une note personnelle, un rappel ou une tâche liée ; clic sur un créneau libre pour créer une tâche à cette heure ; export `.ics` (cours et/ou tâches, avec les rappels) vers Google Agenda / Outlook / téléphone ; impression.
+**Calendrier** : vues semaine (grille horaire, ligne « maintenant »), mois et liste ; clic sur une séance pour ses détails, une note personnelle, un rappel ou une tâche liée ; clic sur un créneau libre pour créer une tâche à cette heure ; export `.ics` (cours, tâches et tickets, avec les rappels) vers Google Agenda / Outlook / téléphone ; impression. **S'abonner depuis mon téléphone** (*Emploi du temps*) : une adresse secrète, en lecture seule, à coller une fois dans l'agenda du téléphone (iPhone : Réglages › Calendrier › Comptes › Ajouter un calendrier avec abonnement ; Android : appli ICSx⁵) ou dans Outlook. Cours, contrôles, tâches et tickets s'y mettent à jour tout seuls. « Nouvelle adresse » rend l'ancienne inutilisable. Le téléphone doit pouvoir joindre le PC : même Wi-Fi, Hangar lancé avec `uv run hangar run --host 0.0.0.0` (ou en ligne). La page te prévient si ce n'est pas le cas.
 
 Les fichiers `.ics` exportés (agenda et « Calendrier (.ics) » des tickets) respectent la norme iCalendar (RFC 5545 : fuseau Europe/Paris décrit, textes échappés, lignes repliées). Les rappels d'une tâche sans heure sonnent à l'heure de référence (8 h par défaut), comme dans Hangar.
 
 **Tâches** : date, heure de début et de fin (ou journée entière), notes, priorité, catégorie, couleur, séance liée, **répétition** (tous les jours, du lundi au vendredi, chaque semaine, toutes les deux semaines, chaque mois, le même jour : une tâche du 31 revient le 31 quand le mois le permet — cocher l'occurrence passe à la suivante, avec un bouton « Annuler » en cas d'erreur), report rapide (demain, lundi, +1 semaine). Raccourci clavier `T`.
 
 **Rappels et e-mails** (menu *Rappels et e-mails*)
-- Rappels par tâche ou par séance : à l'heure, 15 min, 1 h, la veille, 2 jours, 1 semaine avant… ou à une date précise ; par **e-mail + notification** dans l'application, ou notification seule.
+- Rappels par tâche ou par séance : à l'heure, 15 min, 1 h, la veille, 2 jours, 1 semaine avant… ou à une date précise ; par **e-mail + notification** dans l'application, notification dans l'application seule, ou **notification sur mes appareils** : notification du système, même si Hangar est en arrière-plan. Pour cela, active l'appareil dans *Rappels et e-mails › Notifications sur cet appareil*. Ça marche tout de suite sur le PC où tourne Hangar ; sur un téléphone, il faut HTTPS (voir « Ouvrir Hangar sur ton téléphone »). C'est indépendant du rappel quotidien des QCM : couper l'un ne coupe pas l'autre.
 - **Résumé quotidien** par e-mail (activé par défaut à 7 h) : un seul message avec tout ce qu'il y a à faire — cours du jour (horaires, salles), tâches du jour et en retard, tickets de projet à échéance, cartes de QCM à réviser et examens proches, contrôles de la semaine, changements récents du planning, initiatives à risque. Le matin pour la journée, ou la veille au soir pour le lendemain ; rien n'est envoyé les jours vides ; aperçu dans *Agenda › Résumé quotidien*.
   - Si Hangar était fermé à l'heure prévue : le résumé du matin part à la première ouverture avant 18 h, puis plus du tout (pas de programme d'une journée finie). En mode soir, si le résumé n'a pas pu partir la veille, celui du jour part à la première ouverture du lendemain, avant 18 h. Le résumé du soir rappelle aussi ce qui reste à faire et à rendre aujourd'hui. Le récapitulatif hebdomadaire et le bilan du vendredi sont rattrapés au premier lancement suivant de la même semaine.
 - **« Aucun e-mail »** (profil) arrête tous les e-mails automatiques : notifications, rappels de l'agenda (la notification dans l'appli reste), résumé quotidien, e-mail après un import, récapitulatifs. Les e-mails que tu demandes toi-même (test, « M'envoyer le résumé maintenant ») partent quand même. Le résumé quotidien n'est pas activé pour un compte qui ne s'est jamais connecté.
@@ -45,7 +49,11 @@ Les fichiers `.ics` exportés (agenda et « Calendrier (.ics) » des tickets) re
 - Les rappels partent tant que Hangar est lancé (`uv run hangar`). Sous Windows, fais-le démarrer tout seul avec ta session : voir [Sous Windows](#sous-windows--démarrage-avec-la-session-et-mise-à-jour). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée (un rappel « à une date précise » part encore jusqu'à 24 h après son heure, même après l'échéance de la tâche). Une tâche répétée a un rappel à chaque occurrence, même si tu n'as pas coché la précédente.
 - Si un e-mail ne part pas à cause d'une panne passagère (Wi-Fi pas encore revenu au réveil du portable, serveur injoignable), Hangar réessaie seul après 1, 5, 15 puis 60 minutes, jusqu'à la fin de la séance ou de la tâche pour un rappel, jusqu'à la fin de la journée pour le résumé (24 h pour les autres e-mails). Un mot de passe refusé ou une adresse rejetée ne sont pas réessayés. Les e-mails en échec s'affichent dans *Rappels et e-mails* et sur le tableau de bord, avec un bouton « Renvoyer les échecs ».
 
-**Matières reliées au wiki et aux QCM** : dans la fenêtre d'une séance, relie la matière à sa collection du wiki et à sa catégorie de QCM (suggestions automatiques d'après le nom, le sigle ou l'intervenant). Pour un contrôle, « Préparer ce contrôle » fixe la date d'examen des QCM liés au jour du contrôle : les révisions s'organisent pour être prêt à temps.
+**Matières reliées au wiki et aux QCM** : dans la fenêtre d'une séance, relie la matière à sa collection du wiki et à sa catégorie de QCM (suggestions automatiques d'après le nom, le sigle ou l'intervenant). Pour un contrôle, la fenêtre mène à sa page « Préparer ce contrôle » (ci-dessous).
+
+- **Préparer un contrôle** : depuis « Contrôles à venir » (tableau de bord) ou depuis la fenêtre d'un contrôle, le bouton « Préparer ce contrôle » ouvre une page qui rassemble tout : le compte à rebours, les pages du cours relié (ouvertes ou non, avec le temps de lecture restant ; c'est une estimation, car une page compte comme lue dès qu'elle a été ouverte une fois et les PDF ne sont pas suivis), les sets de QCM de la matière avec leur maîtrise et leur statut pour le jour du contrôle, le temps déjà passé sur les QCM, les tâches liées, l'examen blanc et le bouton « Fixer la date d'examen des QCM ». Un statut (prêt, dans les temps, à commencer, en retard) apparaît aussi sur le tableau de bord et dans le résumé quotidien.
+- **Planifier mes révisions** : sur cette même page, Hangar propose des blocs « Réviser <matière> · N min ». Ils sont placés dans les créneaux libres de ton emploi du temps (hors cours et repas, jusqu'à 22 h), du jour où il faut commencer jusqu'à la veille du contrôle, et leur durée suit la charge du jour (QCM et lecture). Un clic les ajoute à ton agenda comme tâches liées au contrôle, sans rappel par e-mail. Après un nouvel import, les blocs qui tombent sur un cours sont replacés, et ceux d'un contrôle retiré du planning sont supprimés.
+- **Mes notes** (menu Agenda) : après un contrôle, saisis ta note (barème et coefficient) dans sa fenêtre ou sur sa page, ou ajoute à la main une note pour une épreuve absente de l'emploi du temps (sport, militaire…). La page montre la moyenne par matière et la moyenne générale (pondérées par les coefficients), leur évolution et, pour les matières reliées aux QCM, ta maîtrise des QCM le jour du contrôle (figée au début du contrôle) à côté de la note obtenue. Le tableau de bord rappelle les contrôles passés dont la note manque.
 
 Une fois la matière reliée à une catégorie de QCM, son prochain contrôle devient tout seul la date d'examen des sets sans date. Si un nouvel import avance, repousse ou retire le contrôle, la date d'examen suit (ou est effacée), et la page de l'import le dit. Une date que tu as choisie toi-même dans *QCM › Planning* n'est jamais modifiée. Annuler l'import remet les dates.
 
@@ -106,13 +114,15 @@ Bouton **Assistant IA** en haut à droite (ou Ctrl+J) : un panneau comme « Plan
 - Réponses en direct, « @ » pour ajouter du contexte, « / » pour les commandes ; l'assistant consulte tickets, tâches, agenda et wiki, et **propose des actions** que tu valides d'un clic : créer la tâche, créer le ticket, ajouter à la page, ajouter au cycle, changer une échéance.
 - Avant de valider une action, « Voir le contenu » montre le texte exact qui sera ajouté (bloc de page, description du ticket, notes de la tâche). L'assistant traite le contenu des pages, des PDF et des commentaires comme des données, jamais comme des consignes, et ses réponses ne chargent aucune image externe : une consigne cachée dans un document ne peut pas faire sortir tes données sans clic.
 - Fonctions d'IA de Revision : expliquer une réponse de QCM, corriger une réponse rédigée, générer un QCM ou des fiches de vocabulaire depuis un cours, « Demander au wiki » (réponses avec sources), tuteur d'une page, améliorer la rédaction dans l'éditeur, transformer un PDF ou du LaTeX en page, corriger une copie photographiée.
-- En ligne de commande : `hangar ia-fournisseurs`, `ia-ajouter ollama`, `ia-tester`, `ia-demander "…"`, `ia-usage`, `ia-travaux`.
+- En ligne de commande : `hangar ia-fournisseurs`, `ia-ajouter ollama`, `ia-tester`, `ia-demander "…"`, `ia-usage`, `ia-travaux`, `ia-evaluer`.
 - **Plafond mensuel** (*Réglages › Plafond et consignes*) : il compte aussi les **travaux en lot** dès leur dépôt (chaque lot réserve son coût au plus, remplacé par le coût réel à son retour) et les **réponses arrêtées en cours de route** (bouton Arrêter, coupure). Un nouveau travail est refusé quand le plafond est atteint. Un modèle Claude absent de la table des prix est compté au tarif le plus cher de sa famille, et les réglages affichent « Tarif inconnu » (y compris pour un service payant compatible OpenAI dont tu n'as pas saisi les prix).
 - **Travaux** (*IA › Travaux*) : « Annuler » arrête un travail en attente, en cours ou dans un lot (le lot est aussi annulé chez Anthropic ; ce qui est déjà traité reste facturé). Un lot impossible à récupérer (clé changée, lot expiré, plus de 29 jours) passe en échec et se relance d'un clic. `hangar run` reprend les travaux interrompus dès le démarrage.
 - **Pages longues** : l'IA reçoit les passages de la page qui parlent de ta question (ou un aperçu de toute la page pour « Interroge-moi » et « Résumer »), et sait qu'elle n'a que des extraits. La pastille du panneau affiche « page coupée ». Claude lit jusqu'à 80 000 caractères de la page ouverte, un modèle local 12 000.
 - **Réponses coupées** : une réponse arrêtée par la limite de longueur porte la mention « Réponse coupée ». Une explication de QCM coupée n'est pas gardée, et un administrateur peut refaire une explication gardée (« ↻ Refaire l'explication »).
 - **Ollama et mémoire** : par défaut, Ollama ne garde que 4 096 jetons et oublie le début d'une demande plus longue, sans prévenir. Hangar t'avertit quand c'est le cas. Pour lui donner plus de mémoire sous Windows : dans l'application Ollama, *Settings › Context length* ; ou crée la variable d'environnement utilisateur `OLLAMA_CONTEXT_LENGTH` = `16384` (menu Démarrer › « Modifier les variables d'environnement pour votre compte »), puis quitte Ollama (icône près de l'horloge › *Quit Ollama*) et relance-le.
 - **Clé d'API liée à l'adresse** : si tu changes l'adresse d'un fournisseur sans retaper sa clé, la clé enregistrée est effacée et n'est jamais envoyée au nouveau serveur. Une redirection vers un autre serveur est refusée.
+- **Qualité des réponses** (*IA › Fournisseurs et usage*) : après un 👎, dis en une phrase ce qui n'allait pas. Tu retrouves tes réponses notées 👎 avec ton commentaire, leur modèle et un lien vers la conversation, ainsi que les avis et le taux de questions de QCM écartées pour chaque modèle. Avant de changer de modèle ou de consignes, `hangar ia-evaluer` rejoue 10 cas fixes : dates (« vendredi », « lundi prochain »), outil choisi, consigne cachée dans une page, QCM valide, correction de réponses rédigées, citation des sources. Il donne le taux de réussite de chaque modèle et demande confirmation avant un passage payant (`--oui` pour ne pas la demander, `--cas tache-vendredi qcm-json` pour quelques cas).
+- **Kit de révision d'un contrôle** (bouton « Kit de révision » dans le sommaire d'un dossier du wiki, ou *IA › Travaux*) : il liste les pages de la matière qui n'ont pas encore de fiche ou de QCM, sans les sommaires ni les fiches. Décoche ce que tu ne veux pas : un set importé au titre proche est déjà décoché. L'écran montre le coût estimé et refuse au-delà de ce qui reste du plafond du mois. Un seul clic lance tout, en lot à moitié prix si tu veux. Les fiches sont écrites directement (« Page (Fiche) »), les QCM arrivent en brouillon à relire et prennent à leur publication la date du contrôle choisi. Une seule notification arrive à la fin du kit.
 
 ## Travail : initiatives et Workgraph
 
@@ -158,6 +168,7 @@ Les rappels, le résumé du matin et les notifications ne partent que si Hangar 
 - **`demarrer-avec-windows.bat`** (double-clic) : Hangar démarre tout seul, **sans fenêtre**, à chaque ouverture de ta session, et tout de suite. Pour l'ouvrir, double-clique sur `lancer.bat` (il voit que Hangar tourne et ouvre seulement le navigateur) ou va sur <http://127.0.0.1:5000>. Aucun droit d'administrateur n'est demandé : c'est un raccourci dans le dossier *Démarrage* de ta session.
 - **`ne-plus-demarrer-avec-windows.bat`** : annule, et arrête le Hangar qui tourne en arrière-plan.
 - **`mettre-a-jour.bat`** : fait une sauvegarde complète (dans `data\backups`, les 5 dernières sont gardées), récupère la nouvelle version (`git pull`), installe ce qu'il faut, puis relance Hangar. Il s'arrête sans rien changer si quelque chose cloche (pas d'Internet, fichiers de Hangar modifiés à la main, sauvegarde impossible).
+- **`partager-en-https.bat`** : installe Caddy si besoin, puis lance Hangar en HTTPS pour le téléphone (adresse et QR code affichés). Voir « Ouvrir Hangar sur ton téléphone ».
 
 Sans fenêtre, les messages d'erreur vont dans `data\journal\` : `hangar.log` (erreurs et avertissements) et `console.log` (ce qu'afficherait la fenêtre). Les erreurs des pages et des envois automatiques sont aussi listées pour les administrateurs sur la page des erreurs du serveur (`/erreurs/`).
 Sur `/erreurs/`, les mots de passe, clés et jetons sont masqués, y compris dans les erreurs enregistrées avant cette version : tu peux copier une trace pour demander de l'aide.
@@ -183,6 +194,34 @@ Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse
 **Sécurité des pages** : chaque réponse porte les en-têtes nosniff, X-Frame-Options et Referrer-Policy, et une politique de contenu (CSP) qui n'exécute que les scripts de Hangar, ne charge que ses images et ne se connecte qu'à Hangar. En cas de souci avec une page : `HANGAR_CSP=rapport` (les blocages sont seulement signalés dans la console du navigateur) ou `HANGAR_CSP=non`.
 
 > Sur le réseau local, la page de connexion montre la liste des comptes (« Qui es-tu ? »). Pour la cacher aux autres appareils du réseau, décoche le réglage dans *Réglages › Espace de travail*. Elle reste toujours visible sur cet ordinateur et n'est jamais montrée quand Hangar est en ligne. Au démarrage avec `--host 0.0.0.0`, Hangar rappelle que les échanges ne sont pas chiffrés : évite les Wi-Fi publics.
+
+## Ouvrir Hangar sur ton téléphone (HTTPS sur le Wi-Fi)
+
+L'application Android marche déjà en http (`uv run hangar run --host 0.0.0.0`). Mais dans le navigateur du téléphone, le wiki et les QCM hors ligne, ainsi que les notifications, ne marchent qu'en **HTTPS**. Pour les avoir :
+
+1. Ferme Hangar s'il est ouvert. Mets le téléphone sur le même Wi-Fi que l'ordinateur.
+2. Double-clique sur `scripts\partager-en-https.bat`. La première fois, il :
+   - installe **Caddy**, un petit serveur gratuit qui chiffre la connexion (avec winget ; sinon il le télécharge dans `data\outils\caddy.exe`) ;
+   - demande l'autorisation d'ouvrir le port 5443 dans le pare-feu de Windows, pour les réseaux privés seulement : accepte.
+   Ensuite, il lance Hangar avec `--lan-https`. Garde la fenêtre ouverte tant que tu utilises Hangar sur le téléphone.
+3. L'adresse du téléphone (par exemple `https://192.168.1.20:5443/`) s'affiche dans la fenêtre avec un **QR code**. Tu les retrouves aussi dans **Réglages › Profil › Sur ton téléphone**. Scanne le QR code avec l'appareil photo du téléphone.
+4. **La première fois seulement**, installe le certificat de Hangar sur le téléphone. Sinon, le navigateur affiche « Connexion non privée ».
+   - Au premier avertissement, touche « Paramètres avancés » puis « Continuer ».
+   - Télécharge le certificat : ajoute `settings/certificat-hangar.crt` à l'adresse, ou utilise le lien dans Réglages › Profil.
+   - **Android** : Paramètres › Sécurité › Chiffrement et identifiants › Installer un certificat › **Certificat CA**, puis choisis le fichier. Utilise Chrome (Firefox ignore ces certificats).
+   - **iPhone** : ouvre le lien avec Safari. Va dans Réglages › Profil téléchargé › Installer. Puis dans Réglages › Général › Informations › Réglages des certificats, active « Caddy Local Authority ».
+   - Pour vérifier que c'est bien ton certificat, compare l'empreinte SHA-256 affichée par le téléphone à celle de Réglages › Profil.
+   - Ferme puis rouvre le navigateur.
+
+Bon à savoir :
+- Si l'adresse IP de l'ordinateur change (autre box, autre Wi-Fi), relance simplement le script : le certificat est refait tout seul, et celui du téléphone reste valable.
+- Hangar n'écoute alors que cet ordinateur. Seul Caddy est ouvert au réseau, en HTTPS. Sur ce PC, continue d'ouvrir `http://127.0.0.1:5000`.
+- Si Windows règle ton Wi-Fi en « réseau public », le téléphone est bloqué : le script te prévient. Pour ton propre Wi-Fi, passe-le en Privé (Paramètres › Réseau et Internet › Wi-Fi › ton réseau › Type de profil réseau). Ne partage pas Hangar sur un Wi-Fi public.
+- Avant de partager, change les mots de passe de démonstration. Hangar affiche un avertissement tant qu'un compte les garde.
+- La première installation (création du premier compte administrateur, page `/setup`) se fait uniquement sur l'ordinateur où tourne Hangar. Elle est refusée depuis le réseau et à travers un proxy ou un tunnel. Sinon, utilise `uv run hangar create-admin`.
+- Le port 5443 est déjà pris ? Ajoute `--https-port 8443` à la commande. Les messages de Caddy sont dans `data\journal\caddy.log`.
+- Sans Internet pour l'installation, copie `caddy.exe` (caddyserver.com) dans `data\outils\`. Tu peux aussi donner son chemin dans la variable `HANGAR_CADDY`.
+- Autre possibilité, hors du Wi-Fi : Tailscale (`tailscale serve`) donne un certificat reconnu partout. Il faut un compte et l'appli Tailscale sur chaque appareil. Lance alors Hangar avec `--behind-proxy`.
 
 ## Mettre Hangar en ligne
 
@@ -272,6 +311,7 @@ Variables d'environnement reconnues :
 ```bash
 uv run hangar                       # lance le serveur (http://127.0.0.1:5000)
 uv run hangar run --port 8080       # autre port ; --host 0.0.0.0 pour le réseau local ; --no-browser
+uv run hangar run --lan-https       # ouvre Hangar au téléphone en HTTPS sur le Wi-Fi, avec Caddy (--https-port N, 5443 par défaut)
 uv run hangar demo                  # données de démonstration du projet EAE (affiche une fois le mot de passe provisoire)
 uv run hangar demo --force          # remplace la base par la démonstration (demande « oui », sauvegarde avant ; wiki gardé ; --yes)
 uv run hangar rebuild-docs          # recrée les tickets du projet EAE d'après les documents (sauvegarde avant)
@@ -290,6 +330,7 @@ uv run hangar ia-tester             # teste la connexion aux fournisseurs d'IA
 uv run hangar ia-demander "…"       # pose une question au modèle configuré
 uv run hangar ia-usage              # dépense et jetons de l'IA ce mois-ci
 uv run hangar ia-travaux            # fait les travaux d'IA en attente et récupère les lots terminés
+uv run hangar ia-evaluer            # rejoue 10 cas fixes sur chaque fournisseur d'IA et donne le taux de réussite par modèle (confirmation avant un passage payant ; --oui, --cas)
 uv run hangar mail-test adresse@ex.fr  # e-mail de test
 uv run hangar backup                # sauvegarde de la base seule dans data/backups/
 uv run hangar backup --complet --vers E:\Sauvegardes --garder 10   # sauvegarde complète (.zip) ailleurs, garde les 10 dernières ; --sans-secrets
@@ -299,6 +340,20 @@ uv run hangar create-admin          # crée ou répare un compte administrateur
 uv run hangar --data /chemin run    # utiliser un autre dossier de données
 uv run python -m unittest discover -s tests   # tests (lancés aussi par GitHub Actions sous Linux et Windows)
 ```
+
+### Vérifications automatiques (CI)
+
+À chaque envoi sur GitHub, la CI (`.github/workflows/tests.yml`) lance la suite sous Ubuntu (Python 3.11 et 3.13) et sous Windows (Python 3.13). Elle fait aussi les contrôles suivants :
+
+- **Vérification du code** : `uvx ruff@0.17.4 check --no-cache --select F,E9 hangar tests`. Elle repère les noms inconnus, les imports inutiles et les erreurs de syntaxe, même dans une partie du code qu'aucun test n'exécute. Lance la même commande chez toi avant d'envoyer.
+- **Toutes les pages** (`tests/test_pages_smoke.py`) : chaque page doit vraiment s'afficher (code 200). Les exceptions voulues sont écrites dans `NON_200`. Une page que le parcours ne visite pas doit figurer dans `SAUTEES`, avec le test qui la couvre. Sans session, chaque page doit renvoyer vers la connexion, sauf celles de la liste `PUBLIQUES`. Quand tu ajoutes une page, ajoute ses paramètres dans `par_route` ou une ligne dans l'une de ces listes.
+- **Lancement réel** : `tests/test_outillage.py` démarre `hangar run` sur un port libre et vérifie que le serveur répond.
+- **Mise à jour** : le même fichier ouvre une base à laquelle il manque des colonnes et des tables. Elle doit être mise à niveau au démarrage, sans aucune action de ta part.
+- En cas d'échec, les journaux des commandes sont joints au job, dans « Artifacts ».
+
+**Numéro de version** : il est écrit à un seul endroit, `__version__` dans `hangar/__init__.py`. `pyproject.toml` le lit à cet endroit. Pour publier une version, change seulement cette ligne.
+
+**Dépendances** : Dependabot (`.github/dependabot.yml`) propose chaque semaine les mises à jour de `uv.lock` et des actions GitHub. Chaque proposition est testée par la CI avant que tu l'acceptes.
 
 ## Où sont les données ?
 
