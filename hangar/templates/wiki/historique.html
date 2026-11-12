@@ -19,8 +19,13 @@
 {% block content %}
 <div class="wiki">
   <h1 class="wiki-doc-title">Historique de « {{ note.title }} »</h1>
-  <p class="muted">Chaque enregistrement qui modifie la page garde le texte précédent ({{ max_versions }} versions au plus,
-    hors du coffre). Choisis une version pour voir ce qui a changé depuis, et la restaurer au besoin.</p>
+  <p class="muted">Chaque enregistrement qui modifie la page garde le texte précédent, hors du coffre. Quand tu écris
+    d'une traite, une version est gardée au début de ta séance puis toutes les 10 minutes ; en vieillissant, il en reste
+    une par heure, puis une par jour, une par semaine et enfin une par mois. Une restauration, une mise à la corbeille,
+    un import ou une page modifiée par l'assistant IA garde toujours sa propre version ; après « ✦ Améliorer »,
+    l'enregistrement suivant garde aussi le texte d'avant l'IA. Au plus {{ max_versions }} versions par page :
+    au-delà, les plus anciennes partent, sauf la toute première.</p>
+  <p class="muted">Choisis une version pour voir ce qui a changé depuis, et la restaurer au besoin.</p>
   {% if not versions %}
   <div class="callout" data-callout="info"><div class="callout-title">Aucune version précédente : la page n'a pas encore été modifiée depuis le wiki.</div></div>
   {% else %}

@@ -325,14 +325,21 @@ def edit(path):
         else:
             if not file.resolve().is_relative_to(vault.root.resolve()):
                 abort(400)
+            # « seance » : l'éditeur a déjà enregistré un changement depuis son ouverture ; la
+            # version vérifiée ci-dessus prouve alors que la page contient encore son propre texte,
+            # et ses enregistrements rapprochés peuvent être regroupés dans l'historique.
+            seance = request.form.get("seance") == "1"
+            change = True
             try:
                 file.parent.mkdir(parents=True, exist_ok=True)
                 if file.is_file():
                     # Page d'un autre encodage (« ANSI » du Bloc-notes…) : enregistrée en UTF-8, et
-                    # son texte d'origine gardé dans l'historique même s'il n'a pas changé.
+                    # son texte d'origine gardé dans l'historique (jamais regroupé) même s'il n'a pas changé.
                     ancien, ancien_encodage = lire_note(file)
-                    if ancien != content or ancien_encodage != "utf-8":
-                        historique.sauvegarder(f"{key}.md", ancien, current_user.username)
+                    change = ancien != content
+                    if change or ancien_encodage != "utf-8":
+                        historique.sauvegarder(f"{key}.md", ancien, current_user.username, edition=True,
+                                               regrouper=seance and ancien_encodage == "utf-8")
                 file.write_text(content, encoding="utf-8", newline="\n")
             except OSError:
                 error = FICHIER_INACCESSIBLE + " Ton texte est toujours dans l'éditeur."
@@ -342,7 +349,8 @@ def edit(path):
                 commun.noter_visite(key, modifiee=True)
                 if wants_json():
                     # Ctrl+S dans l'éditeur : on reste sur la page, avec la nouvelle version.
-                    return jsonify(ok=True, version=str(file.stat().st_mtime_ns), url=url_for("wiki.page", path=key))
+                    return jsonify(ok=True, version=str(file.stat().st_mtime_ns), url=url_for("wiki.page", path=key),
+                                   seance="1" if change or seance else "")
                 flash("Page enregistrée.", "success")
                 return redirect(url_for("wiki.page", path=key))
     elif file.is_file():
@@ -823,7 +831,10 @@ def pdf_annotation():
                 ancien, _ = lire_note(fichier)
             except OSError:
                 return jsonify(ok=False, error=FICHIER_INACCESSIBLE), 409
-            historique.sauvegarder(fichier.relative_to(vault.root).as_posix(), ancien, current_user.username)
+            # Ajout à la fin : l'ancien texte reste entier dans la page, les citations prises
+            # d'affilée peuvent donc partager une version.
+            historique.sauvegarder(fichier.relative_to(vault.root).as_posix(), ancien, current_user.username,
+                                   edition=True, regrouper=True)
             nouveau = ancien.rstrip("\n") + "\n\n" + citation
             titre = note.title if note is not None else cle.rsplit("/", 1)[-1]
         else:

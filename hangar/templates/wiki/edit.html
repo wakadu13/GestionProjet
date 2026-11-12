@@ -27,6 +27,7 @@
   <form method="post" id="editor-form" data-preview-url="{{ preview_url }}" data-import-url="{{ import_url }}" data-latex-url="{{ latex_url }}"{% if ameliorer_url %} data-ameliorer-url="{{ ameliorer_url }}"{% endif %} data-note-key="{{ key }}" data-note-name="{{ name }}">
     {{ ui.csrf() }}
     <input type="hidden" name="version" value="{{ version }}">
+    <input type="hidden" name="seance" value="" autocomplete="off">
     <div class="toolbar" role="toolbar" aria-label="Mise en forme" hidden>
       <div class="toolbar-group">
         <button type="button" class="button" data-action="undo" title="Annuler (Ctrl+Z)" aria-label="Annuler">↶</button>
