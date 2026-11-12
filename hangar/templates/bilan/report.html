@@ -56,13 +56,13 @@
         <div class="flex wrap gap-4">
         {% for u in members %}
           {% if u.contact_email %}<label class="checkbox tag" style="height:28px"><input type="checkbox" name="user_ids" value="{{ u.id }}" checked>{{ ui.avatar(u, 18) }} {{ u.display_name }}</label>
-          {% else %}<span class="tag muted" title="Pas d’adresse e-mail renseignée (profil ou Paramètres › E-mails)">{{ ui.avatar(u, 18) }} {{ u.display_name }} — sans adresse</span>{% endif %}
+          {% else %}<span class="tag muted" title="Pas d’adresse e-mail renseignée (Réglages › Profil, ou Réglages › Envoi des e-mails)">{{ ui.avatar(u, 18) }} {{ u.display_name }} — sans adresse</span>{% endif %}
         {% endfor %}
         </div>
       </div>
       <div class="field"><label>Autres destinataires</label><input class="input" name="others" placeholder="encadrant@exemple.fr, dpo@exemple.fr"><span class="help">Séparés par des virgules.</span></div>
       <div class="field"><label>Message d’accompagnement</label><textarea class="input" name="message" rows="3" placeholder="Bonjour, voici le bilan de la période…"></textarea></div>
-      <p class="help">Le bilan complet (indicateurs, réalisations, retards, jalons, sections rédigées) est inclus dans le corps du message. Configuration de l’envoi : menu de l’espace › E-mails automatiques.</p>
+      <p class="help">Le bilan complet (indicateurs, réalisations, retards, jalons, sections rédigées) est inclus dans le corps du message. Configuration de l’envoi : Réglages › Envoi des e-mails.</p>
     </div>
     <div class="modal-f"><div class="right"><button type="button" class="btn" data-close>Annuler</button><button class="btn btn-primary">{{ icon('send', 14) }} Envoyer</button></div></div>
   </form>

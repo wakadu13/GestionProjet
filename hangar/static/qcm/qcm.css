@@ -127,7 +127,7 @@ details.qcm-cat[open] > summary { border-bottom: 1px solid var(--border-2); bord
 .quiz-choice.is-wrong { border-color: var(--danger); background: var(--danger-bg); }
 .quiz-choice:disabled { cursor: default; }
 .quiz-letter { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--bg-3); font-weight: 650; font-size: 12px; color: var(--text-2); flex: none; }
-.quiz-choice.selected .quiz-letter { background: var(--accent); color: #fff; }
+.quiz-choice.selected .quiz-letter { background: var(--accent); color: var(--on-accent, #fff); }
 .quiz-choice-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .quiz-choice-text p, .quiz-enonce p, .quiz-verso p, .quiz-explication p { margin: 0 0 .4em; }
 .quiz-choice-text p:last-child, .quiz-enonce p:last-child, .quiz-verso p:last-child, .quiz-explication p:last-child { margin-bottom: 0; }
@@ -336,12 +336,12 @@ details.qcm-bloc > summary .muted { font-size: 12px; }
 .masque-zone { position: absolute; box-sizing: border-box; border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 3px; cursor: move; }
 .masque-zone.sans-nom { border-style: dashed; }
 .masque-zone.choisie { background: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
-.masque-numero { position: absolute; left: 2px; top: 2px; min-width: 1.2rem; padding: 0 .25rem; border-radius: 3px; background: var(--accent); color: #fff; font: 600 11px/18px Inter, system-ui, sans-serif; text-align: center; }
+.masque-numero { position: absolute; left: 2px; top: 2px; min-width: 1.2rem; padding: 0 .25rem; border-radius: 3px; background: var(--accent); color: var(--on-accent, #fff); font: 600 11px/18px Inter, system-ui, sans-serif; text-align: center; }
 .masque-poignee { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid var(--accent); cursor: nwse-resize; }
 .masque-liste h3 { margin: 0 0 6px; }
 .masque-liste ol { margin: 0 0 8px; padding-left: 0; list-style: none; counter-reset: zone; }
 .masque-liste li { margin-bottom: 5px; display: flex; gap: 6px; align-items: center; }
-.masque-liste li::before { counter-increment: zone; content: counter(zone); min-width: 20px; height: 20px; border-radius: 4px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; flex: none; }
+.masque-liste li::before { counter-increment: zone; content: counter(zone); min-width: 20px; height: 20px; border-radius: 4px; background: var(--accent); color: var(--on-accent, #fff); font-size: 11px; font-weight: 600; display: grid; place-items: center; flex: none; }
 .masque-liste li.choisie .input { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
 .masque-liste li .input { flex: 1; min-width: 0; height: 30px; }
 .masque-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }

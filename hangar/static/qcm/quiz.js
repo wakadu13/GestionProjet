@@ -211,7 +211,7 @@
       } else if (q.type === "TROU" || q.type === "QRC") {
         input = el("input", "quiz-input");
         input.type = "text";
-        input.placeholder = "Votre réponse…";
+        input.placeholder = "Ta réponse…";
         input.autofocus = true;
         stage.appendChild(input);
         const validate = el("button", "btn btn-primary", "Valider");
@@ -461,7 +461,7 @@
       }
       box.appendChild(el("div", "quiz-score", score + " / " + questions.length));
       box.appendChild(el("div", "mastery", '<div class="mastery-fill" style="width:' + pct + '%"></div>'));
-      const msg = pct >= 80 ? "Excellent 🎉" : pct >= 50 ? "Bien, continuez !" : "À retravailler 💪";
+      const msg = pct >= 80 ? "Excellent 🎉" : pct >= 50 ? "Bien, continue !" : "À retravailler 💪";
       box.appendChild(el("p", "muted", msg + " " + (options.messageFin || "La progression a été enregistrée.")));
       if (intensif) {
         box.querySelector(".quiz-score").textContent = "Tout est su ✓";
@@ -486,7 +486,7 @@
           wrap.appendChild(ul);
           box.appendChild(wrap);
         }
-        box.appendChild(el("p", "muted", "Refaites une Révision intelligente demain pour ancrer ce que vous avez appris."));
+        box.appendChild(el("p", "muted", "Refais une Révision intelligente demain pour ancrer ce que tu as appris."));
       }
       const actions = el("div", "quiz-actions");
       const again = el("a", "btn btn-primary", "Retour aux sets");
@@ -506,7 +506,7 @@
       let bilan = "<b>" + score + "</b> bonne" + (score > 1 ? "s" : "") + " réponse" + (score > 1 ? "s" : "") + " sur " + total;
       if (repondues < total) bilan += " · <b>" + (total - repondues) + "</b> sans réponse (temps écoulé)";
       box.appendChild(el("p", "", bilan));
-      const msg = note >= 16 ? "Excellent 🎉" : note >= 12 ? "Bien, continuez !" : note >= 10 ? "Juste la moyenne : à consolider." : "À retravailler 💪";
+      const msg = note >= 16 ? "Excellent 🎉" : note >= 12 ? "Bien, continue !" : note >= 10 ? "Juste la moyenne : à consolider." : "À retravailler 💪";
       box.appendChild(el("p", "muted", msg + " Les réponses comptent pour la révision espacée."));
       const liste = el("ol", "quiz-correction");
       questions.forEach((q, i) => {
@@ -519,7 +519,7 @@
         if (!t.attempts) texte = "— (sans réponse)";
         else if (q.type === "QCM" || q.type === "QCR") texte = (t.reponse || []).map((k) => el("div", "", q.choix[k]).textContent.trim()).join(" · ") || "—";
         else texte = t.reponse || "—";
-        donnee.innerHTML = "<b>Votre réponse :</b> " + escapeHtml(texte);
+        donnee.innerHTML = "<b>Ta réponse :</b> " + escapeHtml(texte);
         li.appendChild(donnee);
         if (!juste) {
           const bonne = el("p", "quiz-correction-attendu");

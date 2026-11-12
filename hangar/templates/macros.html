@@ -95,4 +95,4 @@
 <a href="{{ url_for('issues.index', pid=project.id) }}"><span>{{ project.emoji }}</span>{{ project.name }}</a><span class="sep">{{ icon('chevron-right', 14) }}</span>
 {% endmacro %}
 
-{% macro mobile_toggle() %}<button class="btn btn-ghost btn-icon mobile-toggle" type="button" data-sidebar-toggle>{{ icon('menu') }}</button>{% endmacro %}
+{% macro mobile_toggle() %}<button class="btn btn-ghost btn-icon mobile-toggle" type="button" data-sidebar-toggle aria-label="Menu" title="Menu">{{ icon('menu') }}</button>{% endmacro %}

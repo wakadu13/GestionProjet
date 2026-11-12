@@ -233,7 +233,7 @@ details.callout[open] > summary::before { transform: rotate(90deg); }
 /* ---------- Boutons repris de Revision (éditeur, lecteur PDF) ---------- */
 .wiki .button, .pdf-reader .button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 500; line-height: 1; cursor: pointer; white-space: nowrap; }
 .wiki .button:hover, .pdf-reader .button:hover { background: var(--hover); text-decoration: none; }
-.wiki .button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wiki .button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
 .wiki .button.primary:hover { background: var(--accent-2); }
 .wiki .button.small { height: 24px; font-size: 12px; padding: 0 7px; }
 .wiki .button[aria-pressed="true"] { background: var(--active); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); color: var(--accent-text); }

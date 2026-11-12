@@ -957,7 +957,7 @@
     const estLigne = (n) => /^\s*\|/.test(doc.line(n).text);
     let first = doc.lineAt(state.selection.main.head).number;
     if (!estLigne(first)) {
-      status("Placez le curseur dans un tableau pour l'aligner.", "dirty");
+      status("Place le curseur dans un tableau pour l'aligner.", "dirty");
       return false;
     }
     let last = first;
@@ -1074,7 +1074,7 @@
     const { from, to } = view.state.selection.main;
     const whole = from === to;
     const source = whole ? view.state.doc.toString() : view.state.sliceDoc(from, to);
-    if (!source.trim()) return status("Rien à convertir : collez d'abord le LaTeX.", "error");
+    if (!source.trim()) return status("Rien à convertir : colle d'abord le LaTeX.", "error");
     try {
       const markdown = await convertLatex(source);
       view.dispatch({
@@ -1083,7 +1083,7 @@
         scrollIntoView: true,
         userEvent: "input",
       });
-      status("LaTeX converti : vérifiez puis enregistrez (Ctrl+Z pour annuler).", "dirty");
+      status("LaTeX converti : vérifie puis enregistre (Ctrl+Z pour annuler).", "dirty");
       view.focus();
     } catch (e) {
       status(e.message, "error");
@@ -1098,8 +1098,8 @@
     const { from, to } = view.state.selection.main;
     const whole = from === to;
     const source = whole ? view.state.doc.toString() : view.state.sliceDoc(from, to);
-    if (!source.trim()) return status("Rien à améliorer : sélectionnez un passage.", "error");
-    if (source.length > 12000) return status("Passage trop long : sélectionnez une partie de la page (12 000 caractères au plus).", "error");
+    if (!source.trim()) return status("Rien à améliorer : sélectionne un passage.", "error");
+    if (source.length > 12000) return status("Passage trop long : sélectionne une partie de la page (12 000 caractères au plus).", "error");
     amelioration = true;
     status(whole ? "L’IA relit toute la page…" : "L’IA relit le passage…");
     const data = new FormData();
@@ -1373,7 +1373,7 @@
         pairOnSelection,
         fileEvents,
         preview_.of(stored("wiki-editor-mode", "live") === "source" ? sourceView : livePreview),
-        placeholder("Écrivez ici… Tapez [[ pour lier une page."),
+        placeholder("Écris ici… Tape [[ pour lier une page."),
         EditorView.contentAttributes.of({ spellcheck: "true", lang: "fr", autocapitalize: "sentences", "aria-label": "Contenu de la page" }),
         EditorView.scrollMargins.of(() => ({ top: stickyTop(), bottom: footer.getBoundingClientRect().height })),
         theme_.of(EditorView.darkTheme.of(sombre())),
@@ -1478,7 +1478,7 @@
     brouillonNotice.querySelector("[data-brouillon=reprendre]").addEventListener("click", () => {
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: b.texte }, userEvent: "input" });
       brouillonNotice.hidden = true;
-      status("Brouillon repris : pensez à enregistrer.", "dirty");
+      status("Brouillon repris : pense à enregistrer.", "dirty");
       view.focus();
     });
     brouillonNotice.querySelector("[data-brouillon=ignorer]").addEventListener("click", () => {
@@ -1706,7 +1706,7 @@
     if (button.dataset.pasteChoice === "convert") {
       try {
         text = await convertLatex(pastedLatex);
-        status("LaTeX converti : vérifiez puis enregistrez (Ctrl+Z pour annuler).", "dirty");
+        status("LaTeX converti : vérifie puis enregistre (Ctrl+Z pour annuler).", "dirty");
       } catch (e) {
         return status(e.message, "error");
       }
@@ -1750,7 +1750,7 @@
     } else {
       replaceSelection(view, mdText);
     }
-    status("Contenu du fichier chargé : pensez à enregistrer.", "dirty");
+    status("Contenu du fichier chargé : pense à enregistrer.", "dirty");
   }
   mdDialog.querySelectorAll("[data-md-choice]").forEach((b) => b.addEventListener("click", () => useMarkdown(b.dataset.mdChoice)));
 
@@ -1975,7 +1975,7 @@
       const { de, a, texte } = s.premiere;
       const insert = texte.toLowerCase() === s.choix.link.toLowerCase() ? `[[${texte}]]` : `[[${s.choix.link}|${texte}]]`;
       view.dispatch({ changes: { from: de, to: a, insert }, userEvent: "input" });
-      status("Lien ajouté : pensez à enregistrer.", "dirty");
+      status("Lien ajouté : pense à enregistrer.", "dirty");
     }
     afficherLiens(false);
   }

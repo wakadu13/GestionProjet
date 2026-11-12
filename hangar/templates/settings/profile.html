@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
-{% block title %}Mon profil{% endblock %}
-{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('settings', 15) }} Paramètres</span></div></div>{% endblock %}
+{% block title %}Profil{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('user', 15) }} Profil</span></div></div>{% endblock %}
 {% block content %}
 <div class="settings">
-  {% include "settings/_nav.html" %}
   <div class="settings-body">
     {% if must_change or current_user.must_change_password %}
     <div class="danger-zone" style="border-color:var(--warning);background:var(--warning-bg)"><b>{{ icon('key', 15) }} Choisis un nouveau mot de passe</b><p class="help mt-0" style="margin-top:4px">Ton compte utilise un mot de passe provisoire. Modifie-le ci-dessous pour continuer.</p></div>
@@ -23,7 +22,7 @@
         <div class="field"><label>Capacité hebdomadaire (heures)</label><input class="input" type="number" min="1" max="80" name="capacity_hours" value="{{ current_user.capacity_hours }}"><span class="help">Utilisée pour la charge de travail.</span></div>
       </div>
       <div class="field"><label>Bio</label><textarea class="input" name="bio" rows="3">{{ current_user.bio }}</textarea></div>
-      <div class="field"><label>Couleur d’avatar</label><div class="color-swatches">{% for c in PALETTE %}<label><input type="radio" name="avatar_color" value="{{ c }}" {% if c == current_user.avatar_color %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
+      <div class="field"><label>Couleur d’avatar</label><div class="color-swatches" role="radiogroup" aria-label="Couleur d’avatar">{% for c in PALETTE %}<label title="{{ M.COLOR_NAMES.get(c, c) }}"><input type="radio" aria-label="{{ M.COLOR_NAMES.get(c, c) }}" name="avatar_color" value="{{ c }}" {% if c == current_user.avatar_color %}checked{% endif %}><span style="background:{{ c }}"></span></label>{% endfor %}</div></div>
       <div class="field"><label>{{ icon('mail', 13) }} Notifications par e-mail</label>
         <div class="panel panel-b" style="background:var(--bg-2)">
           <div class="field"><label>Adresse e-mail (facultative, uniquement pour recevoir des e-mails)</label><input class="input" type="email" name="contact_email" value="{{ current_user.contact_email or '' }}" placeholder="prenom.nom@exemple.fr"><span class="help">La connexion reste par identifiant et mot de passe.</span></div>

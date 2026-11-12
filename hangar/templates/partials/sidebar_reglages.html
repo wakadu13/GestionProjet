@@ -1,13 +1,15 @@
-{# Menu de la section Réglages #}
+{# Menu de la section Réglages : le seul menu des réglages (mêmes libellés dans le menu de l'espace et la palette Ctrl+K).
+   Les pages qui appartiennent à une autre section le disent (→ Agenda, → IA, → Travail). #}
 <div class="sb-title"><span>Réglages</span><button class="btn btn-ghost btn-icon btn-xs" type="button" data-sidebar-collapse title="Masquer le menu">{{ icon('sidebar', 15) }}</button></div>
 <nav class="sb-scroll">
   <div class="sb-section-h"><span>Mon compte</span></div>
   <a class="sb-link {% if ep == 'settings.profile' %}active{% endif %}" href="{{ url_for('settings.profile') }}">{{ icon('user') }} Profil</a>
-  <a class="sb-link {% if ep == 'agenda.settings' %}active{% endif %}" href="{{ url_for('agenda.settings') }}">{{ icon('mail') }} Rappels et e-mails</a>
+  <a class="sb-link {% if ep == 'agenda.settings' %}active{% endif %}" href="{{ url_for('agenda.settings') }}" title="S’ouvre dans la section Agenda">{{ icon('mail') }} Rappels et e-mails <span class="sb-goto">→ Agenda</span></a>
   <a class="sb-link {% if ep == 'settings.tokens' %}active{% endif %}" href="{{ url_for('settings.tokens') }}">{{ icon('key') }} Jetons d’API</a>
   <div class="sb-section">
     <div class="sb-section-h"><span>Espace</span></div>
-    <a class="sb-link {% if ep == 'ai.reglages' %}active{% endif %}" href="{{ url_for('ai.reglages') }}">{{ icon('sparkle') }} Fournisseurs d’IA</a>
+    <a class="sb-link {% if ep == 'ai.reglages' %}active{% endif %}" href="{{ url_for('ai.reglages') }}" title="S’ouvre dans la section IA">{{ icon('sparkle') }} Fournisseurs d’IA <span class="sb-goto">→ IA</span></a>
+    <a class="sb-link {% if ep == 'team.index' %}active{% endif %}" href="{{ url_for('team.index') }}" title="S’ouvre dans la section Travail">{{ icon('users') }} Membres <span class="sb-goto">→ Travail</span></a>
     {% if current_user.is_admin %}
     <a class="sb-link {% if ep == 'settings.workspace' %}active{% endif %}" href="{{ url_for('settings.workspace') }}">{{ icon('settings') }} Paramètres de l’espace</a>
     <a class="sb-link {% if ep == 'mail.settings' %}active{% endif %}" href="{{ url_for('mail.settings') }}">{{ icon('send') }} Envoi des e-mails</a>

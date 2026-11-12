@@ -38,9 +38,9 @@
         </div>
       </div>
       <div class="field"><span class="label">Couleur</span>
-        <div class="color-swatches">
-          <label title="Couleur automatique"><input type="radio" name="color" value="" checked><span class="sw-none"></span></label>
-          {% for c in TASK_COLORS %}<label><input type="radio" name="color" value="{{ c }}"><span style="background:{{ c }}"></span></label>{% endfor %}
+        <div class="color-swatches" role="radiogroup" aria-label="Couleur">
+          <label title="Couleur automatique"><input type="radio" aria-label="Couleur automatique" name="color" value="" checked><span class="sw-none"></span></label>
+          {% for c in TASK_COLORS %}<label title="{{ M.COLOR_NAMES.get(c, c) }}"><input type="radio" aria-label="{{ M.COLOR_NAMES.get(c, c) }}" name="color" value="{{ c }}"><span style="background:{{ c }}"></span></label>{% endfor %}
         </div>
       </div>
       <div class="grid-2">

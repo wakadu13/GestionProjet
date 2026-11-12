@@ -86,11 +86,30 @@
   const avatarHTML = (m, size = 18) => `<span class="avatar" style="--av:${esc(m.color)};width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px">${esc(m.initials)}</span>`;
 
   /* ------------------------------------------------------------------ Toasts */
+  // Une erreur reste affichée jusqu'à ce qu'on la ferme ; les autres messages partent seuls (pas pendant le survol).
+  const dismissToast = (el) => { el.classList.add('hiding'); setTimeout(() => el.remove(), 300); };
+  function armToast(el, ms) {
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'toast-x';
+    x.title = 'Fermer';
+    x.setAttribute('aria-label', 'Fermer');
+    x.innerHTML = ICON.x;
+    x.addEventListener('click', () => dismissToast(el));
+    el.appendChild(x);
+    const errors = $$('.toast.error:not(.hiding)', el.parentElement || document);
+    errors.slice(0, Math.max(0, errors.length - 3)).forEach(dismissToast); // pas plus de 3 erreurs empilées
+    if (el.classList.contains('error')) return;
+    let t = setTimeout(() => dismissToast(el), ms);
+    el.addEventListener('mouseenter', () => clearTimeout(t));
+    el.addEventListener('mouseleave', () => { clearTimeout(t); t = setTimeout(() => dismissToast(el), 2000); });
+  }
   function toast(msg, type = 'info', ms = 4200, action = null) {
     const box = $('#toasts');
     if (!box) return;
     const el = document.createElement('div');
     el.className = `toast ${type}`;
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
     el.innerHTML = `${ICON[type] || ICON.info}<div>${esc(msg)}</div>`;
     if (action) { // bouton dans le message (ex. « Annuler »)
       const b = document.createElement('button');
@@ -99,18 +118,43 @@
       el.appendChild(b);
     }
     box.appendChild(el);
-    setTimeout(() => { el.classList.add('hiding'); setTimeout(() => el.remove(), 300); }, ms);
+    armToast(el, ms);
   }
-  $$('[data-flash]').forEach((el, i) => setTimeout(() => { el.classList.add('hiding'); setTimeout(() => el.remove(), 300); }, 5000 + i * 500));
+  $$('[data-flash]').forEach((el, i) => armToast(el, 5000 + i * 500));
   H.toast = toast;
+  // Message à afficher sur la page suivante (après une redirection faite en JS)
+  const toastNext = (msg, type = 'info') => { try { sessionStorage.setItem('hangar.toast', JSON.stringify([msg, type])); } catch (e) { /* ignore */ } };
+  try {
+    const next = JSON.parse(sessionStorage.getItem('hangar.toast') || 'null');
+    sessionStorage.removeItem('hangar.toast');
+    if (next) toast(next[0], next[1], 6000);
+  } catch (e) { /* ignore */ }
 
-  /* ------------------------------------------------------------------ Rechargement doux (conserve le défilement) */
+  /* ------------------------------------------------------------------ Rechargement doux (conserve le défilement et le focus) */
   const SCROLLERS = ['.content', '.issue-main', '.board', '.sheet-wrap', '.g-right', '.intake-list', '.intake-detail'];
+  // Dernière interaction : le focus n'est rendu après un rechargement que si l'on naviguait au clavier.
+  let viaClavier = false;
+  document.addEventListener('keydown', () => { viaClavier = true; }, true);
+  document.addEventListener('pointerdown', () => { viaClavier = false; }, true);
+  // Sélecteur qui retrouve le même élément après le rechargement (ex. la case « État » du ticket 12).
+  function focusSelector(el) {
+    if (!el || el === document.body || !el.matches || el.closest('dialog, .pop')) return null;
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    if (el.matches('.prop[data-issue][data-pick]')) return `.prop[data-issue="${CSS.escape(el.dataset.issue)}"][data-pick="${CSS.escape(el.dataset.pick)}"]`;
+    const unique = (s) => ($$(s).length === 1 ? s : null);
+    for (const a of Array.from(el.attributes)) {
+      if (a.name.startsWith('data-') && a.value) { const s = unique(`${el.tagName.toLowerCase()}[${a.name}="${CSS.escape(a.value)}"]`); if (s) return s; }
+    }
+    if (el.matches('a[href]')) return unique(`a[href="${CSS.escape(el.getAttribute('href'))}"]`);
+    return null;
+  }
   function softReload(delay = 0) {
     const pos = {};
     SCROLLERS.forEach((s) => { const el = $(s); if (el) pos[s] = [el.scrollLeft, el.scrollTop]; });
     $$('.bcol-body').forEach((el, i) => { pos[`bcol${i}`] = [0, el.scrollTop]; });
-    sessionStorage.setItem('hangar.scroll', JSON.stringify({ path: location.pathname + location.search, pos }));
+    let focus = null;
+    try { focus = viaClavier ? focusSelector(document.activeElement) : null; } catch (e) { /* ignore */ }
+    sessionStorage.setItem('hangar.scroll', JSON.stringify({ path: location.pathname + location.search, pos, focus }));
     setTimeout(() => location.reload(), delay);
   }
   H.softReload = softReload;
@@ -121,13 +165,27 @@
         const el = s.startsWith('bcol') ? $$('.bcol-body')[+s.slice(4)] : $(s);
         if (el) { el.scrollLeft = x; el.scrollTop = y; }
       });
+      const f = saved.focus && $(saved.focus);
+      if (f) { f.focus({ preventScroll: true }); f.scrollIntoView({ block: 'nearest' }); }
     }
     sessionStorage.removeItem('hangar.scroll');
   } catch (e) { /* ignore */ }
 
   /* ------------------------------------------------------------------ Menus déroulants */
+  // Seuls les déclencheurs placés dans un .dd sont gérés ici (l'éditeur du wiki a ses propres menus <details>).
+  const MENU_TRIGGER = '.dd [data-menu]';
+  function closeMenus() {
+    $$('.dd.open').forEach((d) => d.classList.remove('open'));
+    syncStates();
+  }
+  // Ferme le menu quand le focus en sort (Tab au clavier)
+  document.addEventListener('focusout', (e) => {
+    const dd = e.target.closest && e.target.closest('.dd.open');
+    if (dd && e.relatedTarget && !dd.contains(e.relatedTarget)) { dd.classList.remove('open'); syncStates(); }
+  });
   document.addEventListener('click', (e) => {
-    const trigger = e.target.closest('[data-menu]');
+    setTimeout(syncStates, 0); // après les autres gestionnaires de clic, qui ouvrent ou ferment aussi des menus
+    const trigger = e.target.closest(MENU_TRIGGER);
     if (trigger) {
       e.preventDefault();
       const dd = trigger.closest('.dd');
@@ -149,6 +207,97 @@
     if (!e.target.closest('.dd .menu')) $$('.dd.open').forEach((d) => d.classList.remove('open'));
     else if (e.target.closest('.menu-item') && !e.target.closest('form')) $$('.dd.open').forEach((d) => d.classList.remove('open'));
   });
+
+  /* ------------------------------------------------------------------ Clavier et lecteurs d'écran */
+  // État ouvert / fermé annoncé (aria-expanded) des menus, groupes repliables et menu latéral.
+  // Recalculé après chaque clic et chaque Échap / Entrée / Espace : pas besoin de toucher aux gestionnaires.
+  function syncStates() {
+    $$(MENU_TRIGGER).forEach((t) => t.setAttribute('aria-expanded', t.closest('.dd').classList.contains('open') ? 'true' : 'false'));
+    $$('[data-collapse]').forEach((b) => {
+      const g = b.closest('[data-collapse-key]');
+      if (!g) return;
+      if (!b.hasAttribute('aria-label') && !b.textContent.trim()) b.setAttribute('aria-label', 'Replier ou déplier le groupe');
+      b.setAttribute('aria-expanded', g.classList.contains('collapsed') ? 'false' : 'true');
+    });
+    $$('[data-pl-toggle]').forEach((b) => {
+      const row = b.closest('[data-row]');
+      if (!b.hasAttribute('aria-label')) b.setAttribute('aria-label', 'Replier ou déplier');
+      if (row) b.setAttribute('aria-expanded', row.classList.contains('collapsed') ? 'false' : 'true');
+    });
+    const mobile = window.matchMedia('(max-width: 820px)').matches;
+    const sbShown = mobile ? document.body.classList.contains('sb-open') : !document.documentElement.classList.contains('sb-collapsed');
+    $$('[data-sidebar-toggle]').forEach((b) => b.setAttribute('aria-expanded', sbShown ? 'true' : 'false'));
+  }
+  let sbOpener = null;
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-sidebar-toggle]'); if (t) sbOpener = t; });
+  const visible = (el) => el && el.getClientRects().length > 0;
+  // Échap ferme le menu ouvert (ou le menu latéral mobile, ou le panneau IA) et rend le focus au bouton qui l'a ouvert.
+  // Les touches déjà traitées (sélecteurs, éditeur…) sont ignorées, et une fenêtre <dialog> se ferme seule.
+  document.addEventListener('keydown', (e) => {
+    if (['Escape', 'Enter', ' '].includes(e.key)) setTimeout(syncStates, 0);
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const active = document.activeElement;
+    const dd = $('.dd.open');
+    if (dd) {
+      e.preventDefault();
+      const trigger = $('[data-menu]', dd);
+      closeMenus();
+      if (trigger && (dd.contains(active) || active === document.body)) trigger.focus();
+      return;
+    }
+    const wm = $('details.toolbar-menu[open]'); // menus Encadré / Insérer / Fichier de l'éditeur du wiki
+    if (wm) {
+      e.preventDefault();
+      wm.open = false;
+      const s = $('summary', wm);
+      if (s && (wm.contains(active) || active === document.body)) s.focus();
+      return;
+    }
+    if ($('dialog[open]')) return;
+    if (document.body.classList.contains('sb-open')) {
+      e.preventDefault();
+      document.body.classList.remove('sb-open');
+      syncStates();
+      const back = visible(sbOpener) ? sbOpener : $$('[data-sidebar-toggle]').find(visible);
+      if (back) back.focus();
+      return;
+    }
+    const panel = $('#ai-panel');
+    if (document.documentElement.classList.contains('ai-open') && panel && panel.contains(active) && !isTyping(active)) {
+      e.preventDefault();
+      toggleAI(false);
+      const b = $$('[data-ai-toggle]').find(visible);
+      if (b) b.focus();
+    }
+  });
+  setTimeout(syncStates, 0); // une fois les groupes repliés restaurés plus bas
+
+  // Étiquettes et noms manquants dans les gabarits (« <label>Prénom</label><input> ») : un clic sur le libellé
+  // place le curseur dans le champ, et un lecteur d'écran annonce le nom du champ, du bouton ou de la fenêtre.
+  let autoId = 0;
+  const newId = (prefix) => { let id; do { autoId += 1; id = `${prefix}-${autoId}`; } while (document.getElementById(id)); return id; };
+  function nameFields(root = document) {
+    $$('label:not([for])', root).forEach((lab) => {
+      if (lab.querySelector('input, select, textarea')) return; // le champ est déjà dans le libellé
+      const f = lab.nextElementSibling;
+      if (!f || !f.matches('input:not([type=hidden]), select, textarea')) return;
+      if (!f.id) f.id = newId('champ');
+      lab.htmlFor = f.id;
+    });
+    $$('[data-close]', root).forEach((b) => {
+      if (b.textContent.trim() || b.hasAttribute('aria-label')) return;
+      b.setAttribute('aria-label', 'Fermer');
+      if (!b.title) b.title = 'Fermer';
+    });
+    $$('dialog:not([aria-label]):not([aria-labelledby])', root).forEach((d) => {
+      const h = $('h1, h2, h3', d);
+      if (!h) return;
+      if (!h.id) h.id = newId('titre');
+      d.setAttribute('aria-labelledby', h.id);
+    });
+  }
+  nameFields();
+  H.nameFields = nameFields;
 
   // Filtre textuel dans les menus d'options
   document.addEventListener('input', (e) => {
@@ -218,7 +367,9 @@
     const el = document.createElement('div');
     el.className = 'pop';
     el.innerHTML = `${cfg.noSearch ? '' : `<input class="pop-search" placeholder="${esc(cfg.placeholder || 'Rechercher…')}">`}<div class="pop-list"></div>`;
-    document.body.appendChild(el);
+    // Dans une fenêtre (« Nouveau ticket ») : le sélecteur va dans la fenêtre, sinon il resterait caché
+    // derrière elle et inaccessible (souris comme clavier).
+    (anchor.closest('dialog[open]') || document.body).appendChild(el);
     const list = $('.pop-list', el);
     const input = $('.pop-search', el);
     const selected = cfg.selected || new Set();
@@ -231,6 +382,12 @@
       const cur = $('.pop-opt.kb', list);
       if (cur) cur.scrollIntoView({ block: 'nearest' });
     };
+    // Après un choix ou Échap, le focus revient au bouton d'origine (pas après un défilement ou un clic ailleurs).
+    const focusIsHere = () => el.contains(document.activeElement) || document.activeElement === document.body;
+    const giveBack = (p) => {
+      const t = p.anchor && p.anchor.isConnected ? p.anchor : (cfg.focusBack && cfg.focusBack());
+      if (t && t.focus) t.focus();
+    };
     const choose = (o) => {
       if (!o) return;
       if (cfg.multi) {
@@ -238,19 +395,28 @@
         render();
         cfg.onPick(o, selected);
       } else {
+        const back = focusIsHere();
+        const p = pop;
         closePop();
         cfg.onPick(o, selected);
+        if (back && p) giveBack(p);
       }
     };
     list.addEventListener('mousedown', (ev) => {
       const it = ev.target.closest('.pop-opt');
-      if (it) { ev.preventDefault(); choose(shown[+it.dataset.i]); }
+      if (!it) return;
+      ev.preventDefault();
+      // Le clic qui suit vise une option disparue : il ne doit pas atteindre la fenêtre (il la fermerait).
+      const swallow = (e) => { if (e.target.tagName === 'DIALOG') e.stopPropagation(); };
+      document.addEventListener('click', swallow, { capture: true, once: true });
+      setTimeout(() => document.removeEventListener('click', swallow, true), 400);
+      choose(shown[+it.dataset.i]);
     });
     const keys = (ev) => {
       if (ev.key === 'ArrowDown') { kb = Math.min(kb + 1, shown.length - 1); render(); ev.preventDefault(); return true; }
       if (ev.key === 'ArrowUp') { kb = Math.max(kb - 1, 0); render(); ev.preventDefault(); return true; }
       if (ev.key === 'Enter' || (cfg.noSearch && ev.key === 'Tab')) { ev.preventDefault(); choose(shown[Math.max(kb, 0)]); return true; }
-      if (ev.key === 'Escape') { ev.preventDefault(); closePop(); return true; }
+      if (ev.key === 'Escape') { ev.preventDefault(); const back = focusIsHere(); const p = pop; closePop(); if (back && p) giveBack(p); return true; }
       return false;
     };
     if (input) {
@@ -259,7 +425,7 @@
     }
     render();
     placePop(el, anchor);
-    if (input) input.focus();
+    if (input) input.focus({ preventScroll: true }); // sans faire défiler la fenêtre (ce qui refermerait le sélecteur)
     pop = { el, anchor, onClose: cfg.onClose, keys, mention: !!cfg.mention };
     return pop;
   }
@@ -456,7 +622,12 @@
     if (!ciModal) return;
     const form = $('[data-create-form]', ciModal);
     const sel = $('[data-ci-project]', form);
-    if (!sel.options.length) { toast('Aucun projet où tu peux créer de ticket.', 'error'); return; }
+    if (!sel.options.length) {
+      // Un ticket appartient toujours à un projet : sans projet, on ouvre la création de projet.
+      if (H.nav && H.nav.newProject) { toastNext('Aucun projet où tu peux créer de ticket : crée d’abord ton projet.', 'info'); location.href = H.nav.newProject; }
+      else toast('Aucun projet où tu peux créer de ticket.', 'error');
+      return;
+    }
     let pid = d.project || H.contextProject || localStorage.getItem('hangar.lastProject');
     if (!pid || !$(`option[value="${pid}"]`, sel)) pid = sel.options[0].value;
     sel.value = pid;
@@ -494,7 +665,7 @@
       const vals = (box.dataset.value || '').split(',').filter((v) => v !== '');
       openPop(btn, {
         options: optionsFor(kind, sel.value), selected: new Set(multi ? vals : [vals[0] || '']), multi,
-        placeholder: `${PLACEHOLDER[kind]}…`,
+        placeholder: `${PLACEHOLDER[kind]}…`, focusBack: () => $('.prop', box),
         onPick: (o, s) => {
           box.dataset.value = multi ? Array.from(s).join(',') : o.id;
           if (multi) { const keep = pop; renderFormPick(box, sel.value); if (keep) keep.anchor = $('.prop', box); }
@@ -898,19 +1069,30 @@
     { title: 'Calendrier', icon: ICON.calendar, url: H.urls && H.urls.calendar },
     { title: 'Mes tâches', icon: ICON.check, url: H.urls && H.urls.tasks },
     { title: 'Importer l’emploi du temps (.ics)', icon: ICON.arrow, url: H.urls && H.urls.imports },
-    { title: 'Rappels et e-mails', icon: ICON.bell, url: H.agenda && H.agenda.settingsUrl },
+    { title: 'Rappels et e-mails', icon: ICON.bell, url: H.agenda && H.agenda.settingsUrl, mots: 'réglages paramètres agenda résumé quotidien' },
     { title: 'Créer un ticket', icon: ICON.plus, kbd: 'C', run: () => openCreate() },
     { title: 'Créer un projet', icon: ICON.briefcase, url: H.urls && H.urls.newProject },
     { title: 'Accueil des projets', icon: ICON.briefcase, url: H.urls && H.urls.projectsHome },
     { title: 'Mes tickets', icon: ICON.layers, url: H.urls && H.urls.myIssues },
     { title: 'Notifications', icon: ICON.bell, url: H.urls && H.urls.notifications },
     { title: 'Analytique', icon: ICON.chart, url: H.urls && H.urls.analytics },
-    { title: 'Équipe', icon: ICON.users, url: H.urls && H.urls.team },
+    { title: 'Équipe', icon: ICON.users, url: H.urls && H.urls.team, mots: 'membres' },
     { title: 'Charge de travail de l’équipe', icon: ICON.users, url: H.urls && H.urls.workload },
     { title: 'Projets', icon: ICON.briefcase, url: H.urls && H.urls.projects },
-    { title: 'Mon profil et préférences', icon: ICON.user, url: H.urls && H.urls.profile },
+    { title: 'Profil', icon: ICON.user, url: H.urls && H.urls.profile, mots: 'réglages paramètres mon compte préférences mot de passe' },
     { title: 'Basculer le thème clair / sombre', icon: ICON.moon, kbd: 'Maj D', run: () => toggleTheme() },
   ];
+  // Mêmes noms que le menu Réglages ; « mots » : autres mots qui les trouvent (réglages, paramètres…)
+  const NAV = (H.nav && H.nav.urls) || {};
+  [
+    { title: 'Planning', icon: ICON.chart, url: NAV.planning, mots: 'feuille de route gantt' },
+    { title: 'Bilan', icon: ICON.chart, url: NAV.bilan, mots: 'rapport avancement' },
+    { title: 'Paramètres de l’espace', icon: ICON.briefcase, url: NAV.workspace, mots: 'réglages espace de travail' },
+    { title: 'Sauvegardes', icon: ICON.page, url: NAV.backup, mots: 'réglages paramètres sauvegarde copie base de données' },
+    { title: 'Envoi des e-mails', icon: ICON.bell, url: NAV.mail, mots: 'réglages paramètres mail smtp messagerie e-mails automatiques' },
+    { title: 'Fournisseurs d’IA', icon: ICON.layers, url: NAV.ai, mots: 'réglages paramètres assistant ia clé api' },
+    { title: 'Jetons d’API', icon: ICON.user, url: NAV.tokens, mots: 'réglages paramètres' },
+  ].forEach((a) => { if (a.url) ACTIONS.push(a); });
   Object.values(H.projects || {}).forEach((p) => {
     ACTIONS.push({ title: `Ouvrir ${p.name}`, icon: `<span>${esc(p.emoji)}</span>`, url: `/projects/${p.id}/issues`, sub: p.identifier });
   });
@@ -943,7 +1125,7 @@
     if (it.run) it.run(); else if (it.url) location.href = it.url;
   }
   const palSearch = debounce(async (q) => {
-    const acts = ACTIONS.filter((a) => !q || plier(a.title).includes(plier(q)));
+    const acts = ACTIONS.filter((a) => !q || plier(`${a.title} ${a.mots || ''}`).includes(plier(q)));
     let r = { issues: [], projects: [], pages: [], members: [], cycles: [], modules: [] };
     try { r = await api(`${H.urls.search}?q=${encodeURIComponent(q)}`); } catch (e) { /* hors ligne */ }
     // Sources des modules (wiki : pages, PDF, QCM, langues, commandes) : H.paletteSources, [[groupe, éléments], …]

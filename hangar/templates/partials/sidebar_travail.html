@@ -27,7 +27,7 @@
 {% endif %}
 
 <div class="sb-section">
-  <div class="sb-section-h"><span>Vos projets</span>{% if not current_user.is_guest %}<a href="{{ url_for('projects.new') }}" title="Nouveau projet">{{ icon('plus', 14) }}</a>{% endif %}</div>
+  <div class="sb-section-h"><span>Mes projets</span>{% if not current_user.is_guest %}<a href="{{ url_for('projects.new') }}" title="Nouveau projet">{{ icon('plus', 14) }}</a>{% endif %}</div>
   {% for p in sb.projects %}
   <details class="sb-project" {% if pid_ctx == p.id %}open{% endif %}>
     <summary><span class="p-emoji" style="background: color-mix(in srgb, {{ p.color }} 16%, transparent)">{{ p.emoji }}</span><span class="ellipsis">{{ p.name }}</span>{{ icon('chevron-right', 14, 'chev') }}</summary>

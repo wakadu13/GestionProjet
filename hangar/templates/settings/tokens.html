@@ -4,7 +4,6 @@
 {% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('key', 15) }} Jetons d’API</span></div></div>{% endblock %}
 {% block content %}
 <div class="settings">
-  {% include "settings/_nav.html" %}
   <div class="settings-body">
     <h2>Jetons d’API</h2><p class="help">Pour automatiser Hangar avec des scripts (Python, Excel/Power Query, etc.) via l’API REST locale <code>/api/v1</code>.</p>
     {% if new_token %}

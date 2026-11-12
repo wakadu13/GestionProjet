@@ -1,18 +1,17 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
-{% block title %}E-mails automatiques{% endblock %}
+{% block title %}Envoi des e-mails{% endblock %}
 {% block header %}
 <div class="page-header">
   {{ ui.mobile_toggle() }}
-  <div class="crumbs"><span class="current">{{ icon('mail', 15) }} E-mails automatiques</span></div>
+  <div class="crumbs"><span class="current">{{ icon('send', 15) }} Envoi des e-mails</span></div>
   <div class="header-actions"><a class="btn btn-sm btn-primary" href="{{ url_for('mail.compose') }}">{{ icon('send', 14) }} Écrire un e-mail</a></div>
 </div>
 {% endblock %}
 {% block content %}
 <div class="settings">
-  {% include "settings/_nav.html" %}
   <div class="settings-body">
-    <h2>E-mails automatiques</h2>
+    <h2>Envoi des e-mails</h2>
     <p class="help">Notifications, rappels d’échéance, récapitulatif hebdomadaire et bilan envoyés par e-mail aux membres qui ont renseigné une adresse.</p>
 
     <div class="stats mb">
@@ -66,14 +65,14 @@
       <div class="col" style="gap:10px">
         <label class="switch"><input type="checkbox" name="send_notifications" value="1" {% if cfg.send_notifications %}checked{% endif %}> <span><b>Notifications instantanées</b> — assignation, mention, commentaire, changement sur un ticket suivi</span></label>
         <div class="flex gap wrap"><label class="switch"><input type="checkbox" name="send_reminders" value="1" {% if cfg.send_reminders %}checked{% endif %}> <span><b>Rappels d’échéance</b> chaque jour à</span></label>
-          <select class="input input-sm" name="reminder_hour" style="width:auto">{% for h in range(5, 23) %}<option value="{{ h }}" {% if cfg.reminder_hour == h %}selected{% endif %}>{{ h }} h</option>{% endfor %}</select>
+          <select class="input input-sm" name="reminder_hour" aria-label="Heure des rappels" style="width:auto">{% for h in range(5, 23) %}<option value="{{ h }}" {% if cfg.reminder_hour == h %}selected{% endif %}>{{ h }} h</option>{% endfor %}</select>
           <span class="help">tickets en retard, à rendre aujourd’hui ou demain</span></div>
         <div class="flex gap wrap"><label class="switch"><input type="checkbox" name="send_digest" value="1" {% if cfg.send_digest %}checked{% endif %}> <span><b>Récapitulatif hebdomadaire</b> le</span></label>
-          <select class="input input-sm" name="digest_weekday" style="width:auto">{% for d in WEEKDAYS %}<option value="{{ loop.index0 }}" {% if cfg.digest_weekday == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select>
+          <select class="input input-sm" name="digest_weekday" aria-label="Jour du récapitulatif" style="width:auto">{% for d in WEEKDAYS %}<option value="{{ loop.index0 }}" {% if cfg.digest_weekday == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select>
           <span class="help">à l’heure des rappels</span></div>
         <div class="flex gap wrap"><label class="switch"><input type="checkbox" name="send_bilan" value="1" {% if cfg.send_bilan %}checked{% endif %}> <span><b>Bilan de la semaine</b> aux responsables le</span></label>
-          <select class="input input-sm" name="bilan_weekday" style="width:auto">{% for d in WEEKDAYS %}<option value="{{ loop.index0 }}" {% if cfg.bilan_weekday == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select>
-          <span>à</span><select class="input input-sm" name="bilan_hour" style="width:auto">{% for h in range(6, 23) %}<option value="{{ h }}" {% if cfg.bilan_hour == h %}selected{% endif %}>{{ h }} h</option>{% endfor %}</select></div>
+          <select class="input input-sm" name="bilan_weekday" aria-label="Jour du bilan" style="width:auto">{% for d in WEEKDAYS %}<option value="{{ loop.index0 }}" {% if cfg.bilan_weekday == loop.index0 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select>
+          <span>à</span><select class="input input-sm" name="bilan_hour" aria-label="Heure du bilan" style="width:auto">{% for h in range(6, 23) %}<option value="{{ h }}" {% if cfg.bilan_hour == h %}selected{% endif %}>{{ h }} h</option>{% endfor %}</select></div>
       </div>
       <p class="help mt">Les envois planifiés partent pendant que Hangar tourne (vérification toutes les 30 s). Dernier rappel : {{ cfg.last_reminder_date|date(True) if cfg.last_reminder_date else 'jamais' }} · récapitulatif : {{ cfg.last_digest_date|date(True) if cfg.last_digest_date else 'jamais' }} · bilan : {{ cfg.last_bilan_date|date(True) if cfg.last_bilan_date else 'jamais' }}.</p>
       <div class="form-actions"><button class="btn btn-primary">Enregistrer</button></div>
@@ -100,7 +99,7 @@
     </div>
 
     <h2 id="members">Adresses des membres</h2>
-    <p class="help">Utilisées uniquement pour les e-mails (la connexion reste par identifiant). Chacun peut aussi la renseigner dans « Mon profil ».</p>
+    <p class="help">Utilisées uniquement pour les e-mails (la connexion reste par identifiant). Chacun peut aussi la renseigner dans Réglages › Profil.</p>
     <form method="post" class="panel mb-lg">
       {{ ui.csrf() }}<input type="hidden" name="action" value="members">
       <table class="table">
@@ -109,8 +108,8 @@
         {% for u in users %}
         <tr>
           <td>{{ ui.user_chip(u) }}</td>
-          <td><input class="input input-sm" type="email" name="email_{{ u.id }}" value="{{ u.contact_email or '' }}" placeholder="aucune" style="max-width:280px"></td>
-          <td><select class="input input-sm" name="prefs_{{ u.id }}" style="width:auto">{% for k, lab in [('instant', 'Instantané'), ('digest', 'Récapitulatif seul'), ('off', 'Aucun e-mail')] %}<option value="{{ k }}" {% if (u.email_prefs or 'instant') == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></td>
+          <td><input class="input input-sm" type="email" name="email_{{ u.id }}" aria-label="Adresse e-mail de {{ u.display_name }}" value="{{ u.contact_email or '' }}" placeholder="aucune" style="max-width:280px"></td>
+          <td><select class="input input-sm" name="prefs_{{ u.id }}" aria-label="Préférence e-mail de {{ u.display_name }}" style="width:auto">{% for k, lab in [('instant', 'Instantané'), ('digest', 'Récapitulatif seul'), ('off', 'Aucun e-mail')] %}<option value="{{ k }}" {% if (u.email_prefs or 'instant') == k %}selected{% endif %}>{{ lab }}</option>{% endfor %}</select></td>
         </tr>
         {% endfor %}
         </tbody>
