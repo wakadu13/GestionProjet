@@ -117,7 +117,7 @@ Connexion par **identifiant et mot de passe** (pas d'e-mail) ; l'écran de conne
 
 > Base créée par une ancienne version : l'ancien mot de passe de démonstration, qui était public, doit être changé à la prochaine connexion, et `uv run hangar run --host 0.0.0.0` avertit au démarrage tant qu'un compte l'utilise encore.
 
-> Prénoms retrouvés dans les documents : Raphaël Lazaro, Mathieu Brancourt, Vincent Flohic, Benoit Loubatier. Les autres se complètent depuis **Équipe** ou **Mon profil**.
+> Prénoms retrouvés dans les documents : Raphaël Lazaro, Mathieu Brancourt, Vincent Flohic, Benoit Loubatier. Les autres se complètent depuis **Équipe** ou **Réglages › Profil**.
 
 ## Travailler à plusieurs (réseau local)
 
