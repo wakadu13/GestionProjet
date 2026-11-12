@@ -271,9 +271,14 @@ def feed_address(token: str) -> dict:
     url = f"http://{ip}{f':{port}' if port else ''}{path}" if ip else request.host_url.rstrip("/") + path
     listen = current_app.config.get("HANGAR_HOST")
     warning = ""
-    if (current_app.config.get("PARTAGE") or {}).get("https_port"):  # --lan-https, mais aucune IP sur le réseau
+    partage = current_app.config.get("PARTAGE") or {}
+    if partage.get("https_port"):  # --lan-https, mais aucune IP sur le réseau
         warning = ("Cet ordinateur n’est relié à aucun réseau (Wi-Fi coupé ?) : le téléphone ne pourra pas lire "
                    "cette adresse. Connecte-le au même Wi-Fi que le téléphone, puis recharge cette page.")
+    elif partage.get("lan_https"):  # --lan-https demandé, mais Caddy n'a pas démarré (port pris, introuvable…)
+        journal = os.path.join(current_app.config.get("DATA_DIR") or "data", "journal", "caddy.log")
+        warning = ("Le partage HTTPS n’a pas démarré (Caddy) : le téléphone ne pourra pas lire cette adresse. "
+                   f"Regarde la console de Hangar ou le journal {journal}, corrige la cause, puis relance Hangar.")
     elif listen is None or listen in LOCAL_HOSTS:
         # Pas de « --host 0.0.0.0 » : l'agenda et le jeton de l'adresse passeraient en clair sur le Wi-Fi.
         warning = ("Pour l’instant, Hangar n’accepte que les connexions de cet ordinateur : le téléphone ne pourra pas "

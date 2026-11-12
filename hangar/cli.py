@@ -198,7 +198,9 @@ def cmd_run(args):
     if lan_https:
         port_https = getattr(args, "https_port", None) or reseau_local.PORT_HTTPS
         caddy, adresse_https = _lancer_caddy(app, port, port_https)
-    app.config["PARTAGE"] = {"host": args.host, "port": port, "https_port": port_https if adresse_https else None}
+    # « lan_https » garde l'intention même si Caddy n'a pas démarré : la page d'abonnement en donne alors la cause.
+    app.config["PARTAGE"] = {"host": args.host, "port": port, "https_port": port_https if adresse_https else None,
+                             "lan_https": bool(lan_https)}
     if adresse_https:
         print(reseau_local.message_demarrage(adresse_https, https=True))
     elif args.host in ("0.0.0.0", "::"):

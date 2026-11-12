@@ -142,7 +142,7 @@ HOTES_LOCAUX = ("127.0.0.1", "localhost", "::1")
 def adresse_telephone(app, request) -> dict | None:
     """Adresse à ouvrir sur le téléphone : {"url", "https"}, ou None si Hangar n'est ouvert qu'à cet ordinateur.
 
-    ``app.config["PARTAGE"]`` est posé par ``hangar run`` : {"host", "port", "https_port"}."""
+    ``app.config["PARTAGE"]`` est posé par ``hangar run`` : {"host", "port", "https_port", "lan_https"}."""
     partage = app.config.get("PARTAGE") or {}
     hote = request.host.rsplit(":", 1)[0].strip("[]") if not request.host.endswith("]") else request.host.strip("[]")
     if hote not in HOTES_LOCAUX:  # page ouverte depuis le réseau : l'adresse en cours marche déjà

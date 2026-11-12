@@ -128,6 +128,17 @@ class AdresseAbonnement(Base):
         self.assertNotIn("partager-en-https.bat", page)  # déjà en HTTPS : le conseil serait faux
         self.assertIn("aucun réseau", page)
 
+    def test_lan_https_caddy_en_echec(self):
+        # --lan-https demandé, mais Caddy n'a pas démarré (port 5443 pris, Caddy introuvable) : la cause est
+        # Caddy, pas l'option de lancement, que l'utilisateur vient justement d'utiliser.
+        self.app.config.update(HANGAR_HOST="127.0.0.1",
+                               PARTAGE={"host": "127.0.0.1", "port": 5000, "https_port": None, "lan_https": True})
+        page = self.page()
+        self.assertIn("Le partage HTTPS n’a pas démarré", page)
+        self.assertIn("caddy.log", page)
+        self.assertNotIn("partager-en-https.bat", page)
+        self.assertNotIn("n’accepte que les connexions de cet ordinateur", page)
+
 
 # ---------------------------------------------------------------------------
 # /setup derrière un proxy déclaré
@@ -235,6 +246,10 @@ class JetonAbonnement(Base):
         # La page dit ce que coupe chaque bouton
         self.assertIn("ne change pas l’adresse d’abonnement", page)
         self.assertIn("ce bouton la change aussi", page)
+        # La boîte de confirmation le redit : on clique souvent pour fermer une session oubliée sur un autre PC
+        confirm = re.search(r'action="/settings/sessions/fermer"[^>]*data-confirm="([^"]*)"', page)
+        self.assertIsNotNone(confirm)
+        self.assertIn("adresse d’abonnement", confirm.group(1))
         r = c.post("/settings/password", data={"_csrf": self.csrf, "current": "secret-eleve",
                                                 "new": "nouveau-secret", "confirm": "nouveau-secret"},
                    follow_redirects=True, base_url="http://127.0.0.1:5000")
