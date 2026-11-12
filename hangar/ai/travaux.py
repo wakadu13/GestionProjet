@@ -283,17 +283,31 @@ def demander_latex(nom_fichier, texte, page, user=None, lot=False) -> AIJob:
 
 
 def demander_qcm(*, note=None, texte="", nombre=20, categorie="", titre="", user=None, publier=False,
-                 lot=False, date_examen=None, kit=None) -> AIJob:
+                 lot=False, date_examen=None, kit=None, evenement=None) -> AIJob:
     """QCM généré d'après une note du wiki (``note``) ou un texte collé. ``date_examen`` (date) : appliquée au set
-    pour le compte demandeur dès sa publication (kit de révision d'un contrôle)."""
+    pour le compte demandeur dès sa publication (kit de révision d'un contrôle). ``evenement`` (id de la séance du
+    contrôle) : la date est alors relue dans l'agenda à la publication (contrôle déplacé ou retiré entre-temps)."""
     source = note.path.as_posix() if note is not None else "Texte collé"
     if not categorie:
         categorie = (note.path.parent.name if note is not None else "") or CATEGORIE_GENEREE
     return _enqueue("qcm", {"source": source, "texte_source": "" if note is not None else texte,
                             "nombre": nombre, "categorie": categorie, "titre": titre,
                             "nom": note.title if note is not None else "", "publier": bool(publier),
-                            **({"date_examen": date_examen.isoformat()} if date_examen else {})},
+                            **({"date_examen": date_examen.isoformat()} if date_examen else {}),
+                            **(_controle_du_kit(evenement) if date_examen and evenement else {})},
                     user, f"QCM · {note.title if note is not None else 'texte collé'}", lot, kit=kit)
+
+
+def _controle_du_kit(evenement) -> dict:
+    """Séance du contrôle et sa matière (clé), gardées dans le travail pour relire la date à la publication."""
+    from ..agenda import subject_key
+    from ..models import AgendaEvent
+
+    try:
+        e = db.session.get(AgendaEvent, int(evenement))
+    except (TypeError, ValueError):
+        return {}
+    return {"evenement": e.id, "matiere": subject_key(e.title)} if e is not None else {}
 
 
 def demander_vocabulaire(*, mots, langue="Anglais", types=(), dossier="", titre="", user=None, publier=False,
@@ -573,10 +587,16 @@ def _appliquer_date_examen(job, chemin):
     brut = job.payload.get("date_examen")
     if not brut or not job.user_id or job.kind not in ("qcm", "variantes"):
         return
-    try:
-        jour = date.fromisoformat(str(brut))
-    except ValueError:
-        return
+    if job.payload.get("evenement"):  # kit : date du contrôle relue maintenant (un import a pu le déplacer)
+        from .kit import jour_du_controle
+        jour = jour_du_controle(job.user_id, job.payload["evenement"], job.payload.get("matiere") or "")
+        if jour is None:  # contrôle retiré, plus aucun contrôle de la matière : pas de date d'examen
+            return
+    else:
+        try:
+            jour = date.fromisoformat(str(brut))
+        except ValueError:
+            return
     if jour < quiz.jour(quiz.maintenant()):
         return
     set_id = chemin.removesuffix(".json")

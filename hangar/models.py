@@ -1206,7 +1206,13 @@ class AgendaTask(db.Model):
 
     @property
     def is_overdue(self) -> bool:
-        return not self.is_done and self.due_date is not None and self.due_date < heure.today()
+        # Un bloc de révision passé non coché dont le contrôle est passé est « manqué », pas en retard
+        # (agenda.taches.bloc_manque) ; avant le contrôle, il reste en retard.
+        today = heure.today()
+        if self.is_done or self.due_date is None or self.due_date >= today:
+            return False
+        from .agenda.taches import bloc_manque  # import local : agenda importe les modèles
+        return not bloc_manque(self, today)
 
 
 class AgendaReminder(db.Model):

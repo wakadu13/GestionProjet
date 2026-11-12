@@ -15,6 +15,7 @@ import logging
 import math
 import re
 from collections import Counter
+from itertools import islice
 from datetime import date, datetime, time, timedelta
 
 from flask import current_app, url_for
@@ -752,9 +753,13 @@ def search_mentions(q: str, user, limit: int = 14) -> list[dict]:
     tq = AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.done_at.is_(None))
     if q:
         tq = tq.filter(contient(AgendaTask.title, q))
+    from ..agenda.taches import bloc_manque
+    today = heure.today()
+    # Blocs de révision manqués exclus : la page Tâches (où mène le lien) ne les liste plus
+    taches = list(islice((t for t in tq.order_by(AgendaTask.due_date.is_(None), AgendaTask.due_date)
+                          if not bloc_manque(t, today)), 5))
     out += [{"type": "tache", "title": t.title, "subtitle": "Tâche" + (f" · {_d(t.due_date)}" if t.due_date else ""),
-             "icon": "list-check", "url": url_for("agenda.tasks", focus=t.id)}
-            for t in tq.order_by(AgendaTask.due_date.is_(None), AgendaTask.due_date).limit(5)]
+             "icon": "list-check", "url": url_for("agenda.tasks", focus=t.id)} for t in taches]
     if not q:
         out.insert(0, {"type": "agenda", "title": "Mon agenda (cette semaine)", "subtitle": "Cours, contrôles, tâches",
                        "icon": "calendar", "url": url_for("agenda.dashboard")})

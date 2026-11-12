@@ -172,6 +172,7 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
                              status="active", **vals)
             db.session.add(ev)
             db.session.flush()
+            _rattacher_note(user, ev)
             imp.added += 1
             details.append({"type": "added", "notable": notable, "event_id": ev.id, "after": _snapshot(ev)})
             continue
@@ -246,8 +247,14 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
     A.ensure_exam_reminders(user, at)
     db.session.flush()
     quota_off: list[str] = []
+    blocs_retires: dict[int, list[dict]] = {}
     imp.exam_notes = "\n".join(A.sync_exam_objectives(user, at, A.exam_changes(details), quota_off)
-                               + _replanifier_revisions(user, at))
+                               + _replanifier_revisions(user, at, blocs_retires))
+    if blocs_retires:  # blocs de révision supprimés avec leur contrôle : gardés pour l'annulation de l'import
+        for d in details:
+            if d["type"] != "added" and d["event_id"] in blocs_retires:
+                d["blocs"] = blocs_retires[d["event_id"]]
+        imp.details_json = json.dumps(details, ensure_ascii=False)
     imp.exam_quota_sets = "\n".join(quota_off)
     db.session.commit()
     if s.import_email and imp.changed:
@@ -270,6 +277,7 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
     if last is None or last.id != imp.id:
         raise ValueError("Seul le dernier import peut être annulé.")
     blocs_notes: list[str] = []
+    rendre: list[tuple[AgendaEvent, list[dict]]] = []  # blocs de révision supprimés par l'import, à rendre
     for d in reversed(imp.details):
         ev = db.session.get(AgendaEvent, d.get("event_id"))
         if ev is None:
@@ -290,11 +298,14 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
             A.sync_event_reminders(ev, at)
             if d["type"] == "removed":
                 _revive_reminders(ev, imp.created_at, at)
+            if d.get("blocs"):
+                rendre.append((ev, d["blocs"]))
     imp.undone_at = at
     db.session.flush()
     user = db.session.get(User, imp.user_id)
     notes = []
     if user is not None:
+        blocs_notes += _rendre_blocs(user, rendre, at)
         A.ensure_exam_reminders(user, at)
         db.session.flush()
         notes = A.sync_exam_objectives(user, at, A.exam_changes(imp.details, undo=True))
@@ -304,14 +315,42 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
     return blocs_notes + notes
 
 
-def _replanifier_revisions(user: User, at: datetime) -> list[str]:
-    """Blocs de révision générés (hangar/controles.py) replacés après un import ou son annulation."""
+def _replanifier_revisions(user: User, at: datetime, journal: dict | None = None) -> list[str]:
+    """Blocs de révision générés (hangar/controles.py) replacés après un import ou son annulation. `journal`
+    reçoit les blocs supprimés avec leur contrôle (pour l'annulation)."""
     try:
         from .. import controles
-        return controles.replanifier_apres_import(user, at)
+        return controles.replanifier_apres_import(user, at, journal)
     except Exception:  # noqa: BLE001 - l'import passe quand même
         current_app.logger.exception("Blocs de révision après un import")
         return []
+
+
+def _rendre_blocs(user: User, rendre: list, at: datetime) -> list[str]:
+    """Annulation : les blocs de révision supprimés par l'import (contrôle retiré) reviennent avec le contrôle."""
+    notes = []
+    try:
+        from .. import controles
+        for ev, photos in rendre:
+            n = controles.rendre_blocs(user, ev, photos, at)
+            if n:
+                notes.append(f"{ev.title} : contrôle rétabli, {n} bloc(s) de révision rétabli(s).")
+    except Exception:  # noqa: BLE001 - l'annulation passe quand même
+        current_app.logger.exception("Blocs de révision rendus à l'annulation d'un import")
+    return notes
+
+
+def _rattacher_note(user: User, ev: AgendaEvent) -> None:
+    """Contrôle (re)créé par un import : une note restée sans séance (annulation de l'import qui l'avait ajouté)
+    de la même matière et du même jour lui est rattachée, pour ne pas la redemander ni la compter deux fois."""
+    if not A.is_exam(ev):
+        return
+    key = A.subject_key(ev.title)
+    for g in AgendaGrade.query.filter(AgendaGrade.user_id == user.id, AgendaGrade.event_id.is_(None),
+                                      AgendaGrade.day == ev.start.date()).order_by(AgendaGrade.id):
+        if A.subject_key(g.subject) == key and not AgendaGrade.query.filter_by(event_id=ev.id).first():
+            g.event_id = ev.id
+            return
 
 
 def recent_import_ids(user: User, at: datetime | None = None, days: int = 7) -> set[int]:
