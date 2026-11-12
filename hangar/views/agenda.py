@@ -318,17 +318,17 @@ def tasks():
             return False
         return not cat or (t.category or "") == cat
 
+    g_ = A.open_task_groups(current_user, today)  # blocs de révision manqués exclus (A.bloc_manque)
     if show == "done":
         done = [t for t in AgendaTask.query.filter(AgendaTask.user_id == current_user.id, AgendaTask.done_at.isnot(None))
                 .order_by(AgendaTask.done_at.desc()).limit(300) if keep(t)]
         groups = [("done", "Terminées", done)]
     else:
-        g_ = A.open_task_groups(current_user, today)
         groups = [(k, lab, [t for t in g_[k] if keep(t)]) for k, lab in A.TASK_GROUP_LABELS]
     all_tasks = [t for _, _, lst in groups for t in lst]
     data, _ = _payloads([t.event for t in all_tasks if t.event], all_tasks)
     counts = {
-        "open": AgendaTask.query.filter(AgendaTask.user_id == current_user.id, AgendaTask.done_at.is_(None)).count(),
+        "open": sum(len(lst) for lst in g_.values()),  # les tâches listées sous « À faire », pas un count() brut
         "done": AgendaTask.query.filter(AgendaTask.user_id == current_user.id, AgendaTask.done_at.isnot(None)).count(),
     }
     return render_template("agenda/tasks.html", groups=groups, show=show, q=request.args.get("q", ""), cat=cat,

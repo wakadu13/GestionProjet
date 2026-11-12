@@ -379,7 +379,7 @@ def _blocs_auto(user, ev: AgendaEvent, at: datetime, futurs: bool = True) -> lis
     for t in q:
         if futurs and t.due_date is not None and (t.due_date < at.date() or (
                 t.due_date == at.date() and t.start_time and datetime.combine(t.due_date, t.start_time) < at)):
-            continue  # bloc passé non coché : gardé tel quel, « manqué » (agenda.taches.bloc_manque), pas en retard
+            continue  # bloc passé non coché : gardé tel quel, en retard jusqu'au contrôle, puis « manqué » (agenda.taches.bloc_manque)
         out.append(t)
     return out
 

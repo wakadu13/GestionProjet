@@ -56,8 +56,9 @@ class BlocsEtNotesTests(TC.ControlesTests):
         self.assertFalse([x for x in digest.calculer(self.user, apres, at2) if x.cle == "agenda.taches"])
         self.assertIsNone(A.build_day_email(self.user, apres, at2))
         bloc = AgendaTask.query.filter_by(revision_auto=True).first()
-        self.assertFalse(A.tache_en_retard(bloc, apres))
         self.assertTrue(A.bloc_manque(bloc, apres))
+        with self.horloge(at2):
+            self.assertFalse(bloc.is_overdue)
 
     def test_pastille_des_taches_ignore_les_blocs_manques(self):
         self.importer()
@@ -74,6 +75,98 @@ class BlocsEtNotesTests(TC.ControlesTests):
         dues, retard = A.compte_taches_dues(self.user, premier.due_date)
         self.assertEqual(retard, 0)
         self.assertGreaterEqual(dues, 1)
+
+    def horloge(self, at):
+        """Fige l'heure de l'agenda (heure.now/today, et donc la vue et AgendaTask.is_overdue) sur `at`."""
+        from unittest import mock
+
+        from hangar import heure
+        return mock.patch.object(heure, "_maintenant_utc", return_value=heure.depuis_agenda(at))
+
+    def test_bloc_saute_avant_le_controle_reste_en_retard(self):
+        """Un bloc sauté alors que le contrôle est encore à venir n'est pas « manqué » : son travail n'est
+        replacé nulle part, il doit rester rappelé (En retard, pastille, résumé, page Tâches, « @ »)."""
+        from hangar.ai import context as ai_context
+        self.importer()
+        self.relier()
+        ev = self.ev("exam1")
+        C.appliquer(self.user, ev, self.at)
+        db.session.commit()
+        blocs = AgendaTask.query.filter_by(revision_auto=True).order_by(AgendaTask.due_date).all()
+        self.assertGreater(len(blocs), 1)
+        premier = blocs[0]
+        jour = premier.due_date + timedelta(days=1)
+        self.assertLess(jour, ev.start.date())  # contrôle encore à venir
+        self.assertFalse(A.bloc_manque(premier, jour))
+        g = A.open_task_groups(self.user, jour)
+        self.assertIn(premier.id, [t.id for t in g["overdue"]])
+        self.assertEqual(A.compte_taches_dues(self.user, jour)[1], 1)
+        at2 = datetime.combine(jour, time(7))
+        sec = next(x for x in digest.calculer(self.user, jour, at2) if x.cle == "agenda.taches")
+        self.assertIn(premier.title, sec.html)
+        with self.horloge(at2):
+            self.assertTrue(premier.is_overdue)
+            with self.app.test_request_context():
+                urls = [x["url"] for x in ai_context.search_mentions("Réviser", self.user) if x["type"] == "tache"]
+        self.assertIn(f"focus={premier.id}", " ".join(urls))
+        # Le jour du contrôle passé : le même bloc devient « manqué »
+        apres = ev.start.date() + timedelta(days=1)
+        self.assertTrue(A.bloc_manque(premier, apres))
+        # Contrôle retiré (plus actif) : le bloc passé est manqué aussi, même avant la date prévue
+        ev.status = "removed"
+        db.session.commit()
+        self.assertTrue(A.bloc_manque(premier, jour))
+
+    def test_recherche_arobase_sans_les_blocs_manques(self):
+        """« @ » ne propose pas un bloc manqué (il n'est plus listé sur la page Tâches où mène le lien)."""
+        from hangar.ai import context as ai_context
+        self.importer()
+        self.relier()
+        ev = self.ev("exam1")
+        C.appliquer(self.user, ev, self.at)
+        db.session.commit()
+        self.assertTrue(AgendaTask.query.filter_by(revision_auto=True).count())
+        apres = datetime.combine(ev.start.date() + timedelta(days=3), time(9))
+        with self.horloge(apres), self.app.test_request_context():
+            taches = [x for x in ai_context.search_mentions("Réviser", self.user) if x["type"] == "tache"]
+            toutes = [x for x in ai_context.search_mentions("", self.user) if x["type"] == "tache"]
+        self.assertEqual(taches, [])
+        self.assertEqual(toutes, [])
+
+    def test_vue_pastille_et_compteur_de_la_page_taches(self):
+        """La pastille (_agenda_context) et « À faire (N) » de la page Tâches, par la vue : blocs manqués exclus
+        après le contrôle, mais comptés en retard avant."""
+        import re
+        self.importer()
+        self.relier()
+        ev = self.ev("exam1")
+        C.appliquer(self.user, ev, self.at)
+        db.session.add(AgendaTask(user_id=self.user.id, title="Rendre le rapport", due_date=self.today + timedelta(days=1)))
+        db.session.commit()
+        n_blocs = AgendaTask.query.filter_by(revision_auto=True, done_at=None).count()
+        self.assertGreater(n_blocs, 1)
+        c, _ = self.client()
+
+        def page(at):
+            with self.horloge(at):
+                html = c.get("/agenda/tasks").get_data(as_text=True)
+            a_faire = int(re.search(r'À faire <span class="count-pill">(\d+)</span>', html).group(1))
+            badge = re.search(r'<span class="sb-badge( danger)?"[^>]*>(\d+)</span>', html)
+            return a_faire, (int(badge.group(2)), bool(badge.group(1))) if badge else None, html
+
+        # Trois jours après le contrôle : seul le rapport est à faire (en retard), les blocs sont manqués
+        apres = datetime.combine(ev.start.date() + timedelta(days=3), time(9))
+        a_faire, badge, html = page(apres)
+        self.assertEqual(a_faire, 1)
+        self.assertEqual(badge, (1, True))
+        self.assertNotIn("Réviser Techniques", html)
+        # Le lendemain du premier bloc, contrôle à venir : le bloc sauté est en retard et compté partout
+        premier = AgendaTask.query.filter_by(revision_auto=True).order_by(AgendaTask.due_date).first()
+        avant = datetime.combine(premier.due_date + timedelta(days=1), time(9))
+        a_faire, badge, html = page(avant)
+        self.assertEqual(a_faire, n_blocs + 1)
+        self.assertTrue(badge and badge[1])
+        self.assertIn("Réviser Techniques", html)
 
     # -- Constat 2 : annuler un import rend les blocs supprimés --------------------------------------------
     def test_annuler_import_rend_les_blocs_supprimes(self):

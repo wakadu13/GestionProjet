@@ -148,16 +148,18 @@ def task_end(task: AgendaTask, d: date | None = None) -> datetime | None:
 
 
 def bloc_manque(t: AgendaTask, today: date) -> bool:
-    """Bloc « Réviser … » placé par « Planifier mes révisions » (hangar/controles.py) dont le jour est passé sans
-    être coché : il est **manqué**, pas en retard. Il reste dans l'agenda à son jour (historique), mais ne compte
-    ni dans « En retard », ni dans la pastille des tâches, ni dans le résumé quotidien : la charge restante est
-    déjà répartie sur les blocs à venir, et après le contrôle il n'a plus d'objet."""
-    return bool(t.revision_auto) and t.done_at is None and t.due_date is not None and t.due_date < today
+    """Bloc « Réviser … » placé par « Planifier mes révisions » (hangar/controles.py), passé sans être coché,
+    **et dont le contrôle est passé** (ou retiré, annulé, supprimé) : il est **manqué**, pas en retard. Il reste
+    dans l'agenda à son jour (historique), mais ne compte ni dans « En retard », ni dans la pastille, ni dans le
+    résumé quotidien, ni sur la page Tâches, ni dans la recherche « @ » : il n'a plus d'objet.
 
-
-def tache_en_retard(t: AgendaTask, today: date) -> bool:
-    """Tâche non faite dont l'échéance est passée (les blocs de révision manqués exceptés)."""
-    return t.done_at is None and t.due_date is not None and t.due_date < today and not t.revision_auto
+    Avant le contrôle, un bloc sauté reste **en retard** : son travail n'est replacé nulle part (les blocs sont
+    fixés par « Planifier mes révisions », la replanification après un import ne déplace que les blocs en
+    conflit), il doit donc rester rappelé."""
+    if not t.revision_auto or t.done_at is not None or t.due_date is None or t.due_date >= today:
+        return False
+    ev = t.event
+    return ev is None or not ev.is_active or ev.start.date() < today
 
 
 def compte_taches_dues(user: User, today: date) -> tuple[int, int]:
