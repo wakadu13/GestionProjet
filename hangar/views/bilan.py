@@ -141,17 +141,22 @@ def _report(rid, need_edit=False):
 
 
 def _refresh_projects(r: BilanReport) -> list[Project]:
-    """Projets à recalculer : ceux que le bilan couvrait déjà (et que la personne qui actualise voit encore),
-    jamais les projets visibles par cette personne : un administrateur ferait sinon entrer ses projets privés
-    dans le bilan d'un membre."""
-    if r.project_id:
+    """Projets à recalculer : ceux que le bilan couvrait déjà, jamais les projets visibles par la personne qui
+    actualise (un administrateur ferait sinon entrer ses projets privés dans le bilan d'un membre). Parmi eux,
+    on ne garde que ceux que voient encore cette personne ET l'auteur : l'auteur lit toujours son bilan, il ne
+    doit pas y trouver les nouveautés d'un projet privé dont on l'a retiré depuis."""
+    if r.project_id:  # l'auteur n'ouvre ce bilan que s'il voit encore le projet (can_read_report)
         return [r.project]
     ids = _covered_ids(r)
     if ids is None:  # contenu illisible : on se limite à ce que voyait l'auteur
         projects = visible_projects(r.created_by or current_user)
     else:
         projects = Project.query.filter(Project.id.in_(ids or [0])).order_by(Project.name).all()
-    return [p for p in projects if can(current_user, "view", p)]
+    # Droits de l'auteur d'après son rôle et ses adhésions (même si son compte est désactivé pour l'instant)
+    author_ids = ({p.id for p in visible_projects(r.created_by, include_archived=True)}
+                  if r.created_by is not None else None)
+    return [p for p in projects
+            if can(current_user, "view", p) and (author_ids is None or p.id in author_ids)]
 
 
 def _manual(r):

@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from hangar import create_app
 from hangar import workgraph as W
 from hangar.extensions import db
-from hangar.models import BilanReport, Initiative, Label, Module, User, WorkLog
+from hangar.models import BilanReport, Initiative, Label, Module, ProjectMember, User, WorkLog
 from hangar.services import add_relation, create_issue, create_project
 
 SECRETS = ("Licenciement de Paul", "Avis du chef de corps", "Dossier secret", "Conseil de discipline",
@@ -175,6 +175,49 @@ class BilanTests(ConfidentialiteCase):
             c, _ = self.client(username)
             self.assertIn("Ancien bilan", c.get("/bilan").get_data(as_text=True))
             self.assertEqual(c.get(f"/bilan/reports/{old.id}").status_code, 200)
+
+    def _bilan_du_membre_avec_le_projet_prive(self):
+        """Le membre fait partie du projet privé quand il enregistre son bilan « Tous les projets »."""
+        db.session.add(ProjectMember(project=self.priv, user=self.member, role="member"))
+        db.session.commit()
+        r = self.save_bilan("membre", title="Bilan du membre")
+        self.assertEqual(sorted(p["id"] for p in r.data["scope"]["projects"]), sorted([self.pub.id, self.priv.id]))
+        return r
+
+    def _actualiser_en_admin(self, r):
+        c, tok = self.client("chef")
+        res = c.post(f"/bilan/reports/{r.id}", data={"_csrf": tok, "refresh": "1", "title": r.title})
+        self.assertEqual(res.status_code, 302)
+        db.session.expire_all()
+        return db.session.get(BilanReport, r.id)
+
+    def test_actualiser_sans_les_projets_que_l_auteur_ne_voit_plus(self):
+        """Membre retiré d'un projet privé : quand un administrateur actualise son bilan, les nouveautés de ce
+        projet n'y entrent pas (l'auteur lit toujours son propre bilan)."""
+        r = self._bilan_du_membre_avec_le_projet_prive()
+        ProjectMember.query.filter_by(project_id=self.priv.id, user_id=self.member.id).delete()
+        self._issue(self.priv, "Nouveau secret après départ", [], self.today)
+        db.session.commit()
+        c, _ = self.client("membre")
+        self.assertEqual(c.get(f"/projects/{self.priv.id}/issues").status_code, 403)
+        r = self._actualiser_en_admin(r)
+        self.assertEqual([p["id"] for p in r.data["scope"]["projects"]], [self.pub.id])
+        self.assertNotIn("Nouveau secret après départ", r.data_json)
+        self.assertNoSecret(r.data_json, "dans le bilan actualisé")
+        c, _ = self.client("membre")
+        self.assertEqual(c.get(f"/bilan/reports/{r.id}").status_code, 200)
+        for url in (f"/bilan/reports/{r.id}", f"/bilan/reports/{r.id}/export.md"):
+            body = c.get(url).get_data(as_text=True)
+            self.assertNotIn("Nouveau secret après départ", body)
+            self.assertNoSecret(body, f"dans {url}")
+
+    def test_actualiser_le_bilan_d_un_compte_desactive(self):
+        """Un compte désactivé garde ses adhésions : l'actualisation par un administrateur ne vide pas son bilan."""
+        r = self._bilan_du_membre_avec_le_projet_prive()
+        self.member.active = False
+        db.session.commit()
+        r = self._actualiser_en_admin(r)
+        self.assertEqual(sorted(p["id"] for p in r.data["scope"]["projects"]), sorted([self.pub.id, self.priv.id]))
 
 
 class InitiativeTests(ConfidentialiteCase):
