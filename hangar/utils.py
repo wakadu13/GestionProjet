@@ -5,7 +5,6 @@ import re
 from datetime import date, datetime, timedelta
 
 import markdown as md
-import nh3
 from flask import abort, request, url_for
 from flask_login import current_user
 from markupsafe import Markup, escape
@@ -14,7 +13,8 @@ from .extensions import db
 from .models import (
     ROLE_RANK, Favorite, Issue, Project, ProjectMember, User,
 )
-from .securite import ExternalImages, media_filter
+from .nettoyage_html import nettoyer
+from .securite import ExternalImages
 from .texte import COLLATION_FR, cle_tri, contient_plie, plier  # noqa: F401 (réexportés)
 
 MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
@@ -252,11 +252,10 @@ def render_markdown(text: str | None, link_refs: bool = True) -> Markup:
     html = re.sub(r"<li>\s*\[[xX]\]\s*", '<li class="task done"><input type="checkbox" checked disabled> ', html)
     html = re.sub(r"<li>\s*<p>\s*\[ \]\s*", '<li class="task"><p><input type="checkbox" disabled> ', html)
     html = re.sub(r"<li>\s*<p>\s*\[[xX]\]\s*", '<li class="task done"><p><input type="checkbox" checked disabled> ', html)
-    # Images seulement depuis Hangar : une image externe (« ![x](https://…) » devenue un lien ci-dessus, ou
-    # balise <img> écrite à la main) se chargerait chez chaque lecteur sans qu'il clique.
-    clean = nh3.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, attribute_filter=media_filter,
-                      url_schemes={"http", "https", "mailto"}, link_rel="noopener noreferrer")
-    return Markup(clean)
+    # Règle commune (nettoyage_html) : images seulement depuis Hangar. Une image externe (« ![x](https://…) »
+    # devenue un lien ci-dessus, ou balise <img> écrite à la main, changée en lien « Image externe ↗ ») se
+    # chargerait sinon chez chaque lecteur sans qu'il clique.
+    return Markup(nettoyer(html, ALLOWED_TAGS, ALLOWED_ATTRS))
 
 
 def extract_mentions(text: str) -> list[User]:

