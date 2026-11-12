@@ -133,6 +133,10 @@ class Workspace(db.Model):
     allow_signup = db.Column(db.Boolean, default=False)
     week_starts_monday = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=now)
+    # Jeton des sessions : mis dans chaque session et chaque cookie « se souvenir de moi » ; changé à chaque
+    # restauration de sauvegarde, il ferme toutes les sessions ouvertes (un numéro de compte peut désigner
+    # quelqu'un d'autre dans la base restaurée). Vide tant qu'aucune restauration n'a eu lieu.
+    jeton_sessions = db.Column(db.String(40), default="")
 
     @staticmethod
     def get() -> "Workspace":
@@ -142,6 +146,11 @@ class Workspace(db.Model):
             db.session.add(ws)
             db.session.commit()
         return ws
+
+    @staticmethod
+    def jeton_actuel() -> str:
+        ws = db.session.get(Workspace, 1)
+        return (ws.jeton_sessions or "") if ws is not None else ""
 
 
 class User(UserMixin, db.Model):
@@ -173,6 +182,10 @@ class User(UserMixin, db.Model):
     @property
     def is_active(self):  # type: ignore[override]
         return bool(self.active)
+
+    def get_id(self):  # noqa: D401 - « 12 », ou « 12:jeton » après une restauration (voir Workspace.jeton_sessions)
+        jeton = Workspace.jeton_actuel()
+        return f"{self.id}:{jeton}" if jeton else str(self.id)
 
     @staticmethod
     def internal_email(username: str) -> str:

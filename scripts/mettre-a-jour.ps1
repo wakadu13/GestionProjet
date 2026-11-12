@@ -38,18 +38,29 @@ $avant = git rev-parse HEAD
 git pull --ff-only
 if ($LASTEXITCODE -ne 0) { Stop-Ici 'La récupération a échoué (pas d''Internet ? version modifiée ?). Hangar n''a pas changé.' }
 $apres = git rev-parse HEAD
-if ($avant -eq $apres) {
+# Une mise à jour précédente inachevée (dépendances pas installées) ou un Hangar lancé avec un autre code que
+# celui du disque : on termine le travail, même si git n'a rien apporté de nouveau cette fois.
+$marqueur = Join-Path (Get-DossierDonnees) 'mise-a-jour-inachevee'
+$infos = Get-InfosLancement
+$lance = if ($infos -and $infos.commit) { [string]$infos.commit } else { '' }
+if ($avant -eq $apres -and -not (Test-Path -LiteralPath $marqueur) -and (-not $lance -or $lance -eq $apres)) {
     Write-Host 'Hangar était déjà à jour.' -ForegroundColor Green
     Wait-Touche
     exit 0
 }
+New-Item -ItemType File -Force -Path $marqueur | Out-Null
 
-Write-Host '3/4 Installation des dépendances…'
+Write-Host '3/4 Arrêt de Hangar et installation des dépendances…'
+# Hangar arrêté AVANT l'installation : Windows interdit de remplacer un programme en cours d'utilisation.
+$tournait = Stop-Hangar
 & $uv sync
-if ($LASTEXITCODE -ne 0) { Stop-Ici 'L''installation des dépendances a échoué. Relance ce script avec Internet.' }
+if ($LASTEXITCODE -ne 0) {
+    Stop-Ici ('L''installation des dépendances a échoué (pas d''Internet ?). Hangar est arrêté : relance ce ' +
+              'script quand Internet revient, il reprendra là où il s''est arrêté.')
+}
+Remove-Item -LiteralPath $marqueur -Force -ErrorAction SilentlyContinue
 
 Write-Host '4/4 Relance de Hangar…'
-$tournait = Stop-Hangar
 if (Start-HangarCache) {
     Write-Host 'Hangar a redémarré en arrière-plan avec la nouvelle version.' -ForegroundColor Green
 } elseif ($tournait) {

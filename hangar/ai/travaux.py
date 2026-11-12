@@ -16,10 +16,11 @@ import hashlib
 import json
 from pathlib import PurePosixPath
 
-from flask import url_for
+from flask import current_app, url_for
 
 from ..extensions import db
 from ..models import now
+from ..wiki import coffre
 from . import jobs
 from .demandes import (NOTE_EXTRAITS, QUESTION_SCHEMA, budget_cours, extraits_cours, question_en_json,
                        sans_cadre)
@@ -640,6 +641,10 @@ def ecrire_page(job: AIJob, texte: str, avertissement: str | None, pdf_source: b
             raise Echec("Aucun nom libre pour la page.")
     if not cible.resolve().is_relative_to(vault.root.resolve()):
         raise Echec("Nom de page invalide.")
+    try:
+        coffre.dossier_pour_ecrire(current_app.config)  # coffre introuvable : surtout pas recréé vide
+    except coffre.CoffreIntrouvable as e:
+        raise Echec(str(e)) from None
     cible.parent.mkdir(parents=True, exist_ok=True)
     if cible.is_file():
         # Page « ANSI » comprise : réécrite en UTF-8, son texte d'origine gardé dans l'historique.

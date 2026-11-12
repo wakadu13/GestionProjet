@@ -74,6 +74,23 @@ def introuvable(config) -> bool:
     return config.get("WIKI_ORIGINE", DEFAUT) != DEFAUT and not Path(config["WIKI_DIR"]).is_dir()
 
 
+class CoffreIntrouvable(ValueError):
+    """Écriture refusée : le coffre choisi est introuvable. Rien n'est créé à sa place (un dossier recréé par un
+    import ferait passer le coffre pour « trouvé », vide et invisible pour Obsidian)."""
+
+
+def message_introuvable(config) -> str:
+    return (f"Coffre du wiki introuvable ({config['WIKI_DIR']}) : rien n'a été enregistré. Rebranche le disque ou "
+            "choisis le bon dossier dans Réglages › Espace, puis réessaie.")
+
+
+def dossier_pour_ecrire(config) -> Path:
+    """Dossier du coffre, pour y écrire (QCM, IA…). Lève CoffreIntrouvable si le coffre choisi n'existe pas."""
+    if introuvable(config):
+        raise CoffreIntrouvable(message_introuvable(config))
+    return Path(config["WIKI_DIR"])
+
+
 def appliquer(app, dossier: Path, origine: str) -> None:
     """Change le coffre de l'application en marche (le wiki et les QCM le relisent à la prochaine page)."""
     from .vault import invalider

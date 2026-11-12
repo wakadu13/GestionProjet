@@ -38,6 +38,27 @@ def _is_hangar(port: int) -> bool:
         return False
 
 
+def _ports_lances(data_dir) -> list[int]:
+    """Ports où Hangar a pu être lancé : 5000, et celui noté au dernier lancement (data/serveur.json), qui diffère
+    avec --port ou quand 5000 était pris."""
+    import json
+    from pathlib import Path
+
+    from .lancement import FICHIER
+    ports = [5000]
+    try:
+        port = int(json.loads((Path(data_dir) / FICHIER).read_text(encoding="utf-8")).get("port") or 0)
+    except (OSError, ValueError, TypeError, AttributeError):
+        port = 0
+    if 0 < port < 65536 and port not in ports:
+        ports.append(port)
+    return ports
+
+
+def _hangar_tourne(data_dir) -> bool:
+    return any(_port_busy(p) and _is_hangar(p) for p in _ports_lances(data_dir))
+
+
 HOTES_LOCAUX = ("127.0.0.1", "localhost", "::1")
 
 
@@ -337,7 +358,7 @@ def cmd_restore(args):
     if probleme:
         print(f"✗ Restauration refusée : {probleme}. Ta base actuelle n’a pas été touchée.")
         sys.exit(1)
-    if _port_busy(5000) and _is_hangar(5000):
+    if _hangar_tourne(_dossier_donnees(args)):
         print("✗ Hangar est en train de tourner. Arrête-le d’abord (ferme sa fenêtre), "
               "ou restaure depuis Réglages › Sauvegardes.")
         sys.exit(1)

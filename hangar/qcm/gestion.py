@@ -64,7 +64,10 @@ def _importer_fichier(fichier, categorie, remplacer, racine=None, prefixe=DOSSIE
         except ValueError as e:
             return False, str(e)
 
-    destination = Path(racine or coffre.racine(), rel)
+    try:
+        destination = Path(racine or coffre.racine_ecriture(), rel)
+    except ValueError as e:  # coffre introuvable : rien n'est créé à sa place
+        return False, str(e)
     if destination.exists() and not remplacer:
         return False, (f"{rel} existe déjà : coche « Remplacer les sets existants » pour l'écraser "
                        "(la progression est conservée pour les questions dont l'id ne change pas).")
@@ -209,7 +212,11 @@ def deplacer():
     langue = clean_key(element.langue) if element.langue else None
     parties = [DOSSIER_QCM] + ([langue] if langue and "/" not in langue and langue != dossier else []) + [dossier]
     rel = PurePosixPath(*parties, element.path.name)
-    racine = coffre.racine()
+    try:
+        racine = coffre.racine_ecriture()
+    except ValueError as e:  # coffre introuvable
+        flash(str(e), "error")
+        return redirect(retour.split("#")[0] + "#" + ancre(element.id))
     if rel == element.path:
         flash(f"« {element.titre} » est déjà dans le dossier {dossier}.", "info")
         return redirect(retour.split("#")[0] + "#" + ancre(element.id))

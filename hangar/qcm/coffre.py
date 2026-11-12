@@ -28,6 +28,13 @@ def racine() -> Path:
     return Path(current_app.config["WIKI_DIR"])
 
 
+def racine_ecriture() -> Path:
+    """Comme ``racine()``, pour écrire : lève ``CoffreIntrouvable`` (un ValueError) si le coffre choisi est
+    introuvable, au lieu de le recréer vide."""
+    from ..wiki.coffre import dossier_pour_ecrire
+    return dossier_pour_ecrire(current_app.config)
+
+
 def clean_key(raw):
     """Valide un chemin saisi (``Dossier/Nom``), ou renvoie None."""
     parts = [p.strip() for p in str(raw).replace("\\", "/").strip().removesuffix(".md").split("/")]

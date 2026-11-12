@@ -73,7 +73,11 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
 
     @login_manager.user_loader
     def load_user(uid):
-        u = db.session.get(models.User, int(uid))
+        # Le jeton doit être celui de la base : une session ouverte avant une restauration est refusée.
+        numero, _, jeton = str(uid).partition(":")
+        if not numero.isdigit() or jeton != models.Workspace.jeton_actuel():
+            return None
+        u = db.session.get(models.User, int(numero))
         return u if u and u.active else None
 
     _register_blueprints(app)

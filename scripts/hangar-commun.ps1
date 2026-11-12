@@ -18,17 +18,39 @@ function Get-RaccourciDemarrage {
     return Join-Path ([Environment]::GetFolderPath('Startup')) $NomRaccourci
 }
 
-function Get-ProcessusHangar {
-    # Le programme qui écoute sur le port de Hangar, s'il s'agit bien de Python (lancé par uv).
+function Get-DossierDonnees {
+    if ($env:HANGAR_DATA) { return $env:HANGAR_DATA }
+    return Join-Path $Depot 'data'
+}
+
+function Get-InfosLancement {
+    # Ce que Hangar a noté à son dernier lancement (data\serveur.json : port, version du code), ou $null.
+    $fichier = Join-Path (Get-DossierDonnees) 'serveur.json'
+    if (-not (Test-Path -LiteralPath $fichier)) { return $null }
     try {
-        $connexions = Get-NetTCPConnection -LocalPort $PortHangar -State Listen -ErrorAction Stop
+        return Get-Content -LiteralPath $fichier -Raw -Encoding UTF8 | ConvertFrom-Json
     } catch {
-        return @()
+        return $null
     }
+}
+
+function Get-ProcessusHangar {
+    # Le programme qui écoute sur le port de Hangar (5000, ou celui noté au dernier lancement : --port, ou 5000
+    # déjà pris), s'il s'agit bien de Python (lancé par uv).
+    $ports = @($PortHangar)
+    $infos = Get-InfosLancement
+    if ($infos -and $infos.port -and ($ports -notcontains [int]$infos.port)) { $ports += [int]$infos.port }
     $trouves = @()
-    foreach ($c in $connexions) {
-        $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
-        if ($p -and $p.ProcessName -match '^(python|pythonw|uv)') { $trouves += $p }
+    foreach ($port in $ports) {
+        try {
+            $connexions = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Stop)
+        } catch {
+            continue
+        }
+        foreach ($c in $connexions) {
+            $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+            if ($p -and $p.ProcessName -match '^(python|pythonw|uv|hangar)') { $trouves += $p }
+        }
     }
     return $trouves
 }

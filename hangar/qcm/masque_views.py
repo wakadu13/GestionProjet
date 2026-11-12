@@ -110,7 +110,7 @@ def _enregistrer(uid, existant):
                 image = masque.PERSO_IMAGE + masque.enregistrer_image(fichier, perso_racine / masque.DOSSIER_IMAGES_PERSO)
             else:
                 dossier_images = coffre.dossier_pieces_jointes(f"{DOSSIER_QCM}/{dossier}/schema")
-                racine = coffre.racine()
+                racine = coffre.racine_ecriture()
                 nom = masque.enregistrer_image(fichier, racine / dossier_images if dossier_images else racine)
                 image = f"{dossier_images}/{nom}" if dossier_images else nom
                 invalider()
@@ -145,7 +145,11 @@ def _enregistrer(uid, existant):
     elif destination == "perso":
         cible = perso_racine / dossier / masque.nom_libre(perso_racine / dossier, (paquets.slug(titre) or "image-masquee") + ".json")
     else:
-        cible = coffre.racine() / paquets.chemin_libre(dossier, titre, "image-masquee")
+        try:
+            cible = paquets.chemin_libre(dossier, titre, "image-masquee")
+        except ValueError as e:  # coffre introuvable
+            return erreur(str(e))
+        cible = coffre.racine() / cible
     cible.parent.mkdir(parents=True, exist_ok=True)
     cible.write_text(json.dumps(contenu, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     invalider()

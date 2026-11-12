@@ -1,6 +1,7 @@
 """Paramètres : profil, mot de passe, préférences, espace de travail, jetons d'API, sauvegardes."""
 import os
 import shutil
+import secrets
 import sqlite3
 from datetime import datetime
 
@@ -179,8 +180,8 @@ make_backup = sauvegarde.make_backup
 def restaurer_base(chemin: str) -> list[str]:
     """Remplace la base par la sauvegarde ``chemin`` (déjà vérifiée par ``sauvegarde.verifier_base``), après
     une sauvegarde de sécurité de l'état actuel, puis la met au niveau du code sans redémarrer (sauvegarde
-    d'une version plus ancienne : tables et colonnes ajoutées depuis). La session en cours est fermée : son
-    numéro de compte peut désigner quelqu'un d'autre dans la base restaurée. Renvoie les changements de
+    d'une version plus ancienne : tables et colonnes ajoutées depuis). Toutes les sessions ouvertes sont fermées
+    (jeton des sessions changé) : leur numéro de compte peut désigner quelqu'un d'autre dans la base restaurée. Renvoie les changements de
     structure appliqués (vide si la sauvegarde était déjà au niveau)."""
     from .. import migrer_schema
     from ..models import Workspace as _Workspace
@@ -197,7 +198,9 @@ def restaurer_base(chemin: str) -> list[str]:
         dst.close()
     db.engine.dispose()
     changements = migrer_schema()
-    _Workspace.get()
+    # Nouveau jeton : toutes les sessions ouvertes (autres postes, cookies « se souvenir de moi ») sont fermées.
+    _Workspace.get().jeton_sessions = secrets.token_hex(12)
+    db.session.commit()
     from ..extensions import vider_journal
     vider_journal()
     current_app.config.pop("_HAS_USERS", None)  # la base restaurée peut n'avoir aucun compte
@@ -262,7 +265,8 @@ def backup():
                 flash(f"Restauration refusée : {probleme}. Ta base actuelle n’a pas été touchée.", "error")
                 return redirect(url_for("settings.backup"))
             changements = restaurer_base(path)
-            flash(f"Base restaurée depuis {name}. Une sauvegarde de l’état précédent a été créée.", "success")
+            flash(f"Base restaurée depuis {name}. Une sauvegarde de l’état précédent a été créée. Tout le monde a "
+                  "été déconnecté, sur tous les postes : reconnecte-toi avec un compte de la sauvegarde.", "success")
             if changements:
                 flash("Cette sauvegarde venait d’une version plus ancienne de Hangar : elle a été mise à jour "
                       "automatiquement, pas besoin de redémarrer.", "info")
