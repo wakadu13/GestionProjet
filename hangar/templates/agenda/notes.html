@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "agenda/_macros.html" as ag with context %}
+{% block title %}Mes notes{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('estimate', 15) }} Mes notes</span></div></div>{% endblock %}
+{% block content %}
+{% macro fmt(v) %}{{ ('%.2f'|format(v)).rstrip('0').rstrip('.').replace('.', ',') if v is not none else '—' }}{% endmacro %}
+<div class="inner" style="max-width:980px;margin:0 auto">
+  <div class="stats mb-lg">
+    <div class="stat accent"><div class="v" data-moyenne-generale>{{ fmt(m.generale) }}</div><div class="l">{{ icon('estimate', 13) }} Moyenne générale (sur 20)</div></div>
+    <div class="stat"><div class="v">{{ m.notes|length }}</div><div class="l">{{ icon('check', 13) }} Notes saisies</div></div>
+    <div class="stat {% if a_noter %}warning{% endif %}"><div class="v">{{ a_noter|length }}</div><div class="l">{{ icon('alert', 13) }} Contrôles passés sans note</div></div>
+  </div>
+
+  {% if a_noter %}
+  <section class="panel mb">
+    <div class="panel-h">{{ icon('alert', 15) }}<h3>Notes à saisir</h3></div>
+    <div>{% for e in a_noter[:10] %}<a class="flex gap" style="padding:6px 12px;align-items:center" href="{{ url_for('agenda.event_prepare', eid=e.id) }}#note"><b class="nowrap">{{ A.day_short(e.start.date()) }}</b><span class="grow">{{ e.title }}</span><span class="small" style="color:var(--accent-text)">Saisir ta note</span></a>{% endfor %}</div>
+  </section>
+  {% endif %}
+
+  {% if m.matieres %}
+  <div class="grid-2 mb" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+    <section class="panel"><div class="panel-h">{{ icon('chart', 15) }}<h3>Moyenne par matière</h3></div><div class="panel-b" style="overflow-x:auto">{{ graphes.matieres }}</div></section>
+    <section class="panel"><div class="panel-h">{{ icon('trending', 15) }}<h3>Évolution</h3></div><div class="panel-b">{{ graphes.evolution }}</div></section>
+  </div>
+  {% if graphes.comparaison %}
+  <section class="panel mb"><div class="panel-h">{{ icon('graduation', 15) }}<h3>Maîtrise des QCM le jour du contrôle et note obtenue</h3></div>
+    <div class="panel-b"><p class="help" style="margin-top:0">La maîtrise est figée au début de chaque contrôle dont la matière est reliée à une catégorie de QCM. La note est ramenée en pourcentage pour la comparer.</p>{{ graphes.comparaison }}</div></section>
+  {% endif %}
+
+  {% for mat in m.matieres %}
+  <section class="panel mb">
+    <div class="panel-h">{{ icon('book', 15) }}<h3>{{ mat.matiere }}</h3><span class="badge right">Moyenne : {{ fmt(mat.moyenne) }} / 20</span></div>
+    <table class="table" style="width:100%">
+      <thead><tr><th>Date</th><th>Contrôle</th><th>Note</th><th>Coef.</th><th>Maîtrise QCM</th><th></th></tr></thead>
+      <tbody>
+      {% for g in mat.notes %}
+        <tr>
+          <td class="nowrap">{{ g.day.strftime('%d/%m/%Y') }}</td>
+          <td>{% if g.event_id %}<a href="{{ url_for('agenda.event_prepare', eid=g.event_id) }}">{{ g.label or 'Contrôle' }}</a>{% else %}{{ g.label or 'Saisie à la main' }}{% endif %}</td>
+          <td class="nowrap"><b>{{ fmt(g.value) }}</b> / {{ fmt(g.scale) }}</td>
+          <td>{{ fmt(g.coefficient) }}</td>
+          <td>{{ (g.mastery|round|int ~ ' %') if g.mastery is not none else '—' }}</td>
+          <td class="nowrap">
+            <details style="display:inline-block"><summary class="btn btn-xs btn-ghost">Modifier</summary>
+              <form method="post" action="{{ url_for('agenda.grade_update', gid=g.id) }}" class="flex wrap gap-4 mt">{{ ui.csrf() }}
+                <input class="input input-sm" name="value" value="{{ '%g'|format(g.value) }}" style="width:70px" aria-label="Note">
+                <input class="input input-sm" name="scale" value="{{ '%g'|format(g.scale or 20) }}" style="width:55px" aria-label="Barème">
+                <input class="input input-sm" name="coef" value="{{ '%g'|format(g.coefficient or 1) }}" style="width:55px" aria-label="Coefficient">
+                <button class="btn btn-xs">OK</button>
+              </form>
+            </details>
+            {{ ui.confirm_button(url_for('agenda.grade_delete', gid=g.id), 'Supprimer', 'Supprimer cette note ?', cls='btn btn-xs btn-danger-ghost', icon_name='trash') }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+  {% else %}
+  {{ ui.empty('estimate', 'Aucune note pour l’instant', 'Après un contrôle, saisis ta note dans sa fenêtre ou sur sa page « Préparer ce contrôle ». Tu peux aussi en ajouter une à la main ci-dessous.') }}
+  {% endif %}
+
+  <section class="panel mb">
+    <div class="panel-h">{{ icon('plus', 15) }}<h3>Ajouter une note à la main</h3><span class="muted small">pour une épreuve absente de l’emploi du temps (sport, militaire…)</span></div>
+    <div class="panel-b">
+      <form method="post" action="{{ url_for('agenda.grade_create') }}" class="flex wrap gap" style="align-items:flex-end">{{ ui.csrf() }}
+        <label class="small">Matière<br><input class="input input-sm" name="subject" list="ctl-sujets" required style="width:220px"></label>
+        <datalist id="ctl-sujets">{% for s in sujets %}<option value="{{ s }}">{% endfor %}</datalist>
+        <label class="small">Épreuve<br><input class="input input-sm" name="label" placeholder="CC1, oral…" style="width:120px"></label>
+        <label class="small">Date<br><input class="input input-sm" type="date" name="day" value="{{ today.isoformat() }}"></label>
+        <label class="small">Note<br><input class="input input-sm" name="value" inputmode="decimal" style="width:70px" required placeholder="14,5"></label>
+        <label class="small">sur<br><input class="input input-sm" name="scale" inputmode="decimal" style="width:55px" value="20"></label>
+        <label class="small">Coef.<br><input class="input input-sm" name="coef" inputmode="decimal" style="width:55px" value="1"></label>
+        <button class="btn btn-sm btn-primary">Ajouter</button>
+      </form>
+    </div>
+  </section>
+</div>
+{% include "agenda/_event_modal.html" %}
+{{ ag.page_data(data) }}
+{% endblock %}

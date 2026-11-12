@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% import "macros.html" as ui with context %}
+{% import "agenda/_macros.html" as ag with context %}
+{% block title %}Préparer · {{ ev.title }}{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('agenda.dashboard') }}">{{ icon('home', 15) }} Agenda</a><span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">Préparer ce contrôle</span></div>
+  <div class="header-actions">
+    <a class="btn btn-sm" href="{{ url_for('agenda.grades') }}">{{ icon('estimate', 14) }} Mes notes</a>
+    <a class="btn btn-sm" href="{{ url_for('agenda.calendar', view='week', date=ev.start.date().isoformat()) }}">{{ icon('calendar', 14) }} Voir la semaine</a>
+  </div>
+</div>{% endblock %}
+{% block content %}
+{% set st = p.statut %}
+<div class="inner" style="max-width:980px;margin:0 auto">
+  <div class="flex wrap gap-16 mb" style="align-items:center">
+    <div class="grow">
+      <h2 style="margin:0 0 4px">{{ ev.title }} {% if C.classe(st) or C.libelle(st) %}<span class="badge {% if C.classe(st) %}badge-{{ C.classe(st) }}{% endif %}" data-ctl-statut="{{ st }}">{{ C.libelle(st) }}</span>{% endif %}</h2>
+      <div class="muted">{{ A.event_when(ev) }}{% if ev.location %} · {{ ev.location }}{% endif %}{% if ev.kind %} · {{ A.kind_label(ev.kind) }}{% endif %}</div>
+    </div>
+  </div>
+  {% if not ev.is_active %}<div class="ag-warn mb">{{ icon('alert', 15) }}<span>Ce contrôle est annulé ou retiré du planning.</span></div>{% endif %}
+
+  <div class="stats mb-lg">
+    <div class="stat {% if not p.passe and p.jours <= 3 %}danger{% endif %}"><div class="v">{{ p.rebours }}</div><div class="l">{{ icon('clock', 13) }} Contrôle</div></div>
+    {% if p.lecture %}<div class="stat"><div class="v">{{ p.lecture.lues }}/{{ p.lecture.total }}</div><div class="l">{{ icon('book', 13) }} Pages du cours ouvertes</div></div>{% endif %}
+    {% if p.maitrise is not none %}<div class="stat"><div class="v">{{ p.maitrise|round|int }} %</div><div class="l">{{ icon('graduation', 13) }} Maîtrise des QCM</div></div>{% endif %}
+    {% if p.temps %}<div class="stat"><div class="v">{{ A.duration_label(p.temps.minutes) if p.temps.minutes else '0 min' }}</div><div class="l">{{ icon('timer', 13) }} Passées sur les QCM{% if p.temps.semaine %} (dont {{ A.duration_label(p.temps.semaine) }} cette semaine){% endif %}</div></div>{% endif %}
+  </div>
+
+  {% if st == 'a_relier' or not p.wiki_path or not p.categorie %}
+  <section class="panel mb">
+    <div class="panel-h">{{ icon('link', 15) }}<h3>Relier la matière</h3><span class="muted small">pour toutes les séances de « {{ ev.title }} »</span></div>
+    <div class="panel-b">
+      {% set next = url_for('agenda.event_prepare', eid=ev.id) %}
+      {% if not p.wiki_path %}
+      <div class="flex wrap gap mb" style="align-items:center"><b style="min-width:70px">Cours</b>
+        {% for path in links.get('wikiSuggest', []) %}<form method="post" action="{{ url_for('agenda.subject_link', eid=ev.id) }}" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="wiki_path" value="{{ path }}"><button class="btn btn-xs">{{ path.split('/')|last }} ?</button></form>{% endfor %}
+        {% if links.get('wikiAll') %}<form method="post" action="{{ url_for('agenda.subject_link', eid=ev.id) }}" class="flex gap-4">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ next }}"><select class="input input-sm" name="wiki_path" aria-label="Collection du wiki"><option value="">Choisir une collection du wiki…</option>{% for x in links.wikiAll %}<option value="{{ x }}">{{ x }}</option>{% endfor %}</select><button class="btn btn-xs">Relier</button></form>
+        {% elif not links.get('wikiSuggest') %}<span class="muted small">Aucune collection dans le wiki.</span>{% endif %}
+      </div>
+      {% endif %}
+      {% if not p.categorie %}
+      <div class="flex wrap gap" style="align-items:center"><b style="min-width:70px">QCM</b>
+        {% for c in links.get('qcmSuggest', []) %}<form method="post" action="{{ url_for('agenda.subject_link', eid=ev.id) }}" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="qcm_category" value="{{ c }}"><button class="btn btn-xs">{{ c }} ?</button></form>{% endfor %}
+        {% if links.get('qcmAll') %}<form method="post" action="{{ url_for('agenda.subject_link', eid=ev.id) }}" class="flex gap-4">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ next }}"><select class="input input-sm" name="qcm_category" aria-label="Catégorie de QCM"><option value="">Choisir une catégorie de QCM…</option>{% for x in links.qcmAll %}<option value="{{ x }}">{{ x }}</option>{% endfor %}</select><button class="btn btn-xs">Relier</button></form>
+        {% elif not links.get('qcmSuggest') %}<span class="muted small">Aucun set de QCM pour l’instant.</span>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if p.lecture %}
+  <section class="panel mb">
+    <div class="panel-h">{{ icon('book', 15) }}<h3>Cours</h3><span class="muted small">{{ p.wiki_path }}</span>
+      {% if p.lecture.minutes_restantes %}<span class="badge right">environ {{ A.duration_label(p.lecture.minutes_restantes) }} de lecture restante</span>{% endif %}</div>
+    <div class="panel-b">
+      <p class="help" style="margin-top:0">Estimation : une page compte comme lue dès que tu l’as ouverte une fois. Les PDF ne sont pas suivis.</p>
+      {% for pg in p.lecture.pages %}
+      <div class="flex gap" style="align-items:center;padding:3px 0">{% if pg.lue %}<span class="success-text" title="Ouverte le {{ pg.vue_le|datetime if pg.vue_le }}">{{ icon('check-circle', 14) }}</span>{% else %}<span class="muted">{{ icon('book', 14) }}</span>{% endif %}<a class="grow {% if pg.lue %}muted{% endif %}" href="{{ pg.url }}">{{ pg.titre }}</a><span class="muted small nowrap">{{ pg.minutes }} min</span></div>
+      {% else %}<div class="muted small">Aucune page dans cette collection.</div>{% endfor %}
+      {% if p.lecture.pdfs %}<div class="muted small mt">PDF du cours (lecture non suivie) : {% for f in p.lecture.pdfs %}<a href="{{ f.url }}">{{ f.nom }}</a>{{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if p.categorie %}
+  {% set langue = (p.sets[0].set.langue if p.sets else None) or None %}
+  <section class="panel mb">
+    <div class="panel-h">{{ icon('graduation', 15) }}<h3>QCM</h3><span class="muted small">{{ p.categorie }}</span></div>
+    <div class="panel-b">
+      {% if p.sets %}
+      <p class="help" style="margin-top:0">Statut estimé pour être prêt le {{ A.day_long(ev.start.date()) }}.</p>
+      <table class="table" style="width:100%">
+        <thead><tr><th>Set</th><th>Maîtrise</th><th>Statut</th><th>Conseil</th></tr></thead>
+        <tbody>
+        {% for x in p.sets %}{% set e = x.e %}
+          <tr>
+            <td>{{ x.set.titre }}</td>
+            <td class="nowrap">{{ x.resume.pct_maitrise|round|int }} %</td>
+            <td><span class="badge {% if C.classe(x.statut) %}badge-{{ C.classe(x.statut) }}{% endif %}">{{ C.libelle(x.statut) }}</span></td>
+            <td class="small">
+              {% if x.statut == 'pret' %}Tout est su : garde le rythme des révisions.
+              {% elif e.statut == 'ok' and not e.commencer_maintenant %}Commence le {{ A.day_short(e.debut) }}, environ {{ e.minutes_jour }} min par jour.
+              {% elif e.statut == 'ok' %}Environ {{ e.minutes_jour }} min par jour dès maintenant.
+              {% elif e.statut == 'retard' %}Environ {{ e.minutes_conseillees }} min par jour pour rattraper ({{ e.nouvelles_conseillees }} nouvelles questions par jour).
+              {% elif e.statut == 'impossible' %}Pas le temps de tout savoir : découvre {{ e.nouvelles_conseillees }} nouvelles questions par jour.
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<div class="muted small">Aucun set dans cette catégorie.</div>{% endif %}
+      <div class="flex wrap gap mt">
+        <a class="btn btn-sm btn-primary" href="{{ url_for('qcm.play', revision=1, categorie=p.categorie) }}">{{ icon('play', 13) }} Réviser cette matière</a>
+        <a class="btn btn-sm" href="{{ url_for('qcm.play', categorie=p.categorie, langue=langue, mode='examen') }}">{{ icon('timer', 13) }} Examen blanc</a>
+        {% if not p.passe and ev.is_active %}
+        <form method="post" action="{{ url_for('agenda.event_exam', eid=ev.id) }}">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ url_for('agenda.event_prepare', eid=ev.id) }}">
+          <button class="btn btn-sm" {% if p.objectif_fixe %}disabled{% endif %} title="Les quotas de révision des sets s’organisent pour être prêt à cette date">{{ icon('target', 13) }} {% if p.objectif_fixe %}Date d’examen des QCM fixée au {{ ev.start.strftime('%d/%m') }}{% else %}Fixer la date d’examen des QCM au {{ ev.start.strftime('%d/%m') }}{% endif %}</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if p.autres_controles %}<p class="help">Autre(s) contrôle(s) de cette matière : {% for o in p.autres_controles %}<a href="{{ url_for('agenda.event_prepare', eid=o.id) }}">{{ A.day_short(o.start.date()) }}</a>{{ ', ' if not loop.last }}{% endfor %}. Un set n’a qu’une date d’examen : la fixer ici remplace la précédente.</p>{% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if plan is not none %}
+  <section class="panel mb" id="planifier">
+    <div class="panel-h">{{ icon('calendar', 15) }}<h3>Planifier mes révisions</h3>{% if blocs %}<span class="badge right">{{ blocs|length }} bloc(s) déjà dans ton agenda</span>{% endif %}</div>
+    <div class="panel-b">
+      {% if plan.blocs %}
+      <p class="help" style="margin-top:0">Des blocs placés dans les créneaux libres de ton emploi du temps (jusqu’à {{ C.FIN_SOIREE }} h, hors repas), de la durée de la charge du jour, jusqu’à la veille du contrôle. Ils deviennent des tâches liées à ce contrôle, sans rappel par e-mail. Après un nouvel import, ceux qui tombent sur un cours sont replacés.</p>
+      <ul class="plain" style="margin:0 0 10px;padding-left:18px" data-plan-blocs>
+        {% for b in plan.blocs %}<li><b>{{ A.day_short(b.date) }}</b> {{ A.hm(b.debut) }}–{{ A.hm(b.fin) }} · {{ b.titre }}{% if b.minutes < b.charge %} <span class="muted small">(raccourci : pas de créneau assez long)</span>{% endif %}</li>{% endfor %}
+      </ul>
+      {% if plan.sans_creneau %}<p class="help">Pas de créneau libre le {% for d in plan.sans_creneau %}{{ A.day_short(d) }}{{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
+      <div class="flex wrap gap">
+        <form method="post" action="{{ url_for('agenda.event_plan', eid=ev.id) }}">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ url_for('agenda.event_prepare', eid=ev.id) }}#planifier"><button class="btn btn-sm btn-primary">{{ icon('plus', 13) }} {% if blocs %}Remplacer par ces {{ plan.blocs|length }} blocs{% else %}Ajouter ces {{ plan.blocs|length }} blocs à mon agenda{% endif %} ({{ A.duration_label(plan.total) }})</button></form>
+      {% else %}
+      <p class="muted small" style="margin-top:0">{% if p.statut == 'pret' %}Rien à planifier : tu es prêt.{% elif not p.categorie and not p.wiki_path %}Relie la matière à son cours ou à ses QCM pour calculer le temps de révision.{% elif plan.sans_creneau %}Pas de créneau libre d’ici le contrôle.{% else %}Rien à planifier pour l’instant : les révisions peuvent commencer plus tard.{% endif %}</p>
+      <div class="flex wrap gap">
+      {% endif %}
+        {% if blocs %}<form method="post" action="{{ url_for('agenda.event_plan', eid=ev.id) }}">{{ ui.csrf() }}<input type="hidden" name="action" value="retirer"><input type="hidden" name="next" value="{{ url_for('agenda.event_prepare', eid=ev.id) }}#planifier"><button class="btn btn-sm btn-danger-ghost">{{ icon('trash', 13) }} Retirer les blocs à venir</button></form>{% endif %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel mb">
+    <div class="panel-h">{{ icon('list-check', 15) }}<h3>Tâches liées</h3><span class="count-pill">{{ p.taches|length }}</span></div>
+    <div class="tk-list">
+      {% for t in p.taches %}{{ ag.task_row(t) }}{% else %}<div class="empty sm">Aucune tâche liée à ce contrôle.</div>{% endfor %}
+    </div>
+  </section>
+
+  {% if p.passe %}
+  <section class="panel mb" id="note">
+    <div class="panel-h">{{ icon('estimate', 15) }}<h3>Ta note</h3>{% if p.note and p.note.mastery is not none %}<span class="muted small right">Maîtrise des QCM le jour du contrôle : {{ p.note.mastery|round|int }} %</span>{% endif %}</div>
+    <div class="panel-b">
+      <form method="post" action="{{ url_for('agenda.event_grade', eid=ev.id) }}" class="flex wrap gap" style="align-items:flex-end">{{ ui.csrf() }}
+        <label class="small">Note<br><input class="input input-sm" name="value" inputmode="decimal" style="width:80px" value="{{ ('%g'|format(p.note.value)) if p.note and p.note.value is not none else '' }}" placeholder="14,5" required></label>
+        <label class="small">sur<br><input class="input input-sm" name="scale" inputmode="decimal" style="width:60px" value="{{ '%g'|format(p.note.scale) if p.note and p.note.scale else 20 }}"></label>
+        <label class="small">Coefficient<br><input class="input input-sm" name="coef" inputmode="decimal" style="width:70px" value="{{ '%g'|format(p.note.coefficient) if p.note and p.note.coefficient else 1 }}"></label>
+        <button class="btn btn-sm btn-primary">Enregistrer</button>
+      </form>
+      {% if not (p.note and (p.note.value is not none or p.note.skipped)) %}
+      <form method="post" action="{{ url_for('agenda.event_grade', eid=ev.id) }}" class="mt">{{ ui.csrf() }}<input type="hidden" name="skip" value="1"><button class="btn btn-xs btn-ghost">Pas de note pour ce contrôle</button></form>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% include "agenda/_event_modal.html" %}
+{{ ag.page_data(data) }}
+{% endblock %}

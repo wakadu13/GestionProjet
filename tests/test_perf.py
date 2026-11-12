@@ -228,7 +228,10 @@ class PagesQcmAgendaTests(unittest.TestCase):
     def test_accueil_resume_des_qcm_calcule_une_fois(self):
         """Avant : l'état des QCM et l'estimation des examens étaient calculés deux fois (résumé du
         tableau de bord, puis cartes dues des liens des séances)."""
-        html, estimer, etat, sql = self._get("/")
+        # Le statut des « Contrôles à venir » (hangar/controles.py) fait sa propre estimation, pour le jour de
+        # chaque contrôle (une autre date que celle des sets) : il est compté à part (tests/test_controles.py).
+        with mock.patch("hangar.controles.indicateurs", return_value={}):
+            html, estimer, etat, sql = self._get("/")
         self.assertEqual(etat, 1)
         self.assertEqual(estimer, 2)  # une estimation par set daté, pas deux
         data = self._agenda(html)

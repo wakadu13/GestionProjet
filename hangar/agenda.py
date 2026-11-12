@@ -21,6 +21,7 @@ import unicodedata
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+from types import SimpleNamespace
 
 from flask import current_app
 from markupsafe import escape
@@ -28,8 +29,8 @@ from markupsafe import escape
 from . import ics
 from .extensions import db
 from .models import (
-    PRIORITY_ORDER, RECURRENCES, REMINDER_OFFSETS, AgendaEvent, AgendaImport, AgendaReminder, AgendaSettings,
-    AgendaSubjectLink, AgendaTask, Notification, User, now,
+    PRIORITY_ORDER, RECURRENCES, REMINDER_OFFSETS, AgendaEvent, AgendaGrade, AgendaImport, AgendaReminder,
+    AgendaSettings, AgendaSubjectLink, AgendaTask, Notification, User, now,
 )
 from .texte import cle_tri
 from .utils import DAYS, DAYS_FULL, MONTHS, MONTHS_FULL, normalize
@@ -341,7 +342,8 @@ def import_calendar(user: User, raw: bytes | str, filename: str = "planning.ics"
     ensure_exam_reminders(user, at)
     db.session.flush()
     quota_off: list[str] = []
-    imp.exam_notes = "\n".join(sync_exam_objectives(user, at, exam_changes(details), quota_off))
+    imp.exam_notes = "\n".join(sync_exam_objectives(user, at, exam_changes(details), quota_off)
+                               + _replanifier_revisions(user, at))
     imp.exam_quota_sets = "\n".join(quota_off)
     db.session.commit()
     if s.import_email and imp.changed:
@@ -363,12 +365,20 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
     last = AgendaImport.query.filter_by(user_id=imp.user_id, undone_at=None).order_by(AgendaImport.id.desc()).first()
     if last is None or last.id != imp.id:
         raise ValueError("Seul le dernier import peut être annulé.")
+    blocs_notes: list[str] = []
     for d in reversed(imp.details):
         ev = db.session.get(AgendaEvent, d.get("event_id"))
         if ev is None:
             continue
         if d["type"] == "added":
+            # Blocs « Réviser … » générés pour cette séance (hangar/controles.py) : ils partent avec elle,
+            # sinon ils resteraient dans l'agenda sans contrôle ; ceux déjà faits restent (historique).
+            n = AgendaTask.query.filter(AgendaTask.event_id == ev.id, AgendaTask.revision_auto.is_(True),
+                                        AgendaTask.done_at.is_(None)).delete(synchronize_session="fetch")
+            if n:
+                blocs_notes.append(f"{ev.title} : contrôle retiré du planning, {n} bloc(s) de révision supprimé(s).")
             AgendaTask.query.filter_by(event_id=ev.id).update({"event_id": None})
+            AgendaGrade.query.filter_by(event_id=ev.id).update({"event_id": None})  # la note reste
             db.session.delete(ev)
         else:
             _restore(ev, d["before"])
@@ -385,8 +395,19 @@ def undo_import(imp: AgendaImport, at: datetime | None = None) -> list[str]:
         db.session.flush()
         notes = sync_exam_objectives(user, at, exam_changes(imp.details, undo=True))
         notes += _restore_auto_quota(user, (imp.exam_quota_sets or "").splitlines())
+        notes += _replanifier_revisions(user, at)
     db.session.commit()
-    return notes
+    return blocs_notes + notes
+
+
+def _replanifier_revisions(user: User, at: datetime) -> list[str]:
+    """Blocs de révision générés (hangar/controles.py) replacés après un import ou son annulation."""
+    try:
+        from . import controles
+        return controles.replanifier_apres_import(user, at)
+    except Exception:  # noqa: BLE001 - l'import passe quand même
+        current_app.logger.exception("Blocs de révision après un import")
+        return []
 
 
 def recent_import_ids(user: User, at: datetime | None = None, days: int = 7) -> set[int]:
@@ -1041,8 +1062,21 @@ def _digest_controles(ctx):
              if is_exam(e) and not e.cancelled]
     if not exams:
         return None
-    items = [f"{escape(day_short(e.start.date()))} {hm(e.start)} — <b>{escape(e.title)}</b>"
-             f"{' · ' + escape(e.location) if e.location else ''}" for e in exams]
+    try:  # statut de préparation (prêt, à commencer, en retard…), calculé sans adresse web
+        from . import controles
+        statuts = controles.indicateurs(ctx.user, exams, ctx.at)
+    except Exception:  # noqa: BLE001 - la section reste utile sans les statuts
+        controles, statuts = None, {}
+    items = []
+    for e in exams:
+        st = statuts.get(e.id)
+        etat = ""
+        if controles is not None and st and st not in ("passe", "a_relier"):
+            couleur = {"pret": "#16a34a", "retard": "#dc2626", "a_commencer": "#d97706"}.get(st, "#3f76ff")
+            etat = (f' · <a href="{escape(ctx.lien(f"/agenda/events/{e.id}/preparer"))}" style="color:{couleur};'
+                    f'font-weight:600">{escape(controles.libelle(st).lower())}</a>')
+        items.append(f"{escape(day_short(e.start.date()))} {hm(e.start)} — <b>{escape(e.title)}</b>"
+                     f"{' · ' + escape(e.location) if e.location else ''}{etat}")
     return digest.Section("agenda.controles", "Contrôles dans les 7 jours", digest.liste_html(items),
                           compte=len(exams), couleur="#dc2626", a_faire=False, tuile=False)
 
@@ -1199,8 +1233,15 @@ def run_jobs(app=None, at: datetime | None = None) -> dict:
     from .mailer import _ctx
     with _ctx(app):
         at = at or now()
-        return {"reminders": _job("rappels de l’agenda", process_reminders, at),
-                "daily": _job("résumé quotidien de l’agenda", send_daily_programs, at)}
+        out = {"reminders": _job("rappels de l’agenda", process_reminders, at),
+               "daily": _job("résumé quotidien de l’agenda", send_daily_programs, at)}
+        _job("maîtrise des QCM le jour des contrôles", _figer_maitrise, at)
+        return out
+
+
+def _figer_maitrise(at: datetime) -> int:
+    from . import controles
+    return controles.figer_maitrise(at)
 
 
 def _job(nom: str, fn, at: datetime) -> int:
@@ -1527,7 +1568,22 @@ def event_payload(ev: AgendaEvent, recent: set[int], url_for, pre: dict | None =
         "urls": {"note": url_for("agenda.event_note", eid=ev.id), "reminder": url_for("agenda.event_reminder", eid=ev.id),
                  "link": url_for("agenda.subject_link", eid=ev.id), "exam": url_for("agenda.event_exam", eid=ev.id)},
         "links": _safe_links(ev, pre),
+        **_exam_payload(ev, url_for),
     }
+
+
+def _exam_payload(ev: AgendaEvent, url_for) -> dict:
+    """Contrôle : page « Préparer ce contrôle » et, une fois passé, la note (hangar/controles.py)."""
+    if not is_exam(ev):
+        return {}
+    out = {"prepare": url_for("agenda.event_prepare", eid=ev.id)}
+    if ev.start <= now():
+        g = AgendaGrade.query.filter_by(user_id=ev.user_id, event_id=ev.id).first()
+        out["grade"] = {"url": url_for("agenda.event_grade", eid=ev.id),
+                        "value": g.value if g is not None else None,
+                        "scale": g.scale if g is not None and g.scale else 20,
+                        "coef": g.coefficient if g is not None and g.coefficient else 1}
+    return out
 
 
 def _safe_links(ev: AgendaEvent, pre: dict | None = None) -> dict:
@@ -1554,7 +1610,19 @@ def task_payload(t: AgendaTask, url_for) -> dict:
         "channel": (t.reminders[0].channel if t.reminders else ""),
         "urls": {"save": url_for("agenda.task_update", tid=t.id), "delete": url_for("agenda.task_delete", tid=t.id),
                  "toggle": url_for("agenda.task_toggle", tid=t.id)},
+        "revise": _revise_url(t, url_for),
     }
+
+
+def _revise_url(t: AgendaTask, url_for) -> str:
+    """Bloc « Réviser … » d'un contrôle dont la matière est reliée à une catégorie de QCM : adresse de la
+    révision de cette catégorie (bouton « Réviser » de la fenêtre de la tâche) ; sinon vide."""
+    if not t.revision_auto or t.event is None:
+        return ""
+    link = _subject_link(SimpleNamespace(id=t.user_id), t.event.title)
+    if link is None or not link.qcm_category:
+        return ""
+    return url_for("qcm.play", revision=1, categorie=link.qcm_category)
 
 
 def day_events_payload(user: User, d: date) -> list[dict]:

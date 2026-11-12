@@ -195,7 +195,19 @@
       {% if exams %}
       <div class="panel">
         <div class="panel-h"><span class="danger-text">{{ icon('alert', 16) }}</span><h3>Contrôles à venir</h3><span class="count-pill">{{ exams|length }}</span></div>
-        <div>{% for e in exams[:6] %}{{ ag.event_line(e, recent, show_day=True) }}{% endfor %}</div>
+        <div>{% for e in exams[:6] %}{{ ag.event_line(e, recent, show_day=True) }}
+          {% set st = ctl_statuts.get(e.id) %}
+          <a class="ctl-prep small" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 12px 8px;color:var(--accent-text)" href="{{ url_for('agenda.event_prepare', eid=e.id) }}">{{ icon('target', 12) }} Préparer{% if st and st not in ('passe',) %} <span class="badge {% if C_classe(st) %}badge-{{ C_classe(st) }}{% endif %}">{{ C_libelle(st) }}</span>{% endif %}</a>
+        {% endfor %}</div>
+      </div>
+      {% endif %}
+
+      {% if a_noter %}
+      <div class="panel">
+        <div class="panel-h">{{ icon('estimate', 16) }}<h3>Notes à saisir</h3><span class="count-pill">{{ a_noter|length }}</span><a class="btn btn-xs btn-ghost right" href="{{ url_for('agenda.grades') }}">Mes notes</a></div>
+        <div>{% for e in a_noter[:5] %}
+          <a class="ctl-prep small" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 12px 8px;color:var(--accent-text)" href="{{ url_for('agenda.event_prepare', eid=e.id) }}#note"><b>{{ A.day_short(e.start.date()) }}</b>&nbsp;{{ e.title }} <span class="muted">— saisir ta note</span></a>
+        {% endfor %}</div>
       </div>
       {% endif %}
 
