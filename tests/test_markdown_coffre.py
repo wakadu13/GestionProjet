@@ -129,6 +129,27 @@ class RenduQcmTests(CoffreTestCase):
         self.assertIn("Texte &lt;b&gt;gras&lt;/b&gt; &amp; co", out)
         self.assertNotIn("<b>", out)
 
+    def test_erreur_du_moteur_notee_une_seule_fois(self):
+        """Un énoncé que le moteur ne sait pas rendre : texte brut gardé en cache, une seule écriture en base."""
+        from hangar.qcm import rendu
+        from hangar.wiki.models import ErreurServeur
+        from hangar.wiki.render import Renderer
+        with mock.patch.object(Renderer, "convert", side_effect=RuntimeError("panne 72")) as convert, \
+                self.assertLogs(self.app.logger, "WARNING"):
+            sorties = [rendu.rendre("Énoncé en panne 72 <i>", True) for _ in range(5)]
+        self.assertEqual(convert.call_count, 1)
+        self.assertEqual(len(set(sorties)), 1)
+        self.assertIn("&lt;i&gt;", sorties[0])
+        db.session.remove()
+        erreurs = [e for e in ErreurServeur.query.all() if e.message == "panne 72"]
+        self.assertEqual(len(erreurs), 1)
+        self.assertEqual(erreurs[0].nombre, 1)
+        # Le coffre change : on retente le rendu (le moteur peut aller mieux)
+        self.ecrire("nouveau.png")
+        from hangar.wiki import vault
+        vault.invalider()
+        self.assertNotIn("&lt;i&gt;", rendu.rendre("Énoncé en panne 72 <i>", True))
+
     def test_cache_garde_apres_un_nouveau_parcours_sans_changement(self):
         from hangar.qcm import rendu
         from hangar.wiki.render import Renderer

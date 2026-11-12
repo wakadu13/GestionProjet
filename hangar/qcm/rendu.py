@@ -56,11 +56,14 @@ def rendre(text, block: bool = True) -> str:
         return deja
     try:
         out = _rendu_wiki(text, block)
-    except Exception as exc:  # noqa: BLE001 — une question ne doit pas empêcher d'afficher le set
-        current_app.logger.warning("QCM : rendu impossible d'un énoncé, affiché sans mise en forme", exc_info=True)
+    except Exception:  # noqa: BLE001 — une question ne doit pas empêcher d'afficher le set
+        # Journal + note sur /erreurs/ en un appel. Le texte brut est gardé en cache comme un rendu réussi :
+        # l'erreur n'est notée qu'une fois par état du coffre, pas à chaque affichage du set (une écriture
+        # en base par question défectueuse sinon). Un changement du coffre vide le cache et retente le rendu.
         from ..wiki import erreurs
-        erreurs.noter(exc, contexte="Rendu d'une question de QCM")
-        return _texte_brut(text, block)
+        erreurs.signaler("QCM : rendu impossible d'une question, affichée sans mise en forme",
+                         journal=current_app.logger)
+        out = _texte_brut(text, block)
     if len(_CACHE["html"]) < _CACHE_MAX:
         _CACHE["html"][(text, block)] = out
     return out
