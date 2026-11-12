@@ -470,6 +470,13 @@ def back_url(default: str) -> str:
     ref = request.referrer
     if ref and ref.startswith(request.host_url):
         return ref
+    if ref:  # même hôte, autre schéma : page en https derrière un proxy (Caddy, tunnel) qui ne le dit pas
+        from urllib.parse import urlsplit
+        parts = urlsplit(ref)
+        if parts.scheme in ("http", "https") and parts.netloc.lower() == request.host.lower():
+            chemin = parts.path + (f"?{parts.query}" if parts.query else "")
+            if is_safe_next(chemin):
+                return chemin
     return default
 
 

@@ -5,7 +5,9 @@ Réglages lus une fois, au démarrage (``create_app``), dans des variables d'env
 
 - ``HANGAR_CLOUDFLARE=1`` : tunnel Cloudflare ; l'adresse du visiteur est lue dans CF-Connecting-IP ;
 - ``HANGAR_BEHIND_PROXY=1`` : autre proxy ; adresse du visiteur = dernière adresse de X-Forwarded-For ;
-- ``HANGAR_HTTPS=1`` : les visiteurs arrivent en HTTPS ; cookies « Secure » et en-tête HSTS.
+- ``HANGAR_HTTPS=1`` : les visiteurs arrivent en HTTPS ; cookies « Secure » et en-tête HSTS ;
+- ``HANGAR_LAN_HTTPS=1`` (posé par ``--lan-https``, avec ``HANGAR_BEHIND_PROXY``) : le seul proxy est le Caddy du
+  réseau local ; une requête sans en-têtes de transfert vient alors de cet ordinateur.
 
 Sans ces variables (cas normal : cet ordinateur ou le réseau local en http), aucun en-tête de proxy n'est cru :
 un visiteur ne peut pas se faire passer pour une autre adresse. Avec un proxy, ``ProxyFix`` fait voir à
@@ -16,7 +18,7 @@ from __future__ import annotations
 
 import os
 
-VARIABLES = ("HANGAR_CLOUDFLARE", "HANGAR_BEHIND_PROXY", "HANGAR_HTTPS")
+VARIABLES = ("HANGAR_CLOUDFLARE", "HANGAR_BEHIND_PROXY", "HANGAR_HTTPS", "HANGAR_LAN_HTTPS")
 HSTS = "max-age=31536000"  # un an ; sans includeSubDomains : le domaine peut servir d'autres sites
 
 
@@ -28,7 +30,9 @@ def init_app(app) -> None:
     cloudflare = actif("HANGAR_CLOUDFLARE")
     proxy = cloudflare or actif("HANGAR_BEHIND_PROXY")
     https = actif("HANGAR_HTTPS")
-    app.config.update(HANGAR_PROXY=proxy, HANGAR_HTTPS=https)
+    # --lan-https sans autre proxy : Caddy, sur ce PC, ne sert que le réseau local (voir auth._montrer_comptes)
+    lan = actif("HANGAR_LAN_HTTPS") and not cloudflare
+    app.config.update(HANGAR_PROXY=proxy, HANGAR_HTTPS=https, HANGAR_PROXY_LAN=lan and proxy)
     if https:
         app.config.update(SESSION_COOKIE_SECURE=True, REMEMBER_COOKIE_SECURE=True)
     if proxy:

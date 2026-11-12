@@ -56,7 +56,37 @@ def profile():
         db.session.commit()
         flash("Profil mis à jour.", "success")
         return redirect(url_for("settings.profile"))
-    return render_template("settings/profile.html", PALETTE=PALETTE, must_change=request.args.get("must_change"))
+    return render_template("settings/profile.html", PALETTE=PALETTE, must_change=request.args.get("must_change"),
+                           telephone=_telephone())
+
+
+def _telephone() -> dict:
+    """Section « Sur ton téléphone » : adresse à ouvrir, son QR code et le certificat de Hangar (hangar/reseau_local.py)."""
+    from .. import qr, reseau_local
+    adresse = reseau_local.adresse_telephone(current_app, request)
+    info = {"adresse": adresse, "qr": None, "certificat": None, "empreinte": None}
+    if adresse:
+        info["qr"] = qr.svg(adresse["url"], taille_px=180)
+    fichier = reseau_local.certificat_racine(current_app.config["DATA_DIR"])
+    if fichier.is_file():
+        try:
+            info["empreinte"] = reseau_local.empreinte(fichier.read_bytes())
+            info["certificat"] = url_for("settings.certificat")
+        except (OSError, ValueError):
+            pass
+    return info
+
+
+@bp.route("/certificat-hangar.crt")
+def certificat():
+    """Certificat de l'autorité locale de Caddy (--lan-https), à installer sur le téléphone. Public, sans
+    connexion : le téléphone en a besoin avant de faire confiance au site, et il ne contient aucun secret."""
+    from .. import reseau_local
+    fichier = reseau_local.certificat_racine(current_app.config["DATA_DIR"])
+    if not fichier.is_file():
+        abort(404, description="Pas encore de certificat : lance Hangar avec scripts\\partager-en-https.bat.")
+    return send_file(fichier, mimetype="application/x-x509-ca-cert", as_attachment=True,
+                     download_name=reseau_local.NOM_CERTIFICAT, max_age=0)
 
 
 @bp.route("/password", methods=["POST"])

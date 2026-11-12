@@ -82,6 +82,44 @@
       {% endif %}
     </div>
 
+    {# Ouvrir Hangar sur le téléphone (hangar/reseau_local.py, hangar run --lan-https) #}
+    {% set tel = telephone %}
+    <h2 id="telephone" class="mt-lg">Sur ton téléphone</h2>
+    <p class="help">Le téléphone doit être sur le même Wi-Fi que l’ordinateur où tourne Hangar.</p>
+    <div class="panel panel-b md" data-telephone>
+      {% if tel.adresse %}
+      <div class="flex gap wrap" style="align-items:center">
+        <div class="qr" style="line-height:0;border-radius:8px;overflow:hidden;flex:none">{{ tel.qr|safe }}</div>
+        <div style="flex:1;min-width:220px">
+          <p>Scanne ce QR code avec l’appareil photo du téléphone, ou tape cette adresse :</p>
+          <p><code data-adresse>{{ tel.adresse.url }}</code></p>
+          {% if tel.adresse.https %}
+          <p class="help">Connexion chiffrée (HTTPS) : le wiki et les QCM hors ligne et les notifications marchent aussi sur le téléphone.</p>
+          {% else %}
+          <p class="help">Connexion non chiffrée (http) : Hangar s’ouvre, mais le téléphone n’aura ni le wiki ni les QCM hors ligne, ni les notifications. Pour les avoir, ferme Hangar puis double-clique sur <code>scripts\partager-en-https.bat</code>. L’application Android, elle, marche déjà en http.</p>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p>Hangar n’est ouvert qu’à cet ordinateur pour l’instant.</p>
+      <p>Pour l’ouvrir sur ton téléphone, ferme Hangar puis double-clique sur <code>scripts\partager-en-https.bat</code> (dans le dossier de Hangar). La première fois, il installe Caddy, un petit programme gratuit qui chiffre la connexion. L’adresse et son QR code s’affichent ensuite ici et dans la fenêtre de Hangar.</p>
+      {% endif %}
+      {% if tel.certificat %}
+      <details class="mt"{% if tel.adresse and tel.adresse.https %} open{% endif %}>
+        <summary><b>Première fois : installer le certificat de Hangar sur le téléphone</b></summary>
+        <p class="help">Sans lui, le navigateur du téléphone affiche « Connexion non privée ». Il suffit de le faire une fois, même si l’adresse change.</p>
+        <ol>
+          <li>Sur le téléphone, ouvre l’adresse ci-dessus. Au message d’avertissement, touche « Paramètres avancés » puis « Continuer » (cette seule fois).</li>
+          <li>Télécharge le certificat : <a href="{{ tel.certificat }}">{{ icon('download', 13) }} certificat-hangar.crt</a>{% if tel.adresse and tel.adresse.https %} (ou ajoute <code>settings/certificat-hangar.crt</code> à l’adresse){% endif %}.</li>
+          <li><b>Android</b> : Paramètres › Sécurité › Chiffrement et identifiants › Installer un certificat › <b>Certificat CA</b>, puis choisis le fichier téléchargé. Utilise Chrome (Firefox ignore ces certificats).<br>
+              <b>iPhone</b> : ouvre le lien avec Safari, puis Réglages › Profil téléchargé › Installer ; enfin Réglages › Général › Informations › Réglages des certificats : active « Caddy Local Authority ».</li>
+          <li>Ferme puis rouvre le navigateur : l’avertissement a disparu.</li>
+        </ol>
+        <p class="help">Pour vérifier que c’est bien le tien, l’empreinte SHA-256 affichée par le téléphone doit être :<br><code class="small" style="word-break:break-all">{{ tel.empreinte }}</code></p>
+      </details>
+      {% endif %}
+    </div>
+
     {% if current_user.is_admin %}
     {% set bloques = connexions_bloquees() %}
     <h2 id="connexions" class="mt-lg">Connexions bloquées</h2>

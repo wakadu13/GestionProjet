@@ -13,5 +13,5 @@
 </div>
 {% endblock %}
 {% block auth %}
-<div class="auth-wrap"><div class="auth-card center-text"><div class="code" style="font-size:48px;font-weight:700;color:var(--text-3)">{{ error.code }}</div><p class="muted">{{ description if error.code != 500 else 'Une erreur inattendue s’est produite.' }}</p><a class="btn btn-primary mt" href="{{ url_for('auth.login') }}">Se connecter</a></div></div>
+<div class="auth-wrap"><div class="auth-card center-text"><div class="code" style="font-size:48px;font-weight:700;color:var(--text-3)">{{ error.code }}</div><p class="muted">{{ description if error.code != 500 else 'Une erreur inattendue s’est produite.' }}</p>{% if not g.get('sans_bouton_connexion') %}<a class="btn btn-primary mt" href="{{ url_for('auth.login') }}">Se connecter</a>{% endif %}</div></div>
 {% endblock %}
