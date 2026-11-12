@@ -73,6 +73,9 @@ def login():
                 blocage.reussite(ident, ip)
                 login_user(user, remember=bool(request.form.get("remember")))
                 user.last_login_at = now()
+                from ..seed import est_mot_de_passe_public
+                if est_mot_de_passe_public(password):  # ancien mot de passe de démo, publié : à changer
+                    user.must_change_password = True
                 db.session.commit()
                 nxt = request.args.get("next")
                 return redirect(nxt if is_safe_next(nxt) else url_for("agenda.dashboard"))

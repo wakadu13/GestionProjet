@@ -6,6 +6,7 @@ Si le fichier Excel de planification est présent dans le dossier parent, ses t�
 from __future__ import annotations
 
 import random
+import secrets
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
@@ -19,7 +20,24 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # dossier « Projet Pluri 
 PLANNING = ROOT / "Planning" / "Plan_taches_gouvernance_donnees_v5.xlsx"
 MEETING_NOTE = ROOT / "NoteRéunion.docx"
 
+# Ancien mot de passe fixe de la démonstration, publié dans le README des premières versions : les bases
+# créées alors l'ont encore. « hangar demo » tire désormais un mot de passe au hasard (nouveau_mot_de_passe).
 DEMO_PASSWORD = "hangar2026"
+
+
+def nouveau_mot_de_passe() -> str:
+    """Mot de passe provisoire de la démonstration, tiré au hasard (12 caractères)."""
+    return secrets.token_urlsafe(9)
+
+
+def est_mot_de_passe_public(password: str) -> bool:
+    return password == DEMO_PASSWORD
+
+
+def comptes_mot_de_passe_public() -> list[str]:
+    """Identifiants des comptes actifs dont le mot de passe est encore l'ancien mot de passe public."""
+    return [u.username for u in User.query.filter_by(active=True).order_by(User.id)
+            if u.check_password(DEMO_PASSWORD)]
 
 TEAM = [
     # identifiant, prénom, nom, rôle
@@ -73,10 +91,17 @@ def _dt(d: date, h=9) -> datetime:
     return datetime.combine(d, time(h, 0))
 
 
-def seed_demo(planning: str | None = None, verbose=True):
+def seed_demo(planning: str | None = None, verbose=True, password: str | None = None):
+    """Crée l'équipe et le projet de démonstration dans une base vide.
+
+    ``password`` : mot de passe provisoire de tous les comptes (par défaut tiré au hasard, renvoyé dans
+    ``["password"]`` : l'appelant l'affiche une seule fois). Chaque compte, administrateur compris, doit le
+    changer à sa première connexion."""
     say = print if verbose else (lambda *a, **k: None)
     if db.session.query(User.id).first() is not None:
-        raise RuntimeError("La base contient déjà des données. Utilise « hangar reset » d’abord.")
+        raise RuntimeError("La base contient déjà des données. Utilise « hangar demo --force » pour la remplacer "
+                           "(une sauvegarde est faite avant) ou « hangar reset ».")
+    password = password or nouveau_mot_de_passe()
     random.seed(7)
     ws = Workspace.get()
     ws.name = "Projet Pluri — EAE"
@@ -86,14 +111,13 @@ def seed_demo(planning: str | None = None, verbose=True):
     users = {}
     for i, (uname, first, last, role) in enumerate(TEAM):
         u = User(username=uname, email=User.internal_email(uname), first_name=first, last_name=last, role=role,
-                 avatar_color=PALETTE[i % len(PALETTE)], capacity_hours=10,
-                 must_change_password=(uname != "wacogne"))
-        u.set_password(DEMO_PASSWORD)
+                 avatar_color=PALETTE[i % len(PALETTE)], capacity_hours=10, must_change_password=True)
+        u.set_password(password)
         db.session.add(u)
         users[uname] = u
     db.session.flush()
     me = users["wacogne"]
-    say(f"✓ {len(users)} membres créés (mot de passe : {DEMO_PASSWORD})")
+    say(f"✓ {len(users)} membres créés (mot de passe provisoire à changer à la première connexion)")
 
     start, end = date(2026, 9, 22), date(2026, 12, 18)
     project = create_project(
@@ -205,12 +229,13 @@ def seed_demo(planning: str | None = None, verbose=True):
     db.session.add(Favorite(user_id=me.id, entity_type="project", entity_id=project.id))
     db.session.add(Sticky(user_id=me.id, color="#dbeafe",
                           content="Bienvenue ! Les autres membres se connectent avec leur identifiant "
-                                  f"(ex. « claeys ») et le mot de passe provisoire « {DEMO_PASSWORD} »."))
+                                  "(ex. « claeys ») et le mot de passe provisoire affiché par « hangar demo », "
+                                  "puis choisissent le leur."))
     db.session.add(Sticky(user_id=me.id, color="#fef3c7",
                           content="Penser au point de suivi hebdomadaire : revue des tickets en retard."))
     db.session.commit()
     say("✓ Pages, vues enregistrées et pense-bêtes ajoutés")
-    return {"project": project, "imported": imported}
+    return {"project": project, "imported": imported, "password": password}
 
 
 def _generic_tasks(project: Project, me: User, users: dict):

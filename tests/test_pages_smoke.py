@@ -12,6 +12,8 @@ from hangar import cli, create_app
 from hangar.extensions import db
 from hangar.models import AgendaTask, Cycle, Issue, Module, Page, Project, SavedView, User
 
+MOT_DE_PASSE = "mot-de-passe-des-tests"
+
 
 class PagesSmokeTests(unittest.TestCase):
     @classmethod
@@ -20,7 +22,7 @@ class PagesSmokeTests(unittest.TestCase):
         cls.app = create_app(cls.tmp, testing=True)
         with cls.app.test_request_context("/"):
             from hangar.seed import seed_demo
-            seed_demo(None, verbose=False)
+            seed_demo(None, verbose=False, password=MOT_DE_PASSE)
             p = Project.query.filter_by(identifier="EAE").first() or Project.query.first()
             cls.values = {
                 "pid": p.id,
@@ -34,6 +36,7 @@ class PagesSmokeTests(unittest.TestCase):
                 "fmt": "csv",
             }
             u = User.query.filter_by(username="wacogne").one()
+            u.must_change_password = False  # la démo l'exige pour tous : ici on parcourt les pages directement
             db.session.add(AgendaTask(user_id=u.id, title="Tâche de test"))
             db.session.commit()
 
@@ -47,7 +50,7 @@ class PagesSmokeTests(unittest.TestCase):
     def _client(self):
         c = self.app.test_client()
         token = re.search(r'name="_csrf" value="([^"]+)"', c.get("/login").get_data(as_text=True)).group(1)
-        r = c.post("/login", data={"login": "wacogne", "password": "hangar2026", "_csrf": token})
+        r = c.post("/login", data={"login": "wacogne", "password": MOT_DE_PASSE, "_csrf": token})
         self.assertEqual(r.status_code, 302)
         return c
 

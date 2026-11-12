@@ -4,11 +4,14 @@ import shutil
 import sqlite3
 from datetime import datetime
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import (Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file,
+                   url_for)
 from flask_login import current_user, login_required
 
+from .. import sauvegarde
 from ..extensions import db
 from ..models import PALETTE, APIToken, User, Workspace, now
+from ..seed import DEMO_PASSWORD
 from ..services import to_int
 from ..utils import human_size, require_admin
 
@@ -63,6 +66,8 @@ def password():
         flash("Le nouveau mot de passe doit contenir au moins 6 caractères.", "error")
     elif request.form.get("new") != request.form.get("confirm"):
         flash("Les deux mots de passe ne correspondent pas.", "error")
+    elif request.form.get("new") == DEMO_PASSWORD:
+        flash("Ce mot de passe est celui de la démonstration, connu de tous : choisis-en un autre.", "error")
     else:
         u.set_password(request.form["new"])
         u.must_change_password = False
@@ -122,17 +127,16 @@ def _db_path():
     return os.path.join(current_app.config["DATA_DIR"], "hangar.db")
 
 
-def make_backup() -> str:
-    """Copie cohérente de la base SQLite (API de sauvegarde) dans data/backups/."""
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = os.path.join(current_app.config["BACKUP_DIR"], f"hangar_{stamp}.db")
-    src = sqlite3.connect(_db_path())
-    dst = sqlite3.connect(dest)
-    with dst:
-        src.backup(dst)
-    src.close()
-    dst.close()
-    return dest
+# Copie de la base seule : gardée ici sous ce nom pour les commandes (cli.py) qui l'importent.
+make_backup = sauvegarde.make_backup
+
+
+def _nom_sauvegarde(name: str | None) -> str | None:
+    """Nom d'une sauvegarde de data/backups (base .db ou complète .zip), ou None s'il n'en est pas une."""
+    name = os.path.basename(name or "")
+    if name.endswith(".db") or sauvegarde.MOTIF_COMPLET.match(name):
+        return name
+    return None
 
 
 @bp.route("/backup", methods=["GET", "POST"])
@@ -144,11 +148,22 @@ def backup():
         action = request.form.get("action")
         if action == "create":
             path = make_backup()
-            flash(f"Sauvegarde créée : {os.path.basename(path)}", "success")
+            flash(f"Sauvegarde de la base créée : {os.path.basename(path)}", "success")
+        elif action == "create_full":
+            try:
+                bilan = sauvegarde.make_full_backup()
+            except (OSError, sqlite3.Error) as exc:  # disque plein…
+                flash(f"La sauvegarde complète a échoué : {exc}", "error")
+                return redirect(url_for("settings.backup"))
+            flash(f"Sauvegarde complète créée : {os.path.basename(bilan.chemin)} ({bilan.fichiers} fichiers).",
+                  "success")
+            if bilan.non_copies:
+                flash(f"{len(bilan.non_copies)} fichier(s) n’ont pas pu être lus et manquent dans l’archive : "
+                      + ", ".join(bilan.non_copies[:5]), "error")
         elif action == "delete":
-            name = os.path.basename(request.form.get("name", ""))
-            path = os.path.join(folder, name)
-            if name.endswith(".db") and os.path.exists(path):
+            name = _nom_sauvegarde(request.form.get("name"))
+            path = os.path.join(folder, name or "")
+            if name and os.path.isfile(path):
                 os.remove(path)
                 flash("Sauvegarde supprimée.", "info")
         elif action == "restore":
@@ -168,41 +183,59 @@ def backup():
             flash(f"Base restaurée depuis {name}. Une sauvegarde de l’état précédent a été créée.", "success")
             return redirect(url_for("auth.login"))
         return redirect(url_for("settings.backup"))
-    files = []
-    for name in sorted(os.listdir(folder), reverse=True):
-        if name.endswith(".db"):
-            p = os.path.join(folder, name)
-            files.append({"name": name, "size": human_size(os.path.getsize(p)),
-                          "date": datetime.fromtimestamp(os.path.getmtime(p))})
-    return render_template("settings/backup.html", files=files)
+    files = [dict(f, size=human_size(f["octets"])) for f in sauvegarde.liste(folder)]
+    data_dir = current_app.config["DATA_DIR"]
+    vault = current_app.config["WIKI_DIR"]
+    vault_ailleurs = os.path.realpath(vault) != os.path.realpath(os.path.join(data_dir, "vault"))
+    return render_template("settings/backup.html", files=files, data_dir=data_dir, vault=vault,
+                           vault_ailleurs=vault_ailleurs)
+
+
+def _envoyer(fichier, nom: str, mimetype: str):
+    return send_file(fichier, as_attachment=True, download_name=nom, mimetype=mimetype, max_age=0)
 
 
 @bp.route("/backup/download")
 @login_required
 def backup_download():
+    """Une sauvegarde de la liste ; sans nom : la base actuelle, sans secrets et sans rien garder sur le disque."""
     require_admin()
     name = request.args.get("name")
     if name:
-        path = os.path.join(current_app.config["BACKUP_DIR"], os.path.basename(name))
-        if not os.path.exists(path):
+        name = _nom_sauvegarde(name)
+        path = os.path.join(current_app.config["BACKUP_DIR"], name or "")
+        if not name or not os.path.isfile(path):
             abort(404)
-    else:
-        path = make_backup()
-    return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+        return send_file(path, as_attachment=True, download_name=name)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return _envoyer(sauvegarde.fichier_temporaire(sans_secrets=True, complet=False), f"hangar_{stamp}.db",
+                    "application/vnd.sqlite3")
+
+
+@bp.route("/backup/telecharger", methods=["POST"])
+@login_required
+def backup_now():
+    """« Tout télécharger » : sauvegarde complète (.zip) ou base seule (.db), avec ou sans les secrets.
+    Le fichier est préparé dans un fichier temporaire : rien n'est ajouté à data/backups/."""
+    require_admin()
+    complet = request.form.get("format") != "db"
+    sans_secrets = not request.form.get("secrets")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fichier = sauvegarde.fichier_temporaire(sans_secrets=sans_secrets, complet=complet)
+    if complet:
+        return _envoyer(fichier, f"hangar_complet_{stamp}.zip", "application/zip")
+    return _envoyer(fichier, f"hangar_{stamp}.db", "application/vnd.sqlite3")
 
 
 @bp.route("/backup/export.json")
 @login_required
 def export_json():
+    """Export lisible des projets (partie Travail), envoyé directement : rien n'est écrit dans data/."""
     require_admin()
     from ..importer import export_workspace_json
     stamp = datetime.now().strftime("%Y%m%d")
-    data = export_workspace_json()
-    tmp = os.path.join(current_app.config["BACKUP_DIR"], f"export_{stamp}.json")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(data)
-    return send_file(tmp, as_attachment=True, download_name=f"hangar_export_{stamp}.json",
-                     mimetype="application/json")
+    return Response(export_workspace_json(), mimetype="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="hangar_projets_{stamp}.json"'})
 
 
 @bp.route("/about")
