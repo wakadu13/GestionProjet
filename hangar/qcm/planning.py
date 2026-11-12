@@ -32,6 +32,8 @@ REPONSES_MIN_PRECISION = 20
 SECONDES_DEFAUT = 20        # temps par question tant qu'il n'est pas mesuré
 REPONSES_MIN_CHRONO = 10
 HORIZON_JOURS = 365
+PLATEAU_JOURS = 60          # arrêt anticipé de la simulation : jours sans progrès (voir simuler)…
+SERIES_PLATEAU = 2          # … pendant lesquels chaque question restante a fait 2 fois sa plus longue série de réussites
 
 
 def faites_aujourdhui(progress, now):
@@ -71,6 +73,30 @@ def simuler(cartes, quota_nouvelles, quota_revisions, precision, deja=(0, 0), re
     Les quotas sont des nombres par jour ; `deja` = (nouvelles, révisions) déjà
     faites aujourd'hui. Renvoie (jours nécessaires, nombre de réponses), ou None
     au-delà de HORIZON_JOURS.
+
+    Arrêt anticipé : avec une précision faible (moins de 72 % environ), la plupart des
+    questions ne se stabilisent jamais et la simulation parcourait les 365 jours à
+    chaque affichage (jusqu'à plusieurs secondes par page). Elle renvoie None plus tôt
+    quand la suite est jouée d'avance :
+    - toutes les nouvelles sont découvertes ;
+    - le quota de révisions ne peut plus jamais couper la file : il y a au plus
+      quota_revisions questions vues, donc chaque question est révisée à son échéance et
+      évolue seule. Il ne suffit pas que la file n'ait pas été coupée depuis un moment :
+      une coupure plus tardive reporte une révision, ce qui allonge l'intervalle et peut
+      encore faire progresser la question (cas réel : quota de 1 révision par jour,
+      « prêt en 325 jours » au lieu de « impossible »). Quand le quota est plus petit
+      que le nombre de questions, la simulation va donc jusqu'au bout ; les appels sans
+      plafond de révisions (conseil de rattrapage, dichotomie) gardent l'arrêt anticipé ;
+    - depuis PLATEAU_JOURS jours, aucune question n'est devenue « sue » ;
+    - pendant ce temps, chaque question restante a fait SERIES_PLATEAU fois la plus
+      longue série de réussites que permet la précision (les échecs, réguliers, laissent
+      au plus ⌈1/(1-p)⌉ - 1 réussites d'affilée), sans atteindre STABILITE_OBJECTIF :
+      les séries suivantes repartent du même état (difficulté au maximum après chaque
+      échec) et n'iront pas plus haut. Une seule série ne suffit pas : la première peut
+      partir d'un état plus bas, pas encore stabilisé.
+    Vérifié aussi contre la simulation complète : résultats identiques sur 5 192
+    simulations (base d'un an d'usage, précisions de 60 à 97 %, quotas variés) et des
+    dizaines de milliers de tirages au hasard (tests/test_perf.py).
     """
     etats = [e for e, _, _ in cartes]
     dues = [d for _, d, _ in cartes]
@@ -86,17 +112,31 @@ def simuler(cartes, quota_nouvelles, quota_revisions, precision, deja=(0, 0), re
     # sans carte « malchanceuse » qui concentrerait tous les échecs, et plus de
     # nouvelles par jour donne une durée plus courte (dichotomie ci-dessous).
     echecs = [(i * 0.6180339887) % 1.0 for i in range(len(cartes))]
+    # Arrêt anticipé (voir plus haut) : plus longue série de réussites que permet la précision,
+    # et pour chaque question, sa série en cours et les jours où elle a atteint cette longueur.
+    # `q` est aussi l'incrément des échecs ci-dessous (même valeur que 1 - precision).
+    q = 1 - precision
+    serie_max = math.ceil(1 / q) - 1 if q > 0 else None
+    serie = [0] * len(cartes)
+    longues = [[] for _ in cartes]
+    calme_depuis = 0  # premier jour sans progrès et sans quota de révisions atteint (le jour 0 peut être coupé par `deja`)
     reponses = 0
     for jour in range(HORIZON_JOURS):
         places_n = max(0, quota_nouvelles - (deja[0] if jour == 0 else 0))
         places_r = max(0, quota_revisions - (deja[1] if jour == 0 else 0))
-        # Même ordre que la file du jour : les plus menacées d'oubli d'abord, puis nouvelles.
-        a_revoir = sorted((i for i in vues if dues[i] <= jour),
-                          key=lambda i: (fsrs.retrievabilite(jour - derniere[i], etats[i].stabilite), dues[i]))[:places_r]
+        dues_du_jour = [i for i in vues if dues[i] <= jour]
+        coupee = len(dues_du_jour) > places_r
+        if coupee:
+            # Même ordre que la file du jour : les plus menacées d'oubli d'abord, puis nouvelles.
+            a_revoir = sorted(dues_du_jour, key=lambda i: (fsrs.retrievabilite(jour - derniere[i], etats[i].stabilite),
+                                                           dues[i]))[:places_r]
+        else:
+            a_revoir = dues_du_jour  # toutes révisées aujourd'hui : l'ordre ne change rien
         decouvertes, nouvelles = nouvelles[:places_n], nouvelles[places_n:]
+        avant = restantes
         for i in a_revoir + decouvertes:
             reponses += 1
-            echecs[i] += 1 - precision
+            echecs[i] += q
             reussie = echecs[i] < 1
             if not reussie:
                 echecs[i] -= 1
@@ -107,9 +147,19 @@ def simuler(cartes, quota_nouvelles, quota_revisions, precision, deja=(0, 0), re
             if etats[i].stabilite >= STABILITE_OBJECTIF and i not in sues:
                 sues.add(i)
                 restantes -= 1
+            serie[i] = serie[i] + 1 if reussie else 0
+            if serie_max is not None and serie[i] == serie_max:
+                longues[i].append(jour)
         vues += decouvertes
         if restantes <= 0:
             return jour + 1, reponses
+        if decouvertes or coupee or restantes < avant:
+            calme_depuis = jour + 1
+        elif (serie_max is not None and not nouvelles and len(vues) <= quota_revisions
+              and jour + 1 - calme_depuis >= PLATEAU_JOURS
+              and all(len(longues[i]) >= SERIES_PLATEAU and longues[i][-SERIES_PLATEAU] >= calme_depuis
+                      for i in vues if i not in sues)):
+            return None
     return None
 
 

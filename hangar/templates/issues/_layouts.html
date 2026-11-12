@@ -260,7 +260,8 @@
   <div class="bcard-top">
     <span class="key">{{ i.key }}</span>
     {% if show_project %}<span class="muted tiny">{{ i.project.emoji }}</span>{% endif %}
-    {% if i.blockers %}<span class="blocked" title="Bloqué par {{ i.blockers|map(attribute='key')|join(', ') }}">{{ icon('lock', 12) }}</span>{% endif %}
+    {% set bl = blockers_map[i.id] if blockers_map is defined and i.id in blockers_map else i.blockers %}
+    {% if bl %}<span class="blocked" title="Bloqué par {{ bl|map(attribute='key')|join(', ') }}">{{ icon('lock', 12) }}</span>{% endif %}
     {% set cp = i.children_progress %}{% if cp %}<span class="sub-ind muted tiny flex gap-4">{{ icon('subissue', 12) }}{{ cp.done }}/{{ cp.total }}</span>{% endif %}
   </div>
   <a class="bcard-title" href="{{ url_for('issues.detail', pid=i.project_id, seq=i.sequence_id) }}">{{ i.title }}</a>

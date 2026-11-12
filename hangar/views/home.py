@@ -8,7 +8,7 @@ from .. import issue_query as IQ
 from ..extensions import db
 from ..models import (
     Activity, Comment, Cycle, Favorite, Issue, Module, Notification, Page, Project, SavedView, State, Sticky,
-    User, issue_assignees, now,
+    User, blockers_map, issue_assignees, now,
 )
 from ..securite import clean_color
 from ..utils import back_url, visible_projects, week_bounds
@@ -87,6 +87,9 @@ def _layout_context(issues, opts, projects, f):
     if opts["layout"] in ("list", "board"):
         ctx["groups"] = IQ.group_issues(issues, opts["group_by"], projects,
                                         show_empty=opts["layout"] == "board" or len(projects) == 1)
+        if opts["layout"] == "board":
+            # Cadenas des cartes bloquées : une requête pour tout le tableau (et non une par carte).
+            ctx["blockers_map"] = blockers_map(i.id for i in issues)
     elif opts["layout"] == "calendar":
         ctx["cal"] = IQ.calendar_weeks(opts["month"], issues)
     elif opts["layout"] == "gantt":

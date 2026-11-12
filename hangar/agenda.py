@@ -1391,9 +1391,47 @@ def reminder_payload(r: AgendaReminder) -> dict:
             "when": when, "auto": bool(r.auto), "channel": r.channel, "offset": r.offset_minutes}
 
 
-def event_payload(ev: AgendaEvent, recent: set[int], url_for) -> dict:
+def preload_payloads(user, events, tasks) -> dict:
+    """Ce que lisent les fenêtres de détail de toutes les séances et tâches d'une page, chargé en
+    quelques requêtes (et non trois par séance) : rappels des séances et des tâches, tâches liées
+    aux séances, liens de matière du compte. À passer à `event_payload`."""
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    events = [e for e in events if e is not None]
+    tasks = [t for t in tasks if t is not None]
+
+    def par_paquets(ids):
+        ids = sorted(set(ids))
+        return (ids[k:k + 500] for k in range(0, len(ids), 500))  # limite de paramètres SQLite
+
+    def remplir(objets, colonne, ordre):
+        # Collection `reminders` remplie sans requête par objet (comme un chargement groupé).
+        a_charger = {o.id: o for o in objets if "reminders" not in o.__dict__}
+        lus: dict[int, list] = {i: [] for i in a_charger}
+        for ids in par_paquets(a_charger):
+            for r in AgendaReminder.query.filter(colonne.in_(ids)).order_by(*ordre):
+                lus[getattr(r, colonne.key)].append(r)
+        for i, o in a_charger.items():
+            set_committed_value(o, "reminders", lus[i])
+
+    remplir(events, AgendaReminder.event_id, (AgendaReminder.id,))
+    remplir(tasks, AgendaReminder.task_id, (AgendaReminder.remind_at, AgendaReminder.id))
+    liees: dict[int, list] = {}
+    for ids in par_paquets(e.id for e in events):
+        for t in AgendaTask.query.filter(AgendaTask.event_id.in_(ids)).order_by(AgendaTask.due_date, AgendaTask.id):
+            liees.setdefault(t.event_id, []).append(t)
+    liens = {l.subject: l for l in AgendaSubjectLink.query.filter_by(user_id=user.id)} if events else {}
+    return {"tasks": liees, "links": liens}
+
+
+def event_payload(ev: AgendaEvent, recent: set[int], url_for, pre: dict | None = None) -> dict:
+    """Données de la fenêtre de détail d'une séance. `pre` : `preload_payloads` de la page (sinon
+    tout est lu ici, séance par séance)."""
     badge = change_badge(ev, recent)
-    tasks = AgendaTask.query.filter_by(event_id=ev.id).order_by(AgendaTask.due_date).all()
+    if pre is not None:
+        tasks = pre["tasks"].get(ev.id, [])
+    else:
+        tasks = AgendaTask.query.filter_by(event_id=ev.id).order_by(AgendaTask.due_date).all()
     return {
         "id": ev.id, "title": ev.title, "kind": kind_label(ev.kind), "kindCode": ev.kind, "session": ev.session_no,
         "tentative": bool(ev.tentative), "cancelled": bool(ev.cancelled), "removed": ev.status != "active",
@@ -1407,14 +1445,19 @@ def event_payload(ev: AgendaEvent, recent: set[int], url_for) -> dict:
                   for t in tasks],
         "urls": {"note": url_for("agenda.event_note", eid=ev.id), "reminder": url_for("agenda.event_reminder", eid=ev.id),
                  "link": url_for("agenda.subject_link", eid=ev.id), "exam": url_for("agenda.event_exam", eid=ev.id)},
-        "links": _safe_links(ev),
+        "links": _safe_links(ev, pre),
     }
 
 
-def _safe_links(ev: AgendaEvent) -> dict:
+def _safe_links(ev: AgendaEvent, pre: dict | None = None) -> dict:
     try:
         from flask_login import current_user as _cu
-        return subject_links(_cu, ev) if _cu and _cu.is_authenticated else {}
+        if not (_cu and _cu.is_authenticated):
+            return {}
+        if pre is None:
+            return subject_links(_cu, ev)
+        # Page entière : les listes complètes (wikiAll, qcmAll) sont à la racine de ses données.
+        return subject_links(_cu, ev, links=pre["links"], listes=False)
     except Exception:  # noqa: BLE001 - la fenêtre de détail reste utilisable sans les liens
         return {}
 
@@ -1615,55 +1658,102 @@ def _wiki_target(path: str) -> dict | None:
     return {"label": label, "url": _url("wiki.sommaire", dossier=path), "path": path}
 
 
-def qcm_categories(user) -> dict[str, int]:
-    """{catégorie de sets : cartes dues aujourd'hui} pour un compte (vide si le module QCM est indisponible)."""
-    from flask import g
-    key = f"_qcm_cats_{user.id}"
-    if key in g:
-        return g.get(key)
-    cats: dict[str, int] = {}
-    try:
-        from .qcm.services import bibliotheque, resume_du_jour
-        for cat in bibliotheque(user.id).categories():
-            cats.setdefault(cat, 0)
-        for st in resume_du_jour(user).get("par_set", []):
-            cats[st.get("categorie", "")] = cats.get(st.get("categorie", ""), 0) + int(st.get("cartes") or 0)
-    except Exception:  # noqa: BLE001
-        cats = {}
-    setattr(g, key, cats)
-    return cats
+def _par_requete(cle, calcul):
+    """Valeur calculée une fois par requête (rangée sur `request` : g peut survivre à plusieurs
+    requêtes) ; recalculée à chaque appel hors requête."""
+    from flask import has_request_context, request
+    if not has_request_context():
+        return calcul()
+    memo = getattr(request, "_agenda_memo", None)
+    if memo is None:
+        memo = request._agenda_memo = {}
+    if cle not in memo:
+        memo[cle] = calcul()
+    return memo[cle]
 
 
-def subject_links(user, ev: AgendaEvent) -> dict:
-    """Liens et suggestions d'une séance pour la fenêtre de détail."""
-    link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=subject_key(ev.title)).first()
-    out = {"subject": ev.title, "wiki": None, "qcm": None, "wikiSuggest": [], "qcmSuggest": [], "wikiAll": [],
-           "qcmAll": []}
+def qcm_categories(user) -> list[str]:
+    """Catégories de sets de QCM d'un compte, dans l'ordre de la bibliothèque (vide si le module QCM
+    est indisponible). Les noms seulement : les cartes dues sont dans `qcm_due`."""
+    def calcul():
+        try:
+            from .qcm.services import bibliotheque
+            return list(bibliotheque(user.id).categories())
+        except Exception:  # noqa: BLE001
+            return []
+    return _par_requete(("qcm_categories", user.id), calcul)
+
+
+def qcm_due(user) -> dict[str, int]:
+    """{catégorie : cartes à réviser aujourd'hui}, comme le résumé des QCM du tableau de bord (dont il
+    partage le calcul), sans l'estimation des examens. Calculé seulement quand une séance affichée
+    est reliée à une catégorie."""
+    def calcul():
+        try:
+            from .qcm.services import cartes_par_categorie, etat_du_jour_page
+            return cartes_par_categorie(etat_du_jour_page(user.id))
+        except Exception:  # noqa: BLE001
+            return {}
+    return _par_requete(("qcm_due", user.id), calcul)
+
+
+def subject_lists(user) -> dict:
+    """Toutes les collections du wiki et catégories de QCM proposées dans les fenêtres de détail :
+    une fois pour toute la page (et non recopiées dans chaque séance)."""
+    return {"wikiAll": [c["path"] for c in wiki_collections()], "qcmAll": sorted(qcm_categories(user), key=str.lower)}
+
+
+def _suggestions(user, ev: AgendaEvent, kind: str, cols, cats) -> list[str]:
+    """Trois meilleures collections du wiki (kind « wiki ») ou catégories de QCM (« qcm ») pour une
+    séance : calculées une fois par matière et par page (le même cours revient chaque semaine)."""
+    def calcul():
+        teachers = [w for w in _words(ev.teachers or "") if len(w) > 3]
+
+        def score(cand: str) -> int:
+            sc = _similarity(ev.title, cand)
+            cw = "".join(_words(cand))
+            if any(t in cw for t in teachers):  # « TELECOM_SANTORI » pour un cours de M. Santori
+                sc = max(sc, 60)
+            return sc
+
+        if kind == "wiki":
+            scored = sorted(((max(score(c["label"]), score(c["path"])), c) for c in cols), key=lambda x: -x[0])
+            return [c["path"] for s, c in scored[:3] if s >= 45]
+        scored = sorted(((score(c), c) for c in cats), key=lambda x: -x[0])
+        return [c for s, c in scored[:3] if s >= 45]
+    return _par_requete(("suggestions", kind, user.id, ev.title, ev.teachers or ""), calcul)
+
+
+def subject_links(user, ev: AgendaEvent, links: dict | None = None, listes: bool = True) -> dict:
+    """Liens et suggestions d'une séance pour la fenêtre de détail.
+
+    `links` : liens de matière du compte déjà chargés ({clé : lien}, voir `preload_payloads`) ;
+    `listes` : joindre toutes les collections et catégories (wikiAll, qcmAll) ; une page entière les
+    met une seule fois à la racine de ses données (`subject_lists`)."""
+    key = subject_key(ev.title)
+    if links is not None:
+        link = links.get(key)
+    else:
+        link = AgendaSubjectLink.query.filter_by(user_id=user.id, subject=key).first()
+    out = {"subject": ev.title, "wiki": None, "qcm": None, "wikiSuggest": [], "qcmSuggest": []}
+    if listes:
+        out.update(wikiAll=[], qcmAll=[])
     cols = wiki_collections()
     cats = qcm_categories(user)
     if link and link.wiki_path:
         out["wiki"] = _wiki_target(link.wiki_path)
     if link and link.qcm_category:
         from flask import url_for as _url
-        out["qcm"] = {"label": link.qcm_category, "due": cats.get(link.qcm_category, 0),
+        out["qcm"] = {"label": link.qcm_category, "due": qcm_due(user).get(link.qcm_category, 0),
                       "url": _url("qcm.index") + "#cat-" + re.sub(r"[^a-z0-9]+", "-", normalize(link.qcm_category)).strip("-")}
-    teachers = [w for w in _words(ev.teachers or "") if len(w) > 3]
-
-    def score(cand: str) -> int:
-        sc = _similarity(ev.title, cand)
-        cw = "".join(_words(cand))
-        if any(t in cw for t in teachers):  # « TELECOM_SANTORI » pour un cours de M. Santori
-            sc = max(sc, 60)
-        return sc
-
     if out["wiki"] is None and cols:
-        scored = sorted(((max(score(c["label"]), score(c["path"])), c) for c in cols), key=lambda x: -x[0])
-        out["wikiSuggest"] = [c["path"] for s, c in scored[:3] if s >= 45]
-        out["wikiAll"] = [c["path"] for c in cols]
+        out["wikiSuggest"] = _suggestions(user, ev, "wiki", cols, cats)
+        if listes:
+            out["wikiAll"] = [c["path"] for c in cols]
     if out["qcm"] is None and cats:
-        scored = sorted(((score(c), c) for c in cats), key=lambda x: -x[0])
-        out["qcmSuggest"] = [c for s, c in scored[:3] if s >= 45]
-        out["qcmAll"] = sorted(cats, key=str.lower)
+        out["qcmSuggest"] = _suggestions(user, ev, "qcm", cols, cats)
+        if listes:
+            out["qcmAll"] = sorted(cats, key=str.lower)
     return out
 
 
