@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import date, datetime, timedelta
 
 import markdown as md
@@ -16,6 +15,7 @@ from .models import (
     ROLE_RANK, Favorite, Issue, Project, ProjectMember, User,
 )
 from .securite import ExternalImages, media_filter
+from .texte import COLLATION_FR, cle_tri, contient_plie, plier  # noqa: F401 (réexportés)
 
 MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
 MONTHS_FULL = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
@@ -72,7 +72,7 @@ def visible_projects(user, include_archived=False):
     q = Project.query
     if not include_archived:
         q = q.filter(Project.archived_at.is_(None))
-    projects = q.order_by(Project.name).all()
+    projects = q.order_by(tri_fr(Project.name)).all()
     if user.role == "admin":
         return projects
     member_ids = {m.project_id for m in ProjectMember.query.filter_by(user_id=user.id)}
@@ -83,7 +83,7 @@ def visible_projects(user, include_archived=False):
 def joined_projects(user):
     """Projets dont l'utilisateur est membre (pour la barre latérale)."""
     ids = {m.project_id for m in ProjectMember.query.filter_by(user_id=user.id)}
-    return [p for p in Project.query.filter(Project.archived_at.is_(None)).order_by(Project.name)
+    return [p for p in Project.query.filter(Project.archived_at.is_(None)).order_by(tri_fr(Project.name))
             if p.id in ids]
 
 
@@ -108,10 +108,28 @@ def is_favorite(entity_type: str, entity_id: int) -> bool:
 # ---------------------------------------------------------------------------
 
 def normalize(text: str) -> str:
-    """minuscule, sans accents ni ponctuation superflue."""
-    text = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
-    text = re.sub(r"[^a-z0-9]+", " ", text.lower())
+    """minuscule, sans accents ni ponctuation superflue (« Cœur d’Alène » → « coeur d alene »)."""
+    text = plier(str(text or "")).encode("ascii", "ignore").decode()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
     return text.strip()
+
+
+# ---------------------------------------------------------------------------
+# Recherche et tri à la française (voir texte.py)
+# ---------------------------------------------------------------------------
+
+def contient(col, texte: str):
+    """Condition SQL « la colonne contient ``texte`` », sans tenir compte de la casse, des accents
+    ni de la forme de l'apostrophe : « etablir » trouve « Établir le plan d’actions », « plan
+    d'actions » trouve « plan d’actions ». « % » et « _ » sont cherchés tels quels (pas de joker).
+    S'appuie sur la fonction SQLite ``contient_plie`` (extensions.py, texte.py) : comme
+    LIKE '%…%', elle parcourt la table, et les textes longs déjà pliés sont gardés en mémoire."""
+    return db.func.contient_plie(col, plier(texte or ""), type_=db.Boolean)
+
+
+def tri_fr(col):
+    """Colonne triée à la française dans un ORDER BY (« École » avant « Zèbre »)."""
+    return col.collate(COLLATION_FR)
 
 
 def slugify(text: str) -> str:

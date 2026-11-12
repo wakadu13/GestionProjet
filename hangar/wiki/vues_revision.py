@@ -14,6 +14,7 @@ from werkzeug.routing import BuildError
 from .. import BASE_DIR
 from ..extensions import db
 from ..icons import icon
+from ..texte import cle_tri
 from . import commun, installation
 from .commun import can_edit, render
 from .render import render_note
@@ -102,7 +103,7 @@ def palette():
              for n in vault.notes.values() if not commun.est_qcm(n.folder)]
     pages += [{"t": a.path.stem, "s": "PDF" + (f" · {a.path.parent}" if a.path.parent.parts else ""), "u": a.view_url,
                "ic": "pdf"} for a in vault.attachments.values() if a.suffix == ".pdf"]
-    pages.sort(key=lambda x: x["t"].lower())
+    pages.sort(key=lambda x: cle_tri(x["t"]))
     qcm, langues = [], []
     try:
         from ..qcm import services

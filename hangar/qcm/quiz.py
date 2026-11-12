@@ -18,13 +18,14 @@ from __future__ import annotations
 import json
 import re
 import threading
-import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from functools import cached_property
 from pathlib import Path, PurePosixPath
 
 from flask import current_app
+
+from ..texte import cle_tri, plier
 
 
 def maintenant() -> datetime:
@@ -50,22 +51,21 @@ CATEGORIE_DEFAUT = "Général"
 
 
 def normaliser_texte(s: str) -> str:
-    """Normalise une réponse libre : casse, accents et espaces superflus ignorés."""
-    s = unicodedata.normalize("NFKD", str(s).strip().casefold())
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return " ".join(s.split())
+    """Normalise une réponse libre ou une recherche : casse, accents, espaces superflus, forme de
+    l'apostrophe (’ ' ʼ) et ligatures (« nœud » = « noeud ») ignorés — voir hangar/texte.py."""
+    return " ".join(plier(str(s)).split())
 
 
 def cle_naturelle(s: str):
-    """Clé de tri qui range les nombres dans l'ordre (« Linux 2 » avant « Linux 10 »)."""
-    return [(0, int(p), "") if p.isdigit() else (1, 0, p) for p in re.split(r"(\d+)", normaliser_texte(s)) if p]
+    """Clé de tri à la française, nombres dans l'ordre (« Linux 2 » avant « Linux 10 », « Économie »
+    avant « Tactique ») : texte.cle_tri, gardée sous ce nom pour le code qui l'utilise."""
+    return cle_tri(s)
 
 
 def normaliser_reponse(s: str) -> str:
-    """Comme normaliser_texte, en ignorant aussi les apostrophes typographiques et
-    la ponctuation finale (. ! ? ; :) — utile pour les réponses tapées (TROU, QRC)."""
-    s = normaliser_texte(str(s).replace("\u2019", "'").replace("\u2018", "'"))
-    return s.rstrip(".!?;: ")
+    """Comme normaliser_texte, en ignorant aussi la ponctuation finale (. ! ? ; :) — utile pour
+    les réponses tapées (TROU, QRC) : « noeud » est juste quand la réponse attendue est « nœud »."""
+    return normaliser_texte(s).rstrip(".!?;: ")
 
 
 def intervalle_ecoule(boite: int, last_review, now) -> bool:
@@ -393,14 +393,14 @@ class Library:
         """Sets et paquets de l'espace personnel d'un compte."""
         nom = nom_perso(player)
         return sorted([s for s in (*self.sets.values(), *self.langues.values()) if s.proprietaire == nom],
-                      key=lambda s: (s.path.parent.name.lower(), s.titre.lower()))
+                      key=lambda s: (cle_tri(s.path.parent.name), cle_tri(s.titre)))
 
     def get(self, set_id):
         return self.sets.get(set_id)
 
     def sorted_sets(self):
         # Ordre « naturel » (Linux 2 avant Linux 10) : ajout de Hangar.
-        return sorted(self.sets.values(), key=lambda s: (s.categorie.lower(), cle_naturelle(s.titre)))
+        return sorted(self.sets.values(), key=lambda s: (cle_tri(s.categorie), cle_tri(s.titre)))
 
     def categories(self):
         """{catégorie: [sets]} trié, pour l'affichage groupé."""
@@ -412,7 +412,7 @@ class Library:
     def noms_langues(self):
         """Langues distinctes (fichiers de langue et sets rattachés à une langue), triées."""
         noms = {s.langue for s in self.langues.values()} | {s.langue for s in self.sets.values() if s.langue}
-        return sorted(noms, key=str.lower)
+        return sorted(noms, key=cle_tri)
 
     def sets_langue(self, langue):
         """Fichiers d'une langue, dans l'ordre des chemins."""

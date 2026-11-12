@@ -23,6 +23,7 @@ from .. import ai
 from ..extensions import db
 from ..icons import ICONS
 from ..securite import protect_file
+from ..texte import cle_tri
 from . import commun, erreurs, historique, installation, texte_pdf, uploads
 from . import latex as latex_converter
 from .commun import can_edit, deny, render, wants_json
@@ -187,7 +188,7 @@ def _qcm_de_la_page(note):
         return [{"set": s, "ancre": services.ancre(s.id),
                  "summary": services.resume_set(s, QuizProgress.map_for(current_user.id, s.id), maintenant,
                                                 decks.get(s.id))}
-                for s in sorted(sets, key=lambda s: s.titre.lower())]
+                for s in sorted(sets, key=lambda s: cle_tri(s.titre))]
     except Exception:  # noqa: BLE001 - la section QCM ne doit jamais empêcher la lecture d'une page
         current_app.logger.exception("Wiki : QCM de la page %s", note.key)
         return []
@@ -234,7 +235,7 @@ def _fiche_en_cours(note) -> bool:
 
 def _note_page(vault, note):
     content, toc = vault.render(note)
-    backlinks = sorted(vault.backlinks.get(note.key.lower(), ()), key=lambda n: n.title.lower())
+    backlinks = sorted(vault.backlinks.get(note.key.lower(), ()), key=lambda n: cle_tri(n.title))
     fiche = vault.notes.get(note.path.with_name(f"{note.path.stem} (Fiche)").with_suffix("").as_posix().lower())
     mots = len(re.findall(r"\w+", note.clean_body))
     commun.noter_visite(note.key)
@@ -265,7 +266,7 @@ def page(path):
         target = vault.resolve(path)
         if target is not None:
             return redirect(target.url if isinstance(target, Note) else target.view_url)
-        backlinks = sorted(vault.unresolved.get(path.lower(), ()), key=lambda n: n.title.lower())
+        backlinks = sorted(vault.unresolved.get(path.lower(), ()), key=lambda n: cle_tri(n.title))
         return render("wiki/missing.html", vault=vault, name=path, filename=f"{path}.md", backlinks=backlinks,
                       can_create=clean_key(path) is not None, crumbs=fil_ariane(path.split("/")[:-1])), 404
     return _note_page(vault, note)
@@ -736,11 +737,11 @@ def pdf(path):
     context = {"attachment": attachment, "title": attachment.path.stem, "size": full.stat().st_size if full.is_file() else 0}
     if request.args.get("integre") == "1":
         return render_template("wiki/pdf_integre.html", integre=True, can_edit=False, **context)
-    backlinks = sorted(vault.attachment_backlinks.get(str(attachment.path).lower(), ()), key=lambda n: n.title.lower())
+    backlinks = sorted(vault.attachment_backlinks.get(str(attachment.path).lower(), ()), key=lambda n: cle_tri(n.title))
     page_cours = vault.notes.get(str(attachment.path.with_suffix("")).lower())
     return render("wiki/pdf.html", vault=vault, backlinks=backlinks, page_cours=page_cours,
                   crumbs=fil_ariane(attachment.path.parent.parts),
-                  pages_wiki=sorted((n.key for n in vault.notes.values()), key=str.lower) if can_edit() else [],
+                  pages_wiki=sorted((n.key for n in vault.notes.values()), key=cle_tri) if can_edit() else [],
                   **context)
 
 

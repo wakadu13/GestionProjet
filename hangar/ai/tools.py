@@ -18,7 +18,7 @@ from ..extensions import db
 from ..models import (
     PRIORITY_LABELS, AgendaTask, Cycle, Issue, Page, PageVersion, Project, State, now,
 )
-from ..utils import can, parse_date, visible_projects
+from ..utils import can, contient, parse_date, plier, visible_projects
 from . import context as C
 from .core import validate_json
 from .models import AIAction
@@ -37,7 +37,8 @@ READ_TOOLS = [
      "description": "Cherche des tickets (work items) dans les projets que l’utilisateur peut voir. Sans critère : ses "
                     "tickets ouverts. Renvoie clé, titre, état, priorité, échéance, assignés.",
      "input_schema": _schema({
-         "texte": {"type": "string", "description": "Mots à chercher dans le titre ou la description"},
+         "texte": {"type": "string", "description": "Mots à chercher dans le titre ou la description (casse et "
+                                                     "accents ignorés)"},
          "projet": {"type": "string", "description": "Identifiant (ex. EAE) ou nom du projet"},
          "etat": {"type": "string", "enum": ["ouverts", "termines", "tous"], "description": "Par défaut : ouverts"},
          "assignes_a_moi": {"type": "boolean", "description": "Seulement les tickets assignés à l’utilisateur"},
@@ -155,15 +156,26 @@ def _clip(v, n=300):
     return s[:n]
 
 
+def _position(texte: str, mots) -> int:
+    """Début de la première occurrence d'un des mots dans ``texte`` (casse, accents, apostrophes et
+    ligatures ignorés, comme la recherche), 0 si aucun n'y figure : sert à centrer l'extrait."""
+    from ..wiki.vault import fold, positions
+
+    replie = fold(texte)
+    return min((p[0][0] for w in mots if (p := positions(fold(w), replie))), default=0)
+
+
 def _find_project(ref: str, user) -> Project | None:
     ref = (ref or "").strip()
     if not ref:
         return None
-    for p in visible_projects(user):
-        if p.identifier.lower() == ref.lower() or p.name.lower() == ref.lower():
+    projects = visible_projects(user)
+    plie = plier(ref)
+    for p in projects:
+        if plier(p.identifier) == plie or plier(p.name) == plie:
             return p
-    for p in visible_projects(user):
-        if ref.lower() in p.name.lower():
+    for p in projects:
+        if plie in plier(p.name):
             return p
     return None
 
@@ -254,18 +266,28 @@ class ToolBox:
             q = q.filter(db.or_(State.group.is_(None), State.group.notin_(("completed", "cancelled"))))
         elif etat == "termines":
             q = q.filter(State.group.in_(("completed", "cancelled")))
-        for word in (texte or "").split()[:6]:
-            like = f"%{word}%"
-            q = q.filter(db.or_(Issue.title.ilike(like), Issue.description.ilike(like)))
         if assignes_a_moi or not (texte or projet or en_retard or etat != "ouverts"):
             q = q.filter(Issue.assignees.any(id=user.id))
         if en_retard:
             q = q.filter(Issue.target_date < date.today())
         limite = max(1, min(int(limite or 20), 50))
-        issues = q.order_by(Issue.target_date.is_(None), Issue.target_date, Issue.updated_at.desc()).limit(limite).all()
+        order = (Issue.target_date.is_(None), Issue.target_date, Issue.updated_at.desc())
+
+        def mot(w):
+            return db.or_(contient(Issue.title, w), contient(Issue.description, w))
+
+        words = (texte or "").split()[:6]
+        issues = q.filter(*[mot(w) for w in words]).order_by(*order).limit(limite).all()
+        entete = f"{len(issues)} ticket(s) :"
+        longs = [w for w in words if len(w) > 2]
+        if not issues and len(longs) > 1:
+            # Aucun ticket n'a tous les mots (« évaluation » ne se trouve pas dans « Évaluer la solution ») :
+            # ceux qui en ont au moins un, plutôt que de conclure trop vite que le ticket n'existe pas.
+            issues = q.filter(db.or_(*[mot(w) for w in longs])).order_by(*order).limit(limite).all()
+            entete = f"Aucun ticket ne contient tous ces mots ; {len(issues)} ticket(s) en contiennent au moins un :"
         if not issues:
-            return "Aucun ticket ne correspond."
-        return f"{len(issues)} ticket(s) :\n" + "\n".join(f"- {C.issue_line(i)}" for i in issues)
+            return "Aucun ticket ne correspond (la recherche ignore déjà la casse et les accents)."
+        return entete + "\n" + "\n".join(f"- {C.issue_line(i)}" for i in issues)
 
     def t_lire_ticket(self, cle):
         i = find_issue(cle, self.user)
@@ -287,8 +309,8 @@ class ToolBox:
                     "semaine": ["overdue", "today", "tomorrow", "week"]}.get(filtre, [k for k, _ in A.TASK_GROUP_LABELS])
             tasks = [t for k in keys for t in g.get(k, [])]
         if texte:
-            words = texte.lower().split()
-            tasks = [t for t in tasks if all(w in f"{t.title} {t.notes or ''} {t.category or ''}".lower() for w in words)]
+            words = plier(texte).split()
+            tasks = [t for t in tasks if all(w in plier(f"{t.title} {t.notes or ''} {t.category or ''}") for w in words)]
         if not tasks:
             return "Aucune tâche ne correspond."
         return f"{len(tasks)} tâche(s) :\n" + "\n".join(f"- {C._task_line(t, today)}" for t in tasks[:60])
@@ -322,15 +344,14 @@ class ToolBox:
         pids = [p.id for p in visible_projects(self.user)]
         words = [w for w in (texte or "").split() if len(w) > 2][:6] or [texte]
         q = Page.query.filter(Page.project_id.in_(pids), Page.archived_at.is_(None))
-        q = q.filter(db.or_(*[db.or_(Page.title.ilike(f"%{w}%"), Page.content.ilike(f"%{w}%")) for w in words]))
+        q = q.filter(db.or_(*[db.or_(contient(Page.title, w), contient(Page.content, w)) for w in words]))
         pages = [pg for pg in q.order_by(Page.updated_at.desc()).limit(20) if C.page_visible(pg, self.user)][:8]
         if not pages:
             return "Aucune page ne correspond."
         out = []
         for pg in pages:
             content = pg.content or ""
-            low = content.lower()
-            pos = min((low.find(w.lower()) for w in words if low.find(w.lower()) >= 0), default=0)
+            pos = _position(content, words)
             excerpt = content[max(0, pos - 300):pos + 900].strip()
             out.append(f"## {pg.title} ({pg.project.name}) — {url_for('pages.view', pid=pg.project_id, page_id=pg.id)}\n"
                        f"{excerpt}")

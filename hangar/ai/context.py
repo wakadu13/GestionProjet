@@ -25,7 +25,7 @@ from ..extensions import db
 from ..models import (
     PRIORITY_LABELS, AgendaTask, Comment, Cycle, Issue, Module, Page, Project, State,
 )
-from ..utils import can, fmt_date, visible_projects
+from ..utils import can, contient, contient_plie, fmt_date, visible_projects
 
 log = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ def extraits(texte: str, question: str, budget: int) -> tuple[str, bool]:
     if len(texte) <= budget:
         return texte, False
     from ..wiki.demander import mots_cles
-    from ..wiki.vault import fold
+    from ..wiki.vault import compte, fold
 
     mots = mots_cles(question or "")
     nombres = list(dict.fromkeys(_NOMBRE_RE.findall(question or "")))[:10]
@@ -161,7 +161,7 @@ def extraits(texte: str, question: str, budget: int) -> tuple[str, bool]:
     niveaux = [len(t.group(1)) if (t := _TITRE_RE.match(texte, a)) else 0 for a, _ in blocs]
     comptes = []  # par paragraphe : {terme de la question : occurrences}
     for (a, b), niveau in zip(blocs, niveaux):
-        c = {m: k for m in mots if (k := replie.count(m, a, b))}
+        c = {m: k for m in mots if (k := compte(m, replie, a, b))}
         if nombres and (niveau or c):  # un numéro seul compte dans un titre, ou à côté d'un mot-clé
             jetons = _NOMBRE_RE.findall(replie, a, b)
             c.update({x: k for x in nombres if (k := jetons.count(x))})
@@ -713,13 +713,11 @@ _BY_ENDPOINT = {
 
 def search_mentions(q: str, user, limit: int = 14) -> list[dict]:
     q = (q or "").strip()
-    like = f"%{q}%"
     projects = visible_projects(user)
     pids = [p.id for p in projects]
     out: list[dict] = []
-    ql = q.lower()
     for p in projects:
-        if not q or ql in p.name.lower() or ql in p.identifier.lower():
+        if not q or contient_plie(q, p.name) or contient_plie(q, p.identifier):
             out.append({"type": "projet", "title": p.name, "subtitle": p.identifier, "icon": "briefcase",
                         "url": url_for("projects.detail", pid=p.id)})
     issues = []
@@ -730,14 +728,14 @@ def search_mentions(q: str, user, limit: int = 14) -> list[dict]:
                                                       Issue.project_id.in_(pids)).all()
         if not issues:
             iq = Issue.query.filter(Issue.project_id.in_(pids), Issue.archived_at.is_(None), Issue.is_visible_clause())
-            iq = iq.filter(Issue.title.ilike(like)) if q else iq.filter(Issue.assignees.any(id=user.id))
+            iq = iq.filter(contient(Issue.title, q)) if q else iq.filter(Issue.assignees.any(id=user.id))
             issues = iq.order_by(Issue.updated_at.desc()).limit(6).all()
     out += [{"type": "ticket", "title": f"{i.key} · {i.title}", "subtitle": i.project.name, "icon": "target",
              "url": url_for("issues.detail", pid=i.project_id, seq=i.sequence_id)} for i in issues]
     if pids:
         pq = Page.query.filter(Page.project_id.in_(pids), Page.archived_at.is_(None))
         if q:
-            pq = pq.filter(Page.title.ilike(like))
+            pq = pq.filter(contient(Page.title, q))
         out += [{"type": "page", "title": pg.title, "subtitle": pg.project.name, "icon": "page",
                  "url": url_for("pages.view", pid=pg.project_id, page_id=pg.id)}
                 for pg in pq.order_by(Page.updated_at.desc()).limit(5) if page_visible(pg, user)]
@@ -745,14 +743,14 @@ def search_mentions(q: str, user, limit: int = 14) -> list[dict]:
             out += [{"type": "cycle", "title": c.name, "subtitle": c.project.name, "icon": "cycle",
                      "url": url_for("cycles.detail", pid=c.project_id, cid=c.id)}
                     for c in Cycle.query.filter(Cycle.project_id.in_(pids), Cycle.archived_at.is_(None),
-                                                Cycle.name.ilike(like)).limit(4)]
+                                                contient(Cycle.name, q)).limit(4)]
             out += [{"type": "module", "title": m.name, "subtitle": m.project.name, "icon": "module",
                      "url": url_for("modules.detail", pid=m.project_id, mid=m.id)}
                     for m in Module.query.filter(Module.project_id.in_(pids), Module.archived_at.is_(None),
-                                                 Module.name.ilike(like)).limit(4)]
+                                                 contient(Module.name, q)).limit(4)]
     tq = AgendaTask.query.filter(AgendaTask.user_id == user.id, AgendaTask.done_at.is_(None))
     if q:
-        tq = tq.filter(AgendaTask.title.ilike(like))
+        tq = tq.filter(contient(AgendaTask.title, q))
     out += [{"type": "tache", "title": t.title, "subtitle": "Tâche" + (f" · {_d(t.due_date)}" if t.due_date else ""),
              "icon": "list-check", "url": url_for("agenda.tasks", focus=t.id)}
             for t in tq.order_by(AgendaTask.due_date.is_(None), AgendaTask.due_date).limit(5)]
@@ -777,9 +775,8 @@ def _wiki_mentions(q: str) -> list[dict]:
     vault = wiki_vault()
     if vault is None or not q:
         return []
-    ql = q.lower()
     try:
-        notes = [n for n in vault.notes.values() if ql in str(getattr(n, "title", "")).lower()][:6]
+        notes = [n for n in vault.notes.values() if contient_plie(q, str(getattr(n, "title", "")))][:6]
         return [{"type": "wiki", "title": n.title, "subtitle": "Wiki", "icon": "book", "url": n.url} for n in notes]
     except Exception:  # noqa: BLE001
         return []

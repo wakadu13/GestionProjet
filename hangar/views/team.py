@@ -14,6 +14,7 @@ from ..models import (
     ProjectMember, User, WorkLog, issue_subscribers,
 )
 from ..services import to_int
+from ..texte import cle_tri
 from ..utils import (back_url, fmt_date, parse_date, require_admin, visible_projects, week_bounds)
 from .auth import _validate_user_fields
 
@@ -56,7 +57,7 @@ def index():
     role = request.args.get("role")
     if role in ROLES:
         q = q.filter(User.role == role)
-    users = sorted(q.all(), key=lambda u: u.display_name.lower())
+    users = sorted(q.all(), key=lambda u: cle_tri(u.display_name))
     pids = [p.id for p in visible_projects(current_user)]
     stats = _member_stats(users, pids)
     return render_template("team/index.html", users=users, stats=stats, show_inactive=show_inactive, role=role,
@@ -76,7 +77,7 @@ def workload():
     for p in projects:
         for u in p.member_users:
             members[u.id] = u
-    users = sorted(members.values(), key=lambda u: u.display_name.lower())
+    users = sorted(members.values(), key=lambda u: cle_tri(u.display_name))
     today = date.today()
     ws, _ = week_bounds(today)
     weeks = [ws + timedelta(weeks=k) for k in range(weeks_n)]

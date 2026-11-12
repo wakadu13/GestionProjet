@@ -21,6 +21,7 @@ from markupsafe import escape
 from . import digest
 from .extensions import db
 from .icons import ICONS
+from .texte import COLLATION_FR, cle_tri
 from .models import (
     CLOSED_GROUPS, HEALTH_COLORS, HEALTH_LABELS, HEALTH_RANK, INITIATIVE_STATUSES, MODULE_STATUS_COLORS,
     MODULE_STATUS_LABELS, STATE_GROUPS, Initiative, Issue, IssueRelation, Label, Module, Project, State, User,
@@ -160,8 +161,8 @@ class Snapshot:
 
     def __init__(self, today: date | None = None):
         self.today = today or date.today()
-        self.projects = {p.id: p for p in Project.query.order_by(Project.name).all()}
-        self.modules = {m.id: m for m in Module.query.order_by(Module.name).all()}
+        self.projects = {p.id: p for p in Project.query.order_by(Project.name.collate(COLLATION_FR)).all()}
+        self.modules = {m.id: m for m in Module.query.order_by(Module.name.collate(COLLATION_FR)).all()}
         rows = (db.session.query(Issue.id, Issue.project_id, Issue.sequence_id, Issue.title, Issue.target_date,
                                  State.group)
                 .outerjoin(State, Issue.state_id == State.id)
@@ -332,7 +333,7 @@ def milestones(ini: Initiative, snap: Snapshot, issue_ids: set[int] | None = Non
     mods = {m.id: m for p in ini.projects for m in p.modules if m.archived_at is None}
     mods.update({m.id: m for m in ini.modules})
     mods = {mid: m for mid, m in mods.items() if ok(m.project_id)}
-    for m in sorted(mods.values(), key=lambda m: m.name.lower()):
+    for m in sorted(mods.values(), key=lambda m: cle_tri(m.name)):
         add(m.target_date, f"Module « {m.name} »", "module", m.status in ("completed", "cancelled"),
             url_for("modules.detail", pid=m.project_id, mid=m.id), snap.projects[m.project_id].identifier
             if m.project_id in snap.projects else "")
@@ -402,7 +403,7 @@ def build_graph(user, tab: str = "initiative", group: str = "lead", filters: dic
         all_inis = Initiative.query.all()
         linked_pids = {p.id for i in all_inis for p in i.projects}
         inis = [i for i in all_inis if _keep_initiative(i, snap, filters, user)]
-        inis.sort(key=lambda i: (GRAPH_STATUS_ORDER.get(i.status, 9), i.name.lower()))
+        inis.sort(key=lambda i: (GRAPH_STATUS_ORDER.get(i.status, 9), cle_tri(i.name)))
         for ini in inis:
             s = snap.initiative(ini)
             nodes[f"i:{ini.id}"] = {
@@ -641,7 +642,7 @@ def _line_initiative(ini: Initiative, s: dict) -> str:
 def overview_text(user, snap: Snapshot | None = None) -> str:
     from .utils import visible_projects
     snap = snap or Snapshot()
-    inis = sorted(Initiative.query.all(), key=lambda i: (GRAPH_STATUS_ORDER.get(i.status, 9), i.name.lower()))
+    inis = sorted(Initiative.query.all(), key=lambda i: (GRAPH_STATUS_ORDER.get(i.status, 9), cle_tri(i.name)))
     visible = {p.id for p in visible_projects(user)}
     readable = readable_project_ids(user)
     counts = defaultdict(int)
@@ -775,7 +776,7 @@ def _digest_initiatives(ctx):
         db.session.commit()
     if not items:
         return None
-    items.sort(key=lambda x: (-HEALTH_RANK[x[1]["health"]], x[0].name.lower()))
+    items.sort(key=lambda x: (-HEALTH_RANK[x[1]["health"]], cle_tri(x[0].name)))
     lignes = []
     for ini, s in items:
         h = s["health_info"]

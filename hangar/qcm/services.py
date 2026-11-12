@@ -12,6 +12,7 @@ from datetime import datetime, time, timedelta
 from flask import has_request_context, request, url_for
 from markupsafe import escape
 
+from ..texte import cle_tri
 from . import langues, planning, quiz, rattachement
 from .models import _JAMAIS, Activite, ObjectifRevision, QuizDeck, QuizProgress, TempsRevision
 
@@ -232,7 +233,7 @@ def objectifs(user_id, library, decks, now, jours_max=None, tous=None, estimatio
             progress = tous.get(qset.id, {}) if tous is not None else QuizProgress.map_for(user_id, qset.id)
             e = planning.estimer(qset, progress, deck, now)
         out.append({"set": qset, "date": deck.date_objectif, "jours": (deck.date_objectif - jour).days, "e": e})
-    out.sort(key=lambda x: (x["date"], x["set"].titre.lower()))
+    out.sort(key=lambda x: (x["date"], cle_tri(x["set"].titre)))
     return out
 
 
@@ -251,7 +252,7 @@ def objectifs_par_categorie(examens):
                     # « Ajuster auto. » coché sur tous les sets en retard : quotas déjà augmentés.
                     "auto": bool(en_retard) and all(x["e"].get("auto") for x in en_retard),
                     "a_commencer": any(x["e"].get("commencer_maintenant") for x in xs)})
-    out.sort(key=lambda o: (o["date"], o["categorie"].lower()))
+    out.sort(key=lambda o: (o["date"], cle_tri(o["categorie"])))
     return out
 
 
@@ -332,7 +333,7 @@ def resume_du_jour(user, jour=None, e=None) -> dict:
     for l in e["langues"]:
         if l["a_revoir"]:
             par_matiere[l["nom"]] = par_matiere.get(l["nom"], 0) + l["a_revoir"]
-    par_set.sort(key=lambda s: (-s["cartes"], s["titre"].lower()))
+    par_set.sort(key=lambda s: (-s["cartes"], cle_tri(s["titre"])))
     exams = []
     for x in objectifs(user.id, e["library"], e["decks"], now, JOURS_EXAMEN_PROCHE, tous=e.get("tous")):
         exams.append({"titre": x["set"].titre, "categorie": x["set"].categorie, "date": x["date"],

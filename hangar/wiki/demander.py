@@ -4,7 +4,8 @@ une question, envoyés à Claude, puis les citations [n] de sa réponse changée
 import math
 import re
 
-from .vault import escape, fold
+from ..texte import cle_tri
+from .vault import compte, escape, fold, trouve
 
 MAX_PAGES = 6
 MAX_PAGES_PDF = 4
@@ -33,19 +34,20 @@ def pages_pertinentes(vault, mots, limite=MAX_PAGES):
         return []
     notes = list(vault.notes.values())
     total = len(notes) or 1
-    idf = {m: math.log(1 + total / (1 + sum(1 for n in notes if m in n.folded_body or m in n.folded_title))) for m in mots}
+    idf = {m: math.log(1 + total / (1 + sum(1 for n in notes if trouve(m, n.folded_body) or trouve(m, n.folded_title))))
+           for m in mots}
     scores = []
     for note in notes:
         score = 0.0
         for m in mots:
-            tf = note.folded_body.count(m)
-            if m in note.folded_title:
+            tf = compte(m, note.folded_body)
+            if trouve(m, note.folded_title):
                 score += 3 * idf[m]
             if tf:
                 score += idf[m] * (1 + math.log(tf))
         if score > 0:
             scores.append((score, note))
-    scores.sort(key=lambda s: (-s[0], s[1].title.lower()))
+    scores.sort(key=lambda s: (-s[0], cle_tri(s[1].title)))
     return [note for _, note in scores[:limite]]
 
 
@@ -55,7 +57,7 @@ def passages(texte, mots, budget):
     if len(texte) <= budget:
         return texte
     blocs = [b for b in re.split(r"\n\s*\n", texte) if b.strip()]
-    notes = sorted(((sum(fold(b).count(m) for m in mots), i) for i, b in enumerate(blocs)), key=lambda s: (-s[0], s[1]))
+    notes = sorted(((sum(compte(m, fold(b)) for m in mots), i) for i, b in enumerate(blocs)), key=lambda s: (-s[0], s[1]))
     choisis, total = set(), 0
     for score, i in notes:
         if score == 0:

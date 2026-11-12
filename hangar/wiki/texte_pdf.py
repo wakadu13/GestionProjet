@@ -17,7 +17,8 @@ from flask import current_app
 from sqlalchemy import func
 
 from ..extensions import db
-from .vault import Vault, fold
+from ..texte import cle_tri
+from .vault import Vault, compte, fold, trouve
 
 MAX_PAGES = 600
 MAX_CHARS_PAGE = 20_000
@@ -153,14 +154,14 @@ def chercher(vault, requete, limite=20, pages_par_pdf=3):
     resultats = []
     for pdf in vault.pdfs():
         brutes, repliees = index.get(str(pdf.path), ((), ()))
-        trouvees = [(sum(r.count(m) for m in mots), i + 1, b, r)
-                    for i, (b, r) in enumerate(zip(brutes, repliees)) if all(m in r for m in mots)]
+        trouvees = [(sum(compte(m, r) for m in mots), i + 1, b, r)
+                    for i, (b, r) in enumerate(zip(brutes, repliees)) if all(trouve(m, r) for m in mots)]
         if not trouvees:
             continue
-        score = sum(t[0] for t in trouvees) + 5 * sum(m in fold(pdf.path.stem) for m in mots)
+        score = sum(t[0] for t in trouvees) + 5 * sum(trouve(m, fold(pdf.path.stem)) for m in mots)
         meilleures = sorted(sorted(trouvees, key=lambda t: (-t[0], t[1]))[:pages_par_pdf], key=lambda t: t[1])
         resultats.append((score, pdf, len(trouvees), [(n, Vault._snippet(b, r, mots)) for _, n, b, r in meilleures]))
-    resultats.sort(key=lambda r: (-r[0], str(r[1].path).lower()))
+    resultats.sort(key=lambda r: (-r[0], cle_tri(str(r[1].path))))
     return [{"pdf": pdf, "nombre": n, "pages": pages} for _, pdf, n, pages in resultats[:limite]]
 
 
@@ -174,8 +175,8 @@ def pages_pertinentes(vault, mots, limite=4):
     for pdf in vault.pdfs():
         brutes, repliees = index.get(str(pdf.path), ((), ()))
         for i, (b, r) in enumerate(zip(brutes, repliees)):
-            presents = [m for m in mots if m in r]
+            presents = [m for m in mots if trouve(m, r)]
             if len(presents) >= minimum:
-                trouvees.append((10 * len(presents) + sum(min(r.count(m), 5) for m in presents), pdf, i + 1, b))
-    trouvees.sort(key=lambda t: (-t[0], str(t[1].path).lower(), t[2]))
+                trouvees.append((10 * len(presents) + sum(min(compte(m, r), 5) for m in presents), pdf, i + 1, b))
+    trouvees.sort(key=lambda t: (-t[0], cle_tri(str(t[1].path)), t[2]))
     return [(pdf, n, b) for _, pdf, n, b in trouvees[:limite]]

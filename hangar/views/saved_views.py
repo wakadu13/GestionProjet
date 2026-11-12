@@ -7,7 +7,7 @@ from flask_login import current_user, login_required
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import SavedView
-from ..utils import back_url, can, get_project, visible_projects
+from ..utils import back_url, can, get_project, tri_fr, visible_projects
 
 bp = Blueprint("saved_views", __name__)
 
@@ -28,7 +28,7 @@ def _visible(v: SavedView) -> bool:
 @login_required
 def index(pid):
     project = get_project(pid)
-    views = [v for v in db.session.query(SavedView).filter_by(project_id=pid).order_by(SavedView.name) if _visible(v)]
+    views = [v for v in db.session.query(SavedView).filter_by(project_id=pid).order_by(tri_fr(SavedView.name)) if _visible(v)]
     return render_template("views/index.html", project=project, views=views, count_for=count_for,
                            can_edit=can(current_user, "edit", project))
 
@@ -36,7 +36,7 @@ def index(pid):
 @bp.route("/views")
 @login_required
 def global_index():
-    views = [v for v in db.session.query(SavedView).filter(SavedView.project_id.is_(None)).order_by(SavedView.name)
+    views = [v for v in db.session.query(SavedView).filter(SavedView.project_id.is_(None)).order_by(tri_fr(SavedView.name))
              if _visible(v)]
     return render_template("views/index.html", project=None, views=views, count_for=count_for,
                            can_edit=not current_user.is_guest)

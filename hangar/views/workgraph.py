@@ -22,6 +22,7 @@ from ..models import (
     Module, Project, User,
 )
 from ..services import to_int
+from ..texte import cle_tri, contient_plie
 from ..utils import is_safe_next, parse_date, visible_projects
 
 bp = Blueprint("workgraph", __name__)
@@ -54,7 +55,7 @@ def _initiative(iid: int) -> Initiative:
 
 
 def _users():
-    return sorted(User.query.filter_by(active=True).all(), key=lambda u: u.display_name.lower())
+    return sorted(User.query.filter_by(active=True).all(), key=lambda u: cle_tri(u.display_name))
 
 
 def _next(default: str) -> str:
@@ -175,8 +176,7 @@ def initiatives():
     if mine:
         inis = [i for i in inis if i.lead_id == current_user.id]
     if q:
-        ql = q.lower()
-        inis = [i for i in inis if ql in i.name.lower() or ql in (i.description or "").lower()]
+        inis = [i for i in inis if contient_plie(q, i.name) or contient_plie(q, i.description)]
     status_counts = {k: sum(1 for i in inis if i.status == k) for k, _, _ in INITIATIVE_STATUSES}
     if status:
         inis = [i for i in inis if i.status == status]
@@ -184,11 +184,11 @@ def initiatives():
     if health:
         inis = [i for i in inis if S[i.id]["health"] == health]
     keys = {
-        "status": lambda i: (W.GRAPH_STATUS_ORDER.get(i.status, 9), i.name.lower()),
-        "name": lambda i: i.name.lower(),
-        "progress": lambda i: (-S[i.id]["pct"], i.name.lower()),
-        "target": lambda i: (S[i.id]["target"] or date(9999, 1, 1), i.name.lower()),
-        "health": lambda i: (-HEALTH_RANK.get(S[i.id]["health"] or "", -1), i.name.lower()),
+        "status": lambda i: (W.GRAPH_STATUS_ORDER.get(i.status, 9), cle_tri(i.name)),
+        "name": lambda i: cle_tri(i.name),
+        "progress": lambda i: (-S[i.id]["pct"], cle_tri(i.name)),
+        "target": lambda i: (S[i.id]["target"] or date(9999, 1, 1), cle_tri(i.name)),
+        "health": lambda i: (-HEALTH_RANK.get(S[i.id]["health"] or "", -1), cle_tri(i.name)),
     }
     inis = sorted(inis, key=keys[sort])
     visible = {p.id for p in visible_projects(current_user)}

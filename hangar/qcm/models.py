@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 
 from ..extensions import db
+from ..texte import cle_tri
 from . import fsrs, langues, quiz
 
 # Date très ancienne, pour trier les questions jamais révisées en premier.
@@ -389,7 +390,7 @@ class TempsRevision(_Defauts, db.Model):
                 par_matiere.setdefault(t.matiere, [0] * semaines)[k] += t.temps_ms
         lignes = [{"matiere": m, "minutes": [round(ms / 60000) for ms in v], "total": round(sum(v) / 60000)}
                   for m, v in par_matiere.items()]
-        lignes.sort(key=lambda l: (-l["total"], l["matiere"].lower()))
+        lignes.sort(key=lambda l: (-l["total"], cle_tri(l["matiere"])))
         totaux = [sum(l["minutes"][k] for l in lignes) for k in range(semaines)]
         return lundis, lignes, totaux
 
