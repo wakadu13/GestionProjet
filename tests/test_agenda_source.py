@@ -1,13 +1,16 @@
 """Emploi du temps récupéré tout seul (source automatique) : corrections de la revue v3.
 
 - une panne pendant l'import ne marque plus le fichier comme lu : il est réimporté au passage suivant, et
-  l'erreur est visible dans « source_error » ; « Lire maintenant » (force=True) ignore l'empreinte ;
+  l'erreur est visible dans « source_error » ; une panne qui dure ne donne qu'une notification et une trace,
+  avec des essais espacés ; « Lire maintenant » (force=True) ne réimporte un contenu déjà importé que si cet
+  import a été annulé (pas d'import vide qui masquerait le vrai) ;
 - la lecture du fil d'arrière-plan ne vaut que pour un compte encore administrateur (un compte rétrogradé
-  peut couper sa source) ; la lecture d'une adresse a une durée totale bornée ;
+  peut couper sa source) ; la lecture d'une adresse a une durée totale bornée, en-têtes compris, et ne suit
+  pas de redirection vers un autre site ou de https vers http ;
 - un chemin Windows collé entre guillemets, ou écrit avec %USERPROFILE% / ~, est accepté comme pour le
   coffre du wiki.
 
-Lancer : uv run python -m unittest tests.test_agenda_source -v
+Lancer : uv run python -m unittest discover -s tests -p test_agenda_source.py -v
 """
 import http.server
 import os
@@ -23,7 +26,7 @@ from hangar import agenda as A
 from hangar import heure as horloge
 from hangar.agenda import source as S
 from hangar.extensions import db
-from hangar.models import AgendaEvent, AgendaImport, AgendaSettings
+from hangar.models import AgendaEvent, AgendaImport, AgendaSettings, Notification
 from test_agenda_flux import Base, monday_after, week_file
 
 
@@ -199,6 +202,134 @@ class SourceV3Tests(Base):
         c, s = self.save_folder(f'"{os.path.join(self.tmp, "absent")}"')
         self.assertEqual((s.source_kind, s.source_path), ("", ""))
         self.assertIn("introuvable", c.get("/agenda/imports").get_data(as_text=True))
+
+    # -- Revue v3 bis : panne durable, « Vérifier maintenant » sans changement, chemins invalides, réseau -----
+
+    def stored_files(self):
+        folder = os.path.join(self.tmp, "agenda", str(self.user.id))
+        return sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+
+    def notes(self):
+        return Notification.query.filter_by(user_id=self.user.id).count()
+
+    def test_panne_durable_une_seule_notification_et_une_seule_trace(self):
+        self.promote()
+        self.configure("folder", self.folder)
+        self.drop("planning.ics", week_file(self.monday))
+        with mock.patch.object(A, "ensure_exam_reminders", side_effect=RuntimeError("boum")), \
+                mock.patch("hangar.mailer.noter_erreur") as noter, \
+                self.assertLogs(self.app.logger, "ERROR") as logs:
+            results = [A.check_source(self.user, self.at + timedelta(seconds=30 * i)) for i in range(4)]
+        self.assertEqual(results[:2], ["error", "error"])  # premier nouvel essai : tout de suite
+        self.assertEqual(results[2:], ["wait", "wait"])   # ensuite, nouvel essai espacé
+        self.assertEqual(self.notes(), 1)
+        self.assertEqual(noter.call_count, 1)
+        self.assertEqual(len(logs.records), 1)
+        self.assertLessEqual(len(self.stored_files()), 2)
+        s = db.session.get(AgendaSettings, self.user.id)
+        self.assertIn("import", s.source_error)  # l'erreur reste affichée pendant l'attente
+        # Plus tard : nouvel essai, réussi cette fois
+        later = self.at + S.SOURCE_RETRY_EVERY + timedelta(minutes=1)
+        self.assertEqual(A.check_source(self.user, later), "imported")
+        self.assertEqual(self.active(), 4)
+        self.assertEqual(db.session.get(AgendaSettings, self.user.id).source_error, "")
+
+    def test_panne_durable_icserror_une_seule_notification(self):
+        self.promote()
+        self.configure("folder", self.folder)
+        self.drop("planning.ics", week_file(self.monday))
+        from hangar import ics
+        with mock.patch.object(A, "ensure_exam_reminders", side_effect=ics.ICSError("fichier bizarre")):
+            for i in range(3):
+                A.check_source(self.user, self.at + timedelta(seconds=30 * i))
+        self.assertEqual(self.notes(), 1)
+
+    def test_verifier_maintenant_sans_changement_ne_cree_pas_d_import(self):
+        self.promote()
+        self.configure("folder", self.folder)
+        self.drop("planning.ics", week_file(self.monday))
+        self.assertEqual(A.check_source(self.user, self.at), "imported")
+        real = A.latest_import(self.user)
+        self.assertEqual(A.check_source(self.user, self.at + timedelta(minutes=1), force=True), "same")
+        c, csrf = self.login()
+        c.post("/agenda/source/check", data={"_csrf": csrf})
+        page = c.get("/agenda/imports").get_data(as_text=True)
+        self.assertNotIn("Nouveau planning trouvé", page)
+        c.post("/agenda/source", data={"_csrf": csrf, "source_kind": "folder", "source_path": self.folder})
+        self.assertEqual(AgendaImport.query.count(), 1)
+        self.assertEqual(A.latest_import(self.user).id, real.id)
+        A.undo_import(real, self.at + timedelta(minutes=5))  # le vrai import reste annulable
+        self.assertEqual(self.active(), 0)
+
+    def test_dossier_avec_octet_nul_refuse_sans_erreur_500(self):
+        self.promote()
+        c, csrf = self.login()
+        r = c.post("/agenda/source", data={"_csrf": csrf, "source_kind": "folder", "source_path": "a\x00b"})
+        self.assertEqual(r.status_code, 302)
+        s = db.session.get(AgendaSettings, self.user.id)
+        self.assertEqual((s.source_kind, s.source_path), ("", ""))
+        self.assertIn("introuvable", c.get("/agenda/imports").get_data(as_text=True))
+
+    def serve(self, handler):
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        srv.daemon_threads = True
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        return f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def test_en_tetes_au_compte_gouttes_duree_totale_bornee(self):
+        class EnTetesLents(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                try:
+                    for b in b"HTTP/1.0 200 OK\r\nX-Lent: " + b"x" * 100:  # un octet toutes les 0,1 s
+                        self.wfile.write(bytes([b]))
+                        self.wfile.flush()
+                        _time.sleep(0.1)
+                except OSError:
+                    pass
+
+            def log_message(self, *a):
+                pass
+
+        url = self.serve(EnTetesLents) + "/planning.ics"
+        with mock.patch.object(S, "SOURCE_DEADLINE", 1), mock.patch.object(S, "SOURCE_TIMEOUT", 2), \
+                mock.patch.dict(os.environ, {"no_proxy": "*", "NO_PROXY": "*"}):
+            t0 = _time.monotonic()
+            with self.assertRaises(TimeoutError):
+                S._fetch_url(url)
+            self.assertLess(_time.monotonic() - t0, 3)
+
+    def test_redirection_vers_un_autre_site_refusee(self):
+        class Redirige(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                if self.path == "/ici.ics":
+                    self.send_response(200)
+                    self.send_header("Content-Length", "2")
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+                    return
+                self.send_response(302)
+                self.send_header("Location", "http://localhost:%d/ici.ics" % self.server.server_address[1]
+                                 if self.path == "/ailleurs.ics" else "/ici.ics")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+
+        base = self.serve(Redirige)
+        with mock.patch.dict(os.environ, {"no_proxy": "*", "NO_PROXY": "*"}):
+            self.assertEqual(S._fetch_url(base + "/meme_site.ics"), b"ok")  # même site : suivie
+            with self.assertRaises(ValueError):
+                S._fetch_url(base + "/ailleurs.ics")  # 127.0.0.1 → localhost : autre site, refusée
+
+    def test_redirection_https_vers_http_refusee(self):
+        import urllib.request
+        handler = S._SafeRedirect()
+        req = urllib.request.Request("https://ecole.example/planning.ics")
+        with self.assertRaises(ValueError):
+            handler.redirect_request(req, None, 302, "Found", {}, "http://ecole.example/planning.ics")
 
 
 if __name__ == "__main__":

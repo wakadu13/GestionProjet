@@ -715,8 +715,11 @@ def source_save():
             flash(str(exc), "error")
             return redirect(back)
     else:
-        where = str(normaliser_chemin(where))  # %USERPROFILE%, ~ : comme le coffre du wiki
-        if not os.path.isdir(where):
+        try:
+            where = str(normaliser_chemin(where))  # %USERPROFILE%, ~ : comme le coffre du wiki
+        except (OSError, ValueError):  # octet nul, chemin refusé par Windows : comme un dossier introuvable
+            where = ""
+        if not where or not os.path.isdir(where):
             flash("Ce dossier est introuvable sur cet ordinateur : vérifie son chemin (ex. C:\\Users\\moi\\Downloads).",
                   "error")
             return redirect(back)
