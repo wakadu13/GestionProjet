@@ -174,7 +174,11 @@ def _remplir_colonne_ajoutee(table, col) -> None:
         return
     if valeur is None:
         return
-    db.session.execute(table.update().where(col.is_(None)).values({col.name: valeur}))
+    # Les colonnes à ``onupdate`` (updated_at, indexe_le…) sont reprises telles quelles : sans cela, cet UPDATE
+    # passerait pour une modification et toutes les lignes prendraient l'heure de la mise à jour.
+    valeurs = {c.name: c for c in table.columns if c.onupdate is not None and c is not col}
+    valeurs[col.name] = valeur
+    db.session.execute(table.update().where(col.is_(None)).values(valeurs))
 
 
 def _register_blueprints(app: Flask) -> None:

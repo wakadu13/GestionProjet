@@ -556,6 +556,49 @@ class MiseAJourTests(unittest.TestCase):
                 db.session.remove()
                 db.engine.dispose()
 
+    def test_remplissage_ne_touche_pas_aux_dates_de_modification(self):
+        """Remplir une colonne ajoutée ne doit pas passer pour une modification : updated_at (onupdate=now) des
+        tickets et projets existants et indexe_le des PDF du wiki gardent leur valeur."""
+        app = create_app(self.tmp, testing=True)
+        with app.test_request_context("/"):
+            from hangar.wiki.models import WikiPdfText
+            u = User(username="chef", email="chef@exemple.fr", role="admin")
+            u.set_password(MOT_DE_PASSE)
+            db.session.add(u)
+            db.session.flush()
+            p = create_project("Alpha", "ALP", u)
+            create_issue(p, {"title": "Ancien ticket"}, u)
+            db.session.add(WikiPdfText(chemin="Cours/a.pdf", pages=["p1"]))
+            db.session.commit()
+            db.session.remove()
+            db.engine.dispose()
+        ancien = "2025-01-15 10:00:00.000000"
+        con = sqlite3.connect(os.path.join(self.tmp, "hangar.db"))
+        try:
+            con.execute("UPDATE issue SET updated_at = ?", (ancien,))
+            con.execute("UPDATE wiki_pdf_text SET indexe_le = ?", (ancien,))
+            # Colonnes à défaut Python (date calculée, liste JSON) : remplies par un UPDATE au démarrage
+            con.execute("ALTER TABLE issue DROP COLUMN created_at")
+            con.execute("ALTER TABLE wiki_pdf_text DROP COLUMN pages")
+            con.commit()
+        finally:
+            con.close()
+
+        app = create_app(self.tmp, testing=True)
+        try:
+            with app.app_context():
+                from sqlalchemy import text
+                lignes = db.session.execute(text("SELECT created_at, updated_at FROM issue")).all()
+                self.assertEqual(len(lignes), 1)
+                self.assertIsNotNone(lignes[0][0])  # created_at rempli…
+                self.assertEqual(lignes[0][1], ancien)  # …sans toucher à la date de modification
+                pdf = db.session.execute(text("SELECT pages, indexe_le FROM wiki_pdf_text")).one()
+                self.assertEqual((pdf[0], pdf[1]), ("[]", ancien))
+        finally:
+            with app.app_context():
+                db.session.remove()
+                db.engine.dispose()
+
 
 # ---------------------------------------------------------------------------
 # Test des QCM qui dépendait de l'heure
@@ -715,6 +758,10 @@ class OutillageTests(unittest.TestCase):
         ci = (RACINE / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
         self.assertRegex(ci, r"ruff@[\d.]+ check --no-cache --select F,E9")
         self.assertEqual(self.pyproject["tool"]["ruff"]["lint"]["select"], ["F", "E9"])
+        # push et pull_request ne s'annulent pas l'un l'autre, et une PR du dépôt ne relance pas les jobs du push
+        self.assertRegex(ci, r"group: tests-\$\{\{ github\.event_name \}\}-")
+        self.assertIn("if: github.event_name != 'pull_request' || "
+                      "github.event.pull_request.head.repo.full_name != github.repository", ci)
         dependabot = (RACINE / ".github" / "dependabot.yml").read_text(encoding="utf-8")
         for ecosysteme in ("uv", "github-actions"):
             self.assertIn(f'package-ecosystem: "{ecosysteme}"', dependabot)
