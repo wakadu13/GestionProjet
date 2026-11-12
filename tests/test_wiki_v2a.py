@@ -4,18 +4,26 @@ non UTF-8 (piste 23), images externes (piste 49), liens symboliques et git à l'
 Lancer : uv run python -m unittest discover -s tests -v
 """
 import io
+import json
 import os
 import re
+import shutil
+import subprocess
 import unittest
 import urllib.error
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from test_ai import claude_msg, tiny_pdf, tiny_png
+from test_ai_revision import QUESTIONS_IA, SET_OHM, RevisionTestCase
 from test_wiki import WikiTestCase
 
+from hangar.ai import jobs
+from hangar.ai.models import AIJob
+from hangar.extensions import db
 from hangar.wiki import historique, images_externes, installation
-from hangar.wiki.vault import decoder, get_vault
+from hangar.wiki.vault import decoder, get_vault, lire_note
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
 GIF = b"GIF89a" + b"\x00" * 20
@@ -140,6 +148,28 @@ class NotesIllisiblesTests(WikiTestCase):
         self.assertEqual(historique.lire("Ansi.md", versions[0]["id"]), "# Café\nÉté, à bientôt")
         self.assertNotIn("data-autre-encodage", self.client.get("/modifier/Ansi").get_data(as_text=True))
 
+    def test_fins_de_ligne_windows_lues_comme_avant(self):
+        # Le Bloc-notes écrit des « \r\n » : lus comme Path.read_text (l'ancienne lecture) les lisait.
+        fichier = self.root / "Crlf.md"
+        fichier.write_bytes("# Titre\r\nÉté\r\n".encode("utf-8"))
+        self.assertEqual(lire_note(fichier), (fichier.read_text(encoding="utf-8"), "utf-8"))
+        # Empreinte d'un travail de l'IA demandé avant la mise à jour : toujours la même.
+        from hangar.ai import travaux
+        self.assertEqual(travaux._empreinte_actuelle("Crlf.md"), travaux.empreinte(fichier.read_text(encoding="utf-8")))
+        # Enregistrée sans changement : pas de version en plus dans l'historique.
+        page = self.client.get("/modifier/Crlf").get_data(as_text=True)
+        version = re.search(r'name="version" value="(\d+)"', page).group(1)
+        self.assertEqual(self.post("/modifier/Crlf", {"content": "# Titre\r\nÉté\r\n", "version": version}).status_code, 302)
+        self.assertEqual(historique.lister("Crlf.md"), [])
+
+    def test_remplacer_une_note_ansi_par_un_envoi(self):
+        (self.root / "Ansi.md").write_bytes("Été".encode("cp1252"))
+        data = {"_csrf": "jeton-test", "remplacer": "1", "fichiers": [(io.BytesIO("Hiver".encode()), "Ansi.md")]}
+        r = self.client.post("/importer/", data=data, headers={"Accept": "application/json"},
+                             content_type="multipart/form-data")
+        self.assertEqual(r.get_json()["results"][0]["message"], "remplacé")
+        self.assertEqual(historique.lire("Ansi.md", historique.lister("Ansi.md")[0]["id"]), "Été")  # pas « � »
+
     def test_restaurer_une_version_d_une_note_ansi(self):
         fichier = self.root / "Ansi.md"
         fichier.write_bytes("Évolution".encode("cp1252"))
@@ -155,6 +185,118 @@ class NotesIllisiblesTests(WikiTestCase):
         self.assertEqual(decoder("Été".encode("utf-16")), ("Été", "utf-16"))  # « Unicode » du Bloc-notes
         # Fichier mélangé : chaque passage lu dans son encodage.
         self.assertEqual(decoder("début é ".encode("utf-8") + "fin è".encode("cp1252"))[0], "début é fin è")
+
+
+COURS_ANSI = ("---\ntags: [été]\n---\n# Énergie\n\nL'énergie se mesure en joules.\n\n"
+              "> [!definition] Été\n> Saison la plus chaude de l'année.\n").encode("cp1252")
+
+
+class NotesAnsiDansLesActionsTests(RevisionTestCase):
+    """Les actions de la page (cartes, tuteur, travaux et ajouts de l'IA) lisent une note « ANSI » comme
+    l'éditeur, au lieu de planter sur le premier accent."""
+
+    def setUp(self):
+        super().setUp()
+        self.ecrire("Cours/Ansi.md", COURS_ANSI)
+
+    def requetes(self):
+        return json.dumps(self.fake.requests, ensure_ascii=False)
+
+    def test_cartes_de_la_page(self):
+        c = self.login()
+        page = c.get("/wiki/Cours/Ansi").get_data(as_text=True)
+        self.assertIn("Créer les cartes de la page (1)", page)
+        r = c.post("/qcm/cartes-de-la-page/", data={"_csrf": c.token, "page": "Cours/Ansi"})
+        self.assertEqual(r.status_code, 302)
+        data = json.loads(self.lire("QCM/Cours/Ansi (cartes).json"))
+        self.assertIn("Saison la plus chaude", json.dumps(data, ensure_ascii=False))
+        self.assertEqual((Path(self.app.config["WIKI_DIR"]) / "Cours/Ansi.md").read_bytes(), COURS_ANSI)  # intacte
+
+    def test_tuteur_copie_et_contexte_du_panneau(self):
+        from hangar.ai import context, demandes
+
+        self.claude()
+        c = self.login()
+        self.fake.replies += [claude_msg(["En joules."], model="claude-haiku-5-5"), claude_msg(["### Bilan\n15/20"])]
+        r = self.post_json(c, "/claude/tuteur/", {"page": "Cours/Ansi", "question": "Unité de l'énergie ?"})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        r = c.post("/copie/", data={"_csrf": c.token, "enonce": "Énergie ?", "page": "Cours/Ansi",
+                                     "photos": [(io.BytesIO(tiny_png()), "p1.png")]}, content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.assertEqual(self.requetes().count("Saison la plus chaude de l'année"), 2)
+        self.assertNotIn("�", self.requetes())  # plus de « � » à la place des accents
+        self.assertIn("tags: [été]", context._wiki_page("/wiki/Cours/Ansi", {}, self.admin)["text"])
+        qset = mock.Mock(source_page="Cours/Ansi")
+        self.assertIn("Saison la plus chaude", demandes.cours_du_set(qset)[1])  # explication d'une question
+
+    def test_travaux_de_l_ia(self):
+        from hangar.qcm.models import QuizProgress
+        from hangar.wiki import historique
+
+        self.claude()
+        c = self.login()
+        # Fiche de révision et QCM d'après la page
+        c.post("/transformations/", data={"_csrf": c.token, "fiche": "Cours/Ansi"})
+        c.post("/qcm/generer/", data={"_csrf": c.token, "genre": "qcm", "page": "Cours/Ansi", "nombre": "10"})
+        self.fake.replies += [claude_msg(["## L'essentiel"]), claude_msg([json.dumps(QUESTIONS_IA, ensure_ascii=False)])]
+        jobs.run_pending()
+        self.assertEqual([j.status for j in AIJob.query.order_by(AIJob.id)], ["done", "draft"])
+        self.assertEqual(self.requetes().count("Saison la plus chaude de l'année"), 2)
+        # Variantes des questions ratées d'un set tiré de la page
+        self.ecrire("QCM/Physique/ansi.json", json.dumps(dict(SET_OHM, source_page="Cours/Ansi"), ensure_ascii=False))
+        db.session.add(QuizProgress(user_id=self.admin.id, set_id="QCM/Physique/ansi", question_id="q1", seen=2,
+                                    correct=0, last_correct=False))
+        db.session.commit()
+        c.post("/qcm/generer/", data={"_csrf": c.token, "genre": "variantes", "set": "QCM/Physique/ansi"})
+        self.fake.replies.append(claude_msg([json.dumps(QUESTIONS_IA, ensure_ascii=False)]))
+        jobs.run_pending()
+        self.assertEqual(AIJob.query.filter_by(kind="variantes").one().status, "draft")
+        self.assertEqual(self.requetes().count("Saison la plus chaude de l'année"), 3)
+        # PDF transformé en page par-dessus une page ANSI : remplacée, l'original gardé dans l'historique
+        self.ecrire("Cours/Ansi.pdf", tiny_pdf("Energie"))
+        r = c.post("/transformations/", data={"_csrf": c.token, "pdf": "Cours/Ansi.pdf"})
+        self.assertEqual(r.status_code, 302)
+        self.fake.replies.append(claude_msg(["# Énergie (IA)"]))
+        jobs.run_pending()
+        job = AIJob.query.filter_by(kind="page").one()
+        self.assertEqual((job.status, job.result["page_ecrite"]), ("done", "Cours/Ansi.md"))
+        self.assertIn("# Énergie (IA)", self.lire("Cours/Ansi.md"))
+        versions = historique.lister("Cours/Ansi.md")
+        self.assertEqual(historique.lire("Cours/Ansi.md", versions[0]["id"]), COURS_ANSI.decode("cp1252"))
+
+    def test_page_verrouillee(self):
+        self.claude()
+        c = self.login()
+        c.post("/transformations/", data={"_csrf": c.token, "fiche": "Cours/Ansi"})
+        with refuser_lecture("Ansi.md"):
+            r = c.post("/qcm/cartes-de-la-page/", data={"_csrf": c.token, "page": "Cours/Ansi"})
+            self.assertEqual(r.status_code, 302)
+            self.assertIn("verrouillé par un autre programme", c.get(r.headers["Location"]).get_data(as_text=True))
+            r = self.post_json(c, "/claude/tuteur/", {"page": "Cours/Ansi", "question": "Unité ?"})
+            self.assertEqual(r.status_code, 409)
+            self.assertIn("verrouillé par un autre programme", r.json["error"])
+            jobs.run_pending()
+        job = AIJob.query.one()
+        self.assertEqual(job.status, "error")
+        self.assertIn("verrouillée par un autre programme", job.message)
+        self.assertEqual(self.fake.requests, [])
+
+    def test_ajout_de_l_ia_a_une_page_ansi(self):
+        from hangar.ai.models import AIAction
+        from hangar.ai.tools import execute_action
+        from hangar.wiki import historique
+
+        a = AIAction(user_id=self.admin.id, kind="ajout_page", label="Ajouter",
+                     payload={"page_type": "wiki", "url": "/wiki/Cours/Ansi", "contenu": "## Résumé\nÀ retenir.",
+                              "position": "fin"})
+        db.session.add(a)
+        db.session.commit()
+        execute_action(a, self.admin)
+        texte = self.lire("Cours/Ansi.md")  # réécrite en UTF-8, accents compris
+        self.assertTrue(texte.startswith(COURS_ANSI.decode("cp1252").rstrip()), texte)
+        self.assertTrue(texte.endswith("## Résumé\nÀ retenir.\n"))
+        versions = historique.lister("Cours/Ansi.md")
+        self.assertEqual(historique.lire("Cours/Ansi.md", versions[0]["id"]), COURS_ANSI.decode("cp1252"))
 
 
 # ---------------------------------------------------------------------------
@@ -326,10 +468,22 @@ class ImportLiensSymboliquesTests(WikiTestCase):
         lien(base / "vault" / "Cours" / "Vrai.md", base / "vault" / "Interne.md")  # lien interne : gardé
         lien(base / "LISEZMOI.md", base / "vault" / "Lisezmoi.md")  # dans le dépôt importé : gardé
         lien(base / "vault" / "Cours" / "Vrai.md", base / "vault" / "Zz dernier.md")  # après le lien cassé
+        # Dans le dépôt, mais dans un dossier ou un fichier caché que l'import ne copie jamais : l'adresse du
+        # dépôt (avec son jeton) dans .git/config, des mots de passe dans .env.
+        (base / ".git").mkdir()
+        (base / ".git" / "config").write_text('[remote "origin"]\n\turl = https://nom:jeton@example.com/d.git\n',
+                                              encoding="utf-8")
+        (base / ".env").write_text("MOT_DE_PASSE=jeton", encoding="utf-8")
+        lien(base / ".git" / "config", base / "vault" / "Config.md")
+        lien(Path("..") / ".git" / "config", base / "vault" / "Config relatif.md")
+        lien(base / ".env", base / "vault" / "Env.md")
         bilan = installation.importer_coffre(str(base), self.root)
-        self.assertEqual(sorted(bilan.exclus), ["Aa casse.md", "Cours/Annexe.md", "Cours/cle.txt"])
+        self.assertEqual(sorted(bilan.exclus), ["Aa casse.md", "Config relatif.md", "Config.md", "Cours/Annexe.md",
+                                                "Cours/cle.txt", "Env.md"])
         self.assertFalse((self.root / "Cours" / "Annexe.md").exists())
         self.assertFalse((self.root / "Cours" / "cle.txt").exists())
+        for rel in ("Config.md", "Config relatif.md", "Env.md"):
+            self.assertFalse((self.root / rel).exists(), rel)
         self.assertEqual((self.root / "Interne.md").read_text(encoding="utf-8"), "Vraie page")
         self.assertEqual((self.root / "Lisezmoi.md").read_text(encoding="utf-8"), "dans le dépôt")
         self.assertTrue((self.root / "Zz dernier.md").is_file())  # l'import est allé au bout
@@ -339,7 +493,27 @@ class ImportLiensSymboliquesTests(WikiTestCase):
         sortie = io.StringIO()
         with mock.patch.dict(os.environ, {"HANGAR_VAULT": str(self.root)}), redirect_stdout(sortie):
             main(["--data", self.tmp, "wiki-import", str(base)])
-        self.assertIn("3 lien(s) symbolique(s) non copié(s)", sortie.getvalue())
+        self.assertIn("6 lien(s) symbolique(s) non copié(s)", sortie.getvalue())
+
+    def test_lien_vers_la_configuration_git_d_un_depot_clone(self):
+        # Dépôt piégé : vault/Config.md -> ../.git/config ; une fois cloné, ce fichier contient l'adresse tapée,
+        # jeton compris (https://nom:jeton@github.com/…). Il ne doit jamais devenir une page du wiki.
+        if shutil.which("git") is None:
+            self.skipTest("git n'est pas installé")
+        depot = Path(self.tmp) / "piege.git"
+        (depot / "vault").mkdir(parents=True)
+        (depot / "vault" / "A.md").write_text("Page normale", encoding="utf-8")
+        lien(Path("..") / ".git" / "config", depot / "vault" / "Config.md")
+        git = ["git", "-C", str(depot), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.symlinks=true"]
+        for commande in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "piège"]):
+            subprocess.run(git + commande, check=True, capture_output=True)
+        bilan = installation.importer_coffre(depot.as_uri(), self.root)
+        self.assertIn("A.md", bilan.copies)
+        if os.name != "nt":  # Git pour Windows extrait souvent un lien comme un simple fichier texte (sans danger)
+            self.assertEqual((bilan.copies, bilan.exclus), (["A.md"], ["Config.md"]))
+        for fichier in self.root.rglob("*"):
+            if fichier.is_file():
+                self.assertNotIn("[remote", fichier.read_text(encoding="utf-8", errors="replace"), fichier)
 
     def test_dossier_vault_qui_est_un_lien_vers_l_exterieur(self):
         dehors = Path(self.tmp) / "donnees"

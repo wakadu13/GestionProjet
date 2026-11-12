@@ -539,7 +539,8 @@ def _wiki_page(path, args, user):
     if note is None:
         return None
     try:
-        body = (vault.root / note.path).read_text(encoding="utf-8")
+        from ..wiki.vault import lire_note
+        body = lire_note(vault.root / note.path)[0]  # page « ANSI » comprise
     except Exception:  # noqa: BLE001
         body = getattr(note, "body", "") or ""
     return {"type": "wiki", "title": getattr(note, "title", path), "text": f"Page du wiki « {note.title} »\n\n{body}",

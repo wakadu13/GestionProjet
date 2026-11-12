@@ -180,9 +180,27 @@ def empreinte(texte: str) -> str:
     return hashlib.sha256(texte.encode("utf-8")).hexdigest()
 
 
+PAGE_INACCESSIBLE = ("L'ordinateur refuse d'ouvrir la page (elle est verrouillée par un autre programme, ou pas "
+                     "encore téléchargée par OneDrive) : relance le travail dans un moment.")
+
+
+def _texte(fichier) -> str:
+    """Texte d'une page du coffre, quel que soit son encodage (« ANSI » du Bloc-notes…), comme dans l'éditeur."""
+    from ..wiki.vault import lire_note
+    try:
+        return lire_note(fichier)[0]
+    except OSError as e:
+        raise Echec(PAGE_INACCESSIBLE) from e
+
+
 def _empreinte_actuelle(page: str) -> str:
     fichier = _vault().root / page
-    return empreinte(fichier.read_text(encoding="utf-8")) if fichier.is_file() else ""
+    if not fichier.is_file():
+        return ""
+    try:
+        return empreinte(_texte(fichier))
+    except Echec:
+        return "illisible"  # jamais égale à une empreinte : la page ne sera pas écrasée (version de l'IA à côté)
 
 
 def dossier_valide(nom):
@@ -360,7 +378,7 @@ def _travail_fiche(job, ai):
     fichier = _vault().root / p.get("source", "")
     if not fichier.is_file():
         raise Echec("La page n'est plus dans le wiki.")
-    r = ai(_msgs(f"Page « {p.get('nom')} » :\n\n{fichier.read_text(encoding='utf-8')}",
+    r = ai(_msgs(f"Page « {p.get('nom')} » :\n\n{_texte(fichier)}",
                  "Rédige la fiche de révision de cette page."),
            system=CONSIGNE_FICHE, max_tokens=MAX_TOKENS_GENERATION, effort="medium")
     texte = sans_cadre(r.text)
@@ -411,7 +429,7 @@ def _travail_qcm(job, ai):
         fichier = _vault().root / p.get("source", "")
         if not fichier.is_file():
             raise Echec("La page du cours n'est plus dans le wiki.")
-        cours, nom_cours = fichier.read_text(encoding="utf-8"), p.get("nom") or PurePosixPath(p["source"]).stem
+        cours, nom_cours = _texte(fichier), p.get("nom") or PurePosixPath(p["source"]).stem
     r = _json(lambda: ai(_msgs(f"Cours « {nom_cours} » :\n\n{cours}", f"Écris {nombre} questions sur ce cours."),
                                system=CONSIGNE_QCM, json_schema=SCHEMA_QCM, max_tokens=MAX_TOKENS_GENERATION,
                                effort="medium"),
@@ -445,7 +463,7 @@ def _travail_variantes(job, ai):
         note = vault.notes.get(qset.source_page.lower())
         if note is not None:
             textes.append(f"Cours « {note.title} » :\n\n"
-                          f"{(vault.root / note.path).read_text(encoding='utf-8')[:MAX_CHARS_COURS]}")
+                          f"{_texte(vault.root / note.path)[:MAX_CHARS_COURS]}")
     n = len(questions)
     texte = "Questions ratées :\n" + json.dumps([question_en_json(q) for q in questions], ensure_ascii=False, indent=1)
     texte += f"\n\nÉcris {n} variante{'s' if n > 1 else ''} : une par question, dans le même ordre."
@@ -584,7 +602,13 @@ def ecrire_page(job: AIJob, texte: str, avertissement: str | None, pdf_source: b
         texte += f"\n\n> [!warning] {avertissement}\n> Le document d'origine reste disponible ci-dessus ou dans le " \
                  "dossier du cours."
     cible = vault.root / page
-    if cible.is_file() and empreinte(cible.read_text(encoding="utf-8")) != p.get("empreinte", ""):
+    modifiee = False
+    if cible.is_file():
+        try:
+            modifiee = empreinte(_texte(cible)) != p.get("empreinte", "")
+        except Echec:
+            modifiee = True  # illisible pour l'instant : surtout pas écrasée
+    if modifiee:
         # Page modifiée (ou créée) par quelqu'un d'autre : la version de l'IA va à côté.
         origine = page
         for i in range(1, 100):
@@ -598,7 +622,8 @@ def ecrire_page(job: AIJob, texte: str, avertissement: str | None, pdf_source: b
         raise Echec("Nom de page invalide.")
     cible.parent.mkdir(parents=True, exist_ok=True)
     if cible.is_file():
-        historique.sauvegarder(page.as_posix(), cible.read_text(encoding="utf-8"), SUFFIXE_IA)
+        # Page « ANSI » comprise : réécrite en UTF-8, son texte d'origine gardé dans l'historique.
+        historique.sauvegarder(page.as_posix(), _texte(cible), SUFFIXE_IA)
     cible.write_text(texte + "\n", encoding="utf-8", newline="\n")
     invalider()
     return page.as_posix()

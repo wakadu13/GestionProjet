@@ -63,7 +63,7 @@ class BilanImport:
     copies: list[str] = field(default_factory=list)
     remplaces: list[str] = field(default_factory=list)
     ignores: list[str] = field(default_factory=list)  # existaient déjà (sans --remplacer)
-    # Liens symboliques vers un fichier hors du coffre importé, ou cassés : jamais copiés.
+    # Liens symboliques vers un fichier hors du coffre importé ou caché (.git/, .env…), ou cassés : jamais copiés.
     exclus: list[str] = field(default_factory=list)
     echecs: list[str] = field(default_factory=list)  # lecture ou écriture refusée par le système
     source: str = ""
@@ -129,10 +129,12 @@ def importer_coffre(source: str, destination, remplacer: bool = False, historiqu
         for rel in _fichiers(racine):
             source_fichier = racine / rel
             # Lien symbolique (un fichier, ou le dossier vault/ lui-même) : copié seulement s'il mène à
-            # un fichier du dossier importé. Un lien vers une clé, un mot de passe… deviendrait sinon une
-            # page lisible par tous ; un lien cassé arrêtait l'import à mi-chemin.
+            # un fichier du dossier importé, hors des dossiers et fichiers cachés que l'import ignore. Un lien
+            # vers une clé, un mot de passe, .git/config (l'adresse tapée, jeton compris) ou .env deviendrait
+            # sinon une page lisible par tous ; un lien cassé arrêtait l'import à mi-chemin.
             reel = source_fichier.resolve()
-            if not reel.is_relative_to(limite) or not reel.is_file():
+            if (not reel.is_relative_to(limite) or not reel.is_file()
+                    or any(p in IGNORES or p.startswith(".") for p in reel.relative_to(limite).parts)):
                 bilan.exclus.append(rel)
                 continue
             cible = destination / rel

@@ -42,7 +42,8 @@ def _afficher_bilan(bilan, images=False):
               "(ajoute --remplacer pour les écraser ; l'ancien texte des pages reste dans l'historique).")
     if bilan.exclus:
         print(f"  {len(bilan.exclus)} lien(s) symbolique(s) non copié(s) : ils mènent hors du dossier importé, "
-              f"ou nulle part ({', '.join(bilan.exclus[:5])}{'…' if len(bilan.exclus) > 5 else ''}).")
+              "vers un fichier caché (réglages de git…) ou nulle part "
+              f"({', '.join(bilan.exclus[:5])}{'…' if len(bilan.exclus) > 5 else ''}).")
     if bilan.echecs:
         print(f"  {len(bilan.echecs)} fichier(s) non copié(s) : lecture ou écriture refusée par l'ordinateur "
               f"({', '.join(bilan.echecs[:5])}{'…' if len(bilan.echecs) > 5 else ''}).")

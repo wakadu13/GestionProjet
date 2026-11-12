@@ -112,9 +112,12 @@ def decoder(donnees):
 
 
 def lire_note(chemin):
-    """``(texte, encodage)`` d'une note du coffre, quel que soit son encodage (voir :func:`decoder`).
+    """``(texte, encodage)`` d'une note du coffre, quel que soit son encodage (voir :func:`decoder`), fins de
+    ligne Windows ramenées à « \\n » comme le fait ``Path.read_text`` (même texte, donc mêmes empreintes et
+    mêmes comparaisons qu'avant pour une note en UTF-8).
     Lève ``OSError`` si le système refuse la lecture (fichier verrouillé, OneDrive hors connexion…)."""
-    return decoder(Path(chemin).read_bytes())
+    texte, encodage = decoder(Path(chemin).read_bytes())
+    return texte.replace("\r\n", "\n").replace("\r", "\n"), encodage
 
 
 def split_frontmatter(text):
