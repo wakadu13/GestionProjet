@@ -9,6 +9,7 @@ from flask import abort, request, url_for
 from flask_login import current_user
 from markupsafe import Markup, escape
 
+from . import heure
 from .extensions import db
 from .models import (
     ROLE_RANK, Favorite, Issue, Project, ProjectMember, User,
@@ -331,7 +332,7 @@ def fmt_date(d, with_year: bool | None = None, empty: str = "") -> str:
     if isinstance(d, datetime):
         d = d.date()
     if with_year is None:
-        with_year = d.year != date.today().year
+        with_year = d.year != heure.today().year
     s = f"{d.day} {MONTHS[d.month - 1]}"
     return f"{s} {d.year}" if with_year else s
 
@@ -355,7 +356,7 @@ def time_ago(dt) -> str:
         return ""
     if isinstance(dt, date) and not isinstance(dt, datetime):
         dt = datetime.combine(dt, datetime.min.time())
-    delta = datetime.now() - dt
+    delta = heure.now() - dt  # même horloge que les dates enregistrées (models.now)
     s = int(delta.total_seconds())
     if s < 0:
         return "à l'instant"
@@ -378,7 +379,7 @@ def time_ago(dt) -> str:
 def relative_due(d) -> str:
     if not d:
         return ""
-    diff = (d - date.today()).days
+    diff = (d - heure.today()).days  # comme Issue.is_overdue
     if diff == 0:
         return "aujourd'hui"
     if diff == 1:
@@ -422,7 +423,7 @@ def parse_duration(text: str) -> int:
 
 
 def week_bounds(d: date | None = None):
-    d = d or date.today()
+    d = d or heure.today()
     start = d - timedelta(days=d.weekday())
     return start, start + timedelta(days=6)
 
@@ -435,7 +436,7 @@ def daterange(start: date, end: date):
 
 
 def greeting() -> str:
-    h = datetime.now().hour
+    h = heure.now().hour  # heure de l'agenda, comme l'emploi du temps affiché
     if h < 5:
         return "Bonne nuit"
     if h < 12:

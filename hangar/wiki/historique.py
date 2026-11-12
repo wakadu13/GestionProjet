@@ -36,6 +36,8 @@ from pathlib import Path, PurePosixPath
 
 from flask import current_app
 
+from .. import heure
+
 MAX_VERSIONS = 100
 MAX_OCTETS = 20 * 1024 * 1024
 REGROUPEMENT = timedelta(minutes=10)
@@ -77,6 +79,15 @@ def _lire_nom(nom: str):
     return date, m.group(3), m.group(2) == "_"
 
 
+def _date_affichee(d: datetime) -> datetime:
+    """Date d'un nom de version (heure de la machine, celle des fichiers déjà écrits) → heure de l'agenda,
+    pour l'afficher à côté des autres dates de Hangar. Les noms sur disque ne changent pas."""
+    try:
+        return heure.vers_agenda(d.astimezone())
+    except (OverflowError, OSError, ValueError):  # date hors de portée de l'horloge du système
+        return d
+
+
 def _auteur_affiche(qui: str) -> str:
     return qui.replace("_", " ") if qui != "inconnu" else ""
 
@@ -111,6 +122,8 @@ def sauvegarder(rel, contenu: str, auteur: str = "", edition: bool = False, regr
     Renvoie l'identifiant de la version créée (nom du fichier), ou None si elle est regroupée."""
     d = _dossier_page(rel)
     d.mkdir(parents=True, exist_ok=True)
+    # Heure de la machine : celle des noms de versions déjà écrits (regroupement, éclaircissage) ; elle n'est
+    # convertie en heure de l'agenda qu'à l'affichage (_date_affichee).
     maintenant = datetime.now()
     qui = re.sub(r"[^\w.-]", "_", auteur or "")[:40] or "inconnu"
     if regrouper:
@@ -181,7 +194,8 @@ def lister(rel):
             taille = f.stat().st_size
         except OSError:
             continue
-        versions.append({"id": f.name, "date": date, "auteur": _auteur_affiche(qui), "taille": taille})
+        versions.append({"id": f.name, "date": _date_affichee(date), "auteur": _auteur_affiche(qui),
+                         "taille": taille})
     return versions[::-1]
 
 
@@ -223,7 +237,8 @@ def recentes(limite=40):
         if infos and f.parent != racine:
             trouvees.append((infos[0], f.name, f, infos[1]))
     trouvees.sort(key=lambda t: t[:2], reverse=True)
-    return [{"page": f.parent.relative_to(racine).as_posix(), "id": f.name, "date": date, "auteur": _auteur_affiche(qui)}
+    return [{"page": f.parent.relative_to(racine).as_posix(), "id": f.name, "date": _date_affichee(date),
+             "auteur": _auteur_affiche(qui)}
             for date, _, f, qui in trouvees[:limite]]
 
 
@@ -269,6 +284,7 @@ def pages_sans_fichier(existantes) -> list[dict]:
         if rel.lower() in existantes:
             continue
         _, date, qui, _ = versions[-1]
-        out.append({"page": rel, "versions": len(versions), "derniere": date, "auteur": _auteur_affiche(qui)})
+        out.append({"page": rel, "versions": len(versions), "derniere": _date_affichee(date),
+                    "auteur": _auteur_affiche(qui)})
     out.sort(key=lambda p: p["derniere"], reverse=True)
     return out

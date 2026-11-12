@@ -473,10 +473,152 @@ def trigger(minutes_after_start: int) -> str:
     return f"TRIGGER:{'-' if m < 0 else ''}PT{abs(m)}M"
 
 
-def vtimezone(tz_name: str = DEFAULT_TZ) -> list[str]:
-    """Définition du fuseau Europe/Paris (exigée par la RFC pour chaque TZID, utile à Outlook)."""
+_JOURS_ICS = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+
+
+def _decalage_ics(d: timedelta) -> str:
+    """Décalage UTC au format iCalendar : « +0100 », « -0430 », « +053328 » (secondes si besoin)."""
+    s = int(d.total_seconds())
+    signe, s = ("-" if s < 0 else "+"), abs(s)
+    h, m, sec = s // 3600, s % 3600 // 60, s % 60
+    return f"{signe}{h:02d}{m:02d}" + (f"{sec:02d}" if sec else "")
+
+
+def _transitions(zone, debut: int, fin: int) -> list[tuple[datetime, timedelta, timedelta, bool, str]]:
+    """Changements d'heure de `zone` du 1er janvier `debut` au 31 décembre `fin` :
+    [(instant UTC naïf, décalage avant, décalage après, heure d'été après ?, abréviation après)]."""
+    def info(u: datetime):
+        loc = u.replace(tzinfo=timezone.utc).astimezone(zone)
+        return loc.utcoffset(), bool(loc.dst()), loc.tzname() or ""
+    out = []
+    u, fin_u = datetime(debut, 1, 1), datetime(fin + 1, 1, 1)
+    avant = info(u)
+    while u < fin_u:
+        v = min(u + timedelta(hours=12), fin_u)
+        apres = info(v)
+        if apres != avant:
+            bas, haut = u, v  # premier instant au nouveau décalage, à la seconde près
+            while haut - bas > timedelta(seconds=1):
+                milieu = (bas + (haut - bas) / 2).replace(microsecond=0)
+                if info(milieu) == avant:
+                    bas = milieu
+                else:
+                    haut = milieu
+            nouveau = info(haut)
+            if nouveau[0] != avant[0] or nouveau[1] != avant[1]:
+                out.append((haut, avant[0], nouveau[0], nouveau[1], nouveau[2]))
+            avant = nouveau
+            u = haut
+            continue
+        u = v
+    return out
+
+
+# Fenêtre de calcul du VTIMEZONE : `astimezone` déborde avant l'an 1 et `datetime` après 9999 ; au-delà d'un siècle
+# et demi, seules les règles comptent (zoneinfo n'a plus de changement daté après 2087) et le calcul serait long.
+_VTZ_PREMIERE_ANNEE, _VTZ_DERNIERE_ANNEE, _VTZ_ETENDUE_MAX = 1900, 9998, 150
+# Années calculées en plus après `fin`, pour reconnaître chaque règle sur un cycle complet du calendrier (28 ans) :
+# « vendredi avant le dernier dimanche » n'est pas toujours le 4e vendredi, et un rang figé serait faux après `fin`.
+_VTZ_ANNEES_REGLE = 28
+
+
+def _vtimezone_zoneinfo(tz_name: str, zone, debut: int, fin: int) -> list[str]:
+    """VTIMEZONE d'un fuseau quelconque, calculé avec zoneinfo : une observance par règle annuelle (« dernier
+    dimanche de mars à 2 h », « vendredi entre le 23 et le 29 mars »…). Les règles sont reconnues de `debut` à
+    `fin` + 28 ans (un cycle complet du calendrier) ; la dernière continue ensuite (tâches répétées sans fin).
+    Une règle qu'aucune de ces écritures ne décrit serait figée sur sa dernière année : aucun fuseau de zoneinfo
+    n'en a aujourd'hui."""
+    def observance(ete, de, vers, nom, debut_local, rrule=None):
+        lignes = ["BEGIN:DAYLIGHT" if ete else "BEGIN:STANDARD", f"TZOFFSETFROM:{_decalage_ics(de)}",
+                  f"TZOFFSETTO:{_decalage_ics(vers)}"]
+        lignes += [f"TZNAME:{escape_text(nom)}"] if nom else []
+        lignes.append(f"DTSTART:{debut_local:%Y%m%dT%H%M%S}")
+        lignes += [f"RRULE:{rrule}"] if rrule else []
+        return lignes + ["END:DAYLIGHT" if ete else "END:STANDARD"]
+
+    fin = min(fin + _VTZ_ANNEES_REGLE, _VTZ_DERNIERE_ANNEE)
+    base = datetime(debut, 1, 1).replace(tzinfo=timezone.utc).astimezone(zone)
+    out = ["BEGIN:VTIMEZONE", f"TZID:{tz_name}", f"X-LIC-LOCATION:{tz_name}"]
+    out += observance(bool(base.dst()), base.utcoffset(), base.utcoffset(), base.tzname(), datetime(debut, 1, 1))
+    # Regroupe les changements qui suivent la même règle d'une année sur l'autre. Une règle s'écrit par rang
+    # (« 2e dimanche de mars », « dernier dimanche d'octobre » : `rangs` possibles) ou par « tel jour de la
+    # semaine parmi 7 jours de suite » (`fenetre` : bornes possibles du premier de ces 7 jours, compté depuis le
+    # 1er janvier en janvier-février, depuis le 31 décembre ensuite, pour ne pas dépendre des années bissextiles) ;
+    # une année prolonge la règle si l'une des deux écritures reste juste.
+    regles: list[dict] = []
+    for utc, de, vers, ete, nom in _transitions(zone, debut, fin):
+        local = utc + de  # heure affichée juste avant le changement (2 h au passage à l'heure d'été)
+        nb_jours = (date(local.year + local.month // 12, local.month % 12 + 1, 1) - timedelta(days=1)).day
+        rangs = {(local.month, (local.day - 1) // 7 + 1)}
+        if local.day + 7 > nb_jours:
+            rangs.add((local.month, -1))
+        if local.month <= 2:
+            v = local.timetuple().tm_yday
+            fenetre = ("+", max(1, v - 6), min(v, 59 - 6))  # 59 : 28 février
+        else:
+            v = (local.date() - date(local.year, 12, 31)).days - 1  # -1 : 31 décembre
+            fenetre = ("-", max(-306, v - 6), min(v, -7))  # -306 : 1er mars
+        cle = (ete, de, vers, nom, local.weekday(), local.time())
+        suite = None
+        for r in regles:
+            if r["cle"] == cle and r["fin"].year == local.year - 1 and r["ouverte"]:
+                f = r["fenetre"]
+                communs = (f[0], max(f[1], fenetre[1]), min(f[2], fenetre[2]))
+                if f[0] != fenetre[0]:
+                    communs = (f[0], 1, 0)  # vide
+                if r["rangs"] & rangs or communs[1] <= communs[2]:
+                    suite = r
+                    break
+        if suite:
+            suite["rangs"] &= rangs
+            suite["fenetre"] = communs
+            suite["fin"], suite["fin_utc"], suite["n"] = local, utc, suite["n"] + 1
+        else:
+            for r in regles:
+                if r["cle"][0] == ete:
+                    r["ouverte"] = False  # une nouvelle règle remplace l'ancienne
+            regles.append({"cle": cle, "rangs": rangs, "fenetre": fenetre, "debut": local, "fin": local,
+                           "fin_utc": utc, "n": 1, "ouverte": True})
+    for r in regles:
+        ete, de, vers, nom, jour, _ = r["cle"]
+        if r["n"] == 1 and (r["fin"].year < fin or not r["ouverte"]):
+            out += observance(ete, de, vers, nom, r["debut"])
+            continue
+        if r["rangs"]:
+            mois, rang = max(r["rangs"], key=lambda x: (x[1] == -1, -x[1]))  # « dernier » de préférence
+            rrule = f"FREQ=YEARLY;BYMONTH={mois};BYDAY={rang}{_JOURS_ICS[jour]}"
+        else:
+            sens, n = r["fenetre"][0], r["fenetre"][2]
+            # Les 7 jours, datés une année non bissextile (2025) : même mois → BYMONTHDAY, sinon BYYEARDAY
+            jours = [date(2025, 1, 1) + timedelta(days=n + k - 1) if sens == "+"
+                     else date(2025, 12, 31) + timedelta(days=n + k + 1) for k in range(7)]
+            if jours[0].month == jours[-1].month:
+                rrule = (f"FREQ=YEARLY;BYMONTH={jours[0].month};BYDAY={_JOURS_ICS[jour]};"
+                         f"BYMONTHDAY={','.join(str(j.day) for j in jours)}")
+            else:
+                rrule = (f"FREQ=YEARLY;BYDAY={_JOURS_ICS[jour]};"
+                         f"BYYEARDAY={','.join(str(n + k) for k in range(7))}")
+        if not (r["ouverte"] and r["fin"].year >= fin):
+            # UNTIL est en UTC (RFC 5545), mais certains lecteurs (dateutil) le comparent à l'heure locale :
+            # la plus tardive des deux inclut la dernière occurrence dans les deux lectures, sans la suivante.
+            rrule += f";UNTIL={utc_value(max(r['fin_utc'], r['fin']))}"
+        out += observance(ete, de, vers, nom, r["debut"], rrule)
+    return out + ["END:VTIMEZONE"]
+
+
+def vtimezone(tz_name: str = DEFAULT_TZ, debut: int | None = None, fin: int | None = None) -> list[str]:
+    """Définition du fuseau (exigée par la RFC pour chaque TZID, utile à Outlook). Europe/Paris : règle
+    européenne fixe. Autre fuseau (HANGAR_TZ) : calculé avec zoneinfo pour les années `debut` à `fin`,
+    ramenées entre 1900 et 9998 et à 150 ans au plus (les règles continuent au-delà, voir _vtimezone_zoneinfo) ;
+    [] si la base des fuseaux ne le connaît pas."""
     if tz_name != "Europe/Paris":
-        return []
+        zone = _zone(tz_name)
+        if zone is None:
+            return []
+        annee = heure.today().year
+        debut = min(max(debut or annee - 1, _VTZ_PREMIERE_ANNEE), _VTZ_DERNIERE_ANNEE)
+        fin = min(max(fin or annee + 2, debut), debut + _VTZ_ETENDUE_MAX, _VTZ_DERNIERE_ANNEE)
+        return _vtimezone_zoneinfo(tz_name, zone, debut, fin)
     return ["BEGIN:VTIMEZONE", "TZID:Europe/Paris", "X-LIC-LOCATION:Europe/Paris",
             "BEGIN:DAYLIGHT", "TZOFFSETFROM:+0100", "TZOFFSETTO:+0200", "TZNAME:CEST", "DTSTART:19700329T020000",
             "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU", "END:DAYLIGHT",

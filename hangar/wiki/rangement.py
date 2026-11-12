@@ -16,10 +16,11 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, unquote
 
+from .. import heure
 from ..extensions import db
 from . import historique
 from .vault import MDLINK_RE, WIKILINK_RE, Note, invalider, lire_note, map_outside_code
@@ -76,7 +77,7 @@ def contenu(vault) -> dict:
             rel = f.relative_to(racine).as_posix()
             origine = _origine(rel, sans_fichier)
             try:
-                quand = datetime.fromtimestamp(f.stat().st_mtime)
+                quand = heure.vers_agenda(datetime.fromtimestamp(f.stat().st_mtime, timezone.utc))
             except OSError:
                 continue
             origines.add(origine.lower())
