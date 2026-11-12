@@ -79,18 +79,24 @@ def simuler(cartes, quota_nouvelles, quota_revisions, precision, deja=(0, 0), re
     chaque affichage (jusqu'à plusieurs secondes par page). Elle renvoie None plus tôt
     quand la suite est jouée d'avance :
     - toutes les nouvelles sont découvertes ;
-    - depuis PLATEAU_JOURS jours, aucune question n'est devenue « sue » et le quota de
-      révisions n'a jamais coupé la file (chaque question est révisée à son échéance et
-      évolue seule ; un report allonge l'intervalle et peut encore la faire progresser) ;
+    - le quota de révisions ne peut plus jamais couper la file : il y a au plus
+      quota_revisions questions vues, donc chaque question est révisée à son échéance et
+      évolue seule. Il ne suffit pas que la file n'ait pas été coupée depuis un moment :
+      une coupure plus tardive reporte une révision, ce qui allonge l'intervalle et peut
+      encore faire progresser la question (cas réel : quota de 1 révision par jour,
+      « prêt en 325 jours » au lieu de « impossible »). Quand le quota est plus petit
+      que le nombre de questions, la simulation va donc jusqu'au bout ; les appels sans
+      plafond de révisions (conseil de rattrapage, dichotomie) gardent l'arrêt anticipé ;
+    - depuis PLATEAU_JOURS jours, aucune question n'est devenue « sue » ;
     - pendant ce temps, chaque question restante a fait SERIES_PLATEAU fois la plus
       longue série de réussites que permet la précision (les échecs, réguliers, laissent
       au plus ⌈1/(1-p)⌉ - 1 réussites d'affilée), sans atteindre STABILITE_OBJECTIF :
       les séries suivantes repartent du même état (difficulté au maximum après chaque
       échec) et n'iront pas plus haut. Une seule série ne suffit pas : la première peut
       partir d'un état plus bas, pas encore stabilisé.
-    Vérifié contre la simulation complète : résultats identiques sur 5 192 simulations
-    (base d'un an d'usage, précisions de 60 à 97 %, quotas variés) et 23 000 tirages
-    au hasard (tests/test_perf.py).
+    Vérifié aussi contre la simulation complète : résultats identiques sur 5 192
+    simulations (base d'un an d'usage, précisions de 60 à 97 %, quotas variés) et des
+    dizaines de milliers de tirages au hasard (tests/test_perf.py).
     """
     etats = [e for e, _, _ in cartes]
     dues = [d for _, d, _ in cartes]
@@ -113,7 +119,7 @@ def simuler(cartes, quota_nouvelles, quota_revisions, precision, deja=(0, 0), re
     serie_max = math.ceil(1 / q) - 1 if q > 0 else None
     serie = [0] * len(cartes)
     longues = [[] for _ in cartes]
-    calme_depuis = 0  # premier jour sans progrès et sans quota de révisions atteint
+    calme_depuis = 0  # premier jour sans progrès et sans quota de révisions atteint (le jour 0 peut être coupé par `deja`)
     reponses = 0
     for jour in range(HORIZON_JOURS):
         places_n = max(0, quota_nouvelles - (deja[0] if jour == 0 else 0))
@@ -149,7 +155,8 @@ def simuler(cartes, quota_nouvelles, quota_revisions, precision, deja=(0, 0), re
             return jour + 1, reponses
         if decouvertes or coupee or restantes < avant:
             calme_depuis = jour + 1
-        elif (serie_max is not None and not nouvelles and jour + 1 - calme_depuis >= PLATEAU_JOURS
+        elif (serie_max is not None and not nouvelles and len(vues) <= quota_revisions
+              and jour + 1 - calme_depuis >= PLATEAU_JOURS
               and all(len(longues[i]) >= SERIES_PLATEAU and longues[i][-SERIES_PLATEAU] >= calme_depuis
                       for i in vues if i not in sues)):
             return None

@@ -87,7 +87,8 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(planning.simuler(cartes, 5, 5, 0.6), (337, 1714))
 
     def test_cas_limites_meme_resultat(self):
-        """Séries de réussites rares : la question finit par passer après un long plateau."""
+        """Séries de réussites rares, ou coupure tardive de la file : la question finit par passer
+        après un long plateau."""
         e = fsrs.Etat
         cas = [
             ([(None, 0, 0)] * 8 + [(e(2.4107104692493264, 9.540903739485554), 1, 17.415115073771034), (None, 0, 0)],
@@ -103,6 +104,14 @@ class SimulationTests(unittest.TestCase):
               (e(4.963498417418111, 7.020296311542694), 0, 7.493844039969134),
               (e(5.261589355377518, 6.430611810340095), 0, 89.44560380715939)],
              2, 3, 0.7613866992594712, (5, 0), (90, 112)),
+            # Quota d'une révision par jour : la file n'est pas coupée pendant plus de 60 jours,
+            # puis une coupure tardive reporte une révision et la question finit par passer.
+            ([(e(0.5, 6.719303045407995), 3, 10.444612730180175), (None, 0, 0),
+              (e(3, 6.458617774599349), 1, 11.588412328209541)],
+             3, 1, 0.72, (0, 0), (325, 215)),
+            ([(e(0.5, 6.719303045407995), 3, 10.444612730180175), (None, 0, 0),
+              (e(3, 6.458617774599349), 1, 11.588412328209541)],
+             3, 1, 0.72, (1, 2), (325, 215)),
         ]
         for cartes, qn, qr, p, deja, attendu in cas:
             with _sans_arret():
