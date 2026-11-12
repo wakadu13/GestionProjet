@@ -22,10 +22,40 @@ def _live(pid=None):
     return projects, kind, start, end, data
 
 
+def _covered_ids(r: BilanReport) -> set[int] | None:
+    """Projets dont le bilan contient les données (``scope.projects`` du contenu figé), None si inconnus."""
+    data = r.data
+    scope = data.get("scope") if isinstance(data, dict) else None
+    projects = scope.get("projects") if isinstance(scope, dict) else None
+    if not isinstance(projects, list):
+        return None
+    try:
+        ids = {int(p["id"]) for p in projects}
+    except (KeyError, TypeError, ValueError):
+        return None
+    if r.project_id:
+        ids.add(r.project_id)
+    return ids
+
+
+def can_read_report(r: BilanReport, user) -> bool:
+    """Un bilan enregistré ne se lit que si l'on voit tous les projets qu'il couvre ; sinon (ou si on ne sait
+    pas lesquels il couvre), il reste réservé à son auteur et aux administrateurs."""
+    if r.project_id and (r.project is None or not can(user, "view", r.project)):
+        return False
+    if user.is_admin or (r.created_by_id is not None and r.created_by_id == user.id):
+        return True
+    ids = _covered_ids(r)
+    if ids is None:
+        return False
+    projects = {p.id: p for p in Project.query.filter(Project.id.in_(ids or [0]))}
+    return all(pid in projects and can(user, "view", projects[pid]) for pid in ids)
+
+
 def _reports(pid):
     q = db.session.query(BilanReport)
     q = q.filter(BilanReport.project_id == pid) if pid else q.filter(BilanReport.project_id.is_(None))
-    return q.order_by(BilanReport.created_at.desc()).all()
+    return [r for r in q.order_by(BilanReport.created_at.desc()).all() if can_read_report(r, current_user)]
 
 
 def _render_live(pid=None):
@@ -102,14 +132,31 @@ def _report(rid, need_edit=False):
     r = db.session.get(BilanReport, rid)
     if r is None:
         abort(404)
-    if r.project_id:
-        p = db.session.get(Project, r.project_id)
-        if p is None or not can(current_user, "view", p):
-            abort(403)
+    if not can_read_report(r, current_user):
+        abort(403)
     if need_edit and r.created_by_id != current_user.id and not current_user.is_admin:
         if not (r.project_id and can(current_user, "admin", r.project)):
             abort(403)
     return r
+
+
+def _refresh_projects(r: BilanReport) -> list[Project]:
+    """Projets à recalculer : ceux que le bilan couvrait déjà, jamais les projets visibles par la personne qui
+    actualise (un administrateur ferait sinon entrer ses projets privés dans le bilan d'un membre). Parmi eux,
+    on ne garde que ceux que voient encore cette personne ET l'auteur : l'auteur lit toujours son bilan, il ne
+    doit pas y trouver les nouveautés d'un projet privé dont on l'a retiré depuis."""
+    if r.project_id:  # l'auteur n'ouvre ce bilan que s'il voit encore le projet (can_read_report)
+        return [r.project]
+    ids = _covered_ids(r)
+    if ids is None:  # contenu illisible : on se limite à ce que voyait l'auteur
+        projects = visible_projects(r.created_by or current_user)
+    else:
+        projects = Project.query.filter(Project.id.in_(ids or [0])).order_by(Project.name).all()
+    # Droits de l'auteur d'après son rôle et ses adhésions (même si son compte est désactivé pour l'instant)
+    author_ids = ({p.id for p in visible_projects(r.created_by, include_archived=True)}
+                  if r.created_by is not None else None)
+    return [p for p in projects
+            if can(current_user, "view", p) and (author_ids is None or p.id in author_ids)]
 
 
 def _manual(r):
@@ -132,7 +179,7 @@ def report(rid):
             if key in request.form:
                 setattr(r, key, request.form.get(key, ""))
         if request.form.get("refresh"):
-            projects = [r.project] if r.project_id else visible_projects(current_user)
+            projects = _refresh_projects(r)
             data = compute_bilan(projects, r.period_start, r.period_end, r.data.get("period", {}).get("label"))
             r.data_json = json.dumps(data, ensure_ascii=False)
         r.updated_at = now()

@@ -85,7 +85,7 @@
         {% else %}
         <div class="empty sm">Aucun projet lié.{% if can_edit %} <button class="btn btn-xs" type="button" data-open="link-modal">Lier un projet</button>{% endif %}</div>
         {% endif %}
-        {% if hidden %}<div class="tiny muted wg-sec-foot">{{ hidden }} projet(s) privé(s) lié(s) non affiché(s).</div>{% endif %}
+        {% if hidden %}<div class="tiny muted wg-sec-foot">{{ hidden }} projet(s) privé(s) lié(s) non affiché(s). Leurs tickets comptent quand même dans l’avancement.</div>{% endif %}
       </section>
 
       <section class="panel wg-sec">
@@ -131,7 +131,7 @@
       </section>
       {% endif %}
 
-      {% if s.blockers or neighbours.blocks or neighbours.blocked_by %}
+      {% if s.blockers or s.blockers_hidden or neighbours.blocks or neighbours.blocked_by %}
       <section class="panel wg-sec">
         <div class="panel-h"><h3>{{ icon('ban', 15) }} Dépendances bloquantes</h3><span class="badge {% if s.blockers %}badge-danger{% endif %}">{{ s.blockers|length }}</span></div>
         {% if neighbours.blocked_by or neighbours.blocks %}
@@ -155,6 +155,7 @@
           {% if s.blockers|length > 25 %}<div class="tiny muted wg-sec-foot">… et {{ s.blockers|length - 25 }} autre(s).</div>{% endif %}
         </div>
         {% endif %}
+        {% if s.blockers_hidden %}<div class="tiny muted wg-sec-foot">{{ s.blockers_hidden }} dépendance(s) liée(s) à des projets privés non affichée(s).</div>{% endif %}
       </section>
       {% endif %}
 

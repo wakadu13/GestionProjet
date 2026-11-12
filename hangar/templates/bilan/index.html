@@ -81,7 +81,7 @@
     <div class="modal-h"><h2>Enregistrer le bilan</h2><button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button></div>
     <div class="modal-b">
       <div class="field"><label>Titre</label><input class="input" name="title" value="Bilan — {{ data.scope.label }} — {{ data.period.label }}"></div>
-      <p class="help mb">Les indicateurs et listes ci-dessus sont figés. Complète avec l’analyse de l’équipe (markdown, @mentions, clés de tickets) — tout est facultatif et modifiable ensuite.</p>
+      <p class="help mb">Les indicateurs et listes ci-dessus sont figés. Complète avec l’analyse de l’équipe (markdown, @mentions, clés de tickets) — tout est facultatif et modifiable ensuite. Le bilan ne sera visible que par les personnes qui ont accès à tous les projets qu’il couvre.</p>
       {% for key, lab in sections %}
       <div class="field"><label>{{ lab }}</label>{{ ui.md_editor(key, '', {'highlights': 'Ce qui a marqué la période : livrables, rencontres, avancées…', 'difficulties': 'Blocages, risques, retards et leurs causes…', 'decisions': 'Décisions prises et par qui…', 'next_steps': 'Ce qui est prévu pour la suite…'}[key], 3) }}</div>
       {% endfor %}

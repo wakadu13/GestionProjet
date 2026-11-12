@@ -223,20 +223,21 @@ def initiative_create():
 def initiative_detail(iid):
     ini = _initiative(iid)
     snap = W.Snapshot()
-    s = snap.initiative(ini)
+    # avancement et santé : toute l'initiative ; tickets, jalons et dépendances : projets lisibles seulement
+    readable = W.readable_project_ids(current_user)
+    s = snap.initiative_for(ini, readable)
     if W.refresh_health(ini, s["health"]):
         db.session.commit()
     vis = visible_projects(current_user)
-    visible = {p.id for p in vis}
     projects = []
     for p in ini.projects:
-        if p.id in visible:
+        if p.id in readable:
             st = snap.project_stats(p.id)
             projects.append({"p": p, "st": st, "health": W.health_info(snap.project_health(p, st)[0])})
-    hidden = sum(1 for p in ini.projects if p.id not in visible)
+    hidden = sum(1 for p in ini.projects if p.id not in readable)
     modules = []
     for m in ini.modules:
-        if m.project_id in visible:
+        if m.project_id in readable:
             st = snap.module_stats(m.id)
             modules.append({"m": m, "st": st, "health": W.health_info(snap.module_health(m, st)[0])})
     linked_p = {p.id for p in ini.projects}
@@ -244,22 +245,24 @@ def initiative_detail(iid):
     cand_projects = [p for p in vis if p.id not in linked_p]
     cand_modules = [(p, [m for m in p.modules if m.archived_at is None and m.id not in linked_m]) for p in vis]
     cand_modules = [(p, ms) for p, ms in cand_modules if ms]
-    graph_deps = _initiative_neighbours(ini, snap)
+    graph_deps = _initiative_neighbours(ini, snap, readable)
     return render_template("workgraph/initiative.html", ini=ini, s=s, projects=projects, modules=modules,
-                           hidden=hidden, jalons=W.milestones(ini, snap, s["issue_ids"]),
+                           hidden=hidden, jalons=W.milestones(ini, snap, s["issue_ids"], readable),
                            cand_projects=cand_projects, cand_modules=cand_modules, neighbours=graph_deps,
                            users=_users(), statuses=INITIATIVE_STATUSES, healths=HEALTHS,
                            can_edit=can_edit_initiatives(), can_delete=can_delete_initiative(ini),
                            today=snap.today)
 
 
-def _initiative_neighbours(ini: Initiative, snap: W.Snapshot) -> dict:
-    """Autres initiatives qui bloquent celle-ci ou qu'elle bloque (au moins un ticket)."""
+def _initiative_neighbours(ini: Initiative, snap: W.Snapshot, readable: set[int]) -> dict:
+    """Autres initiatives qui bloquent celle-ci ou qu'elle bloque (au moins un ticket lisible par le compte)."""
     mine = snap.initiative(ini)["issue_ids"]
     blocks, blocked_by = {}, {}
     others = [o for o in Initiative.query.all() if o.id != ini.id]
     sets = {o.id: snap.initiative(o)["issue_ids"] for o in others}
     for a, b in snap.blocked_by:  # a bloqué par b
+        if snap.issues[a].project_id not in readable or snap.issues[b].project_id not in readable:
+            continue
         open_ = not snap.issues[a].is_closed and not snap.issues[b].is_closed
         for o in others:
             if b in mine and a in sets[o.id] and a not in mine and b not in sets[o.id]:

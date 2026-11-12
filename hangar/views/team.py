@@ -128,10 +128,13 @@ def profile(username):
             prio[i.priority or "none"] += 1
     activity = (Activity.query.filter(Activity.actor_id == u.id, Activity.project_id.in_(pids))
                 .order_by(Activity.created_at.desc()).limit(60).all())
+    # Temps et contributions : seulement sur les projets que le lecteur peut voir (archivés compris)
+    readable = [p.id for p in visible_projects(current_user, include_archived=True)] or [0]
     # Contributions des 16 dernières semaines (activités par jour)
     today = date.today()
     start = today - timedelta(days=today.weekday()) - timedelta(weeks=15)
-    acts_all = Activity.query.filter(Activity.actor_id == u.id, Activity.created_at >= start).all()
+    acts_all = Activity.query.filter(Activity.actor_id == u.id, Activity.created_at >= start,
+                                     Activity.project_id.in_(readable)).all()
     per_day = {}
     for a in acts_all:
         per_day[a.created_at.date()] = per_day.get(a.created_at.date(), 0) + 1
@@ -142,7 +145,8 @@ def profile(username):
             day = start + timedelta(weeks=w, days=d)
             col.append({"date": day, "n": per_day.get(day, 0), "future": day > today})
         heat.append(col)
-    logs = WorkLog.query.filter_by(user_id=u.id).order_by(WorkLog.date.desc()).limit(100).all()
+    logs = (WorkLog.query.join(Issue).filter(WorkLog.user_id == u.id, Issue.project_id.in_(readable))
+            .order_by(WorkLog.date.desc()).limit(100).all())
     ws, we = week_bounds(today)
     week_minutes = sum(w.minutes for w in logs if ws <= w.date <= we)
     absences = Absence.query.filter_by(user_id=u.id).order_by(Absence.start_date.desc()).all()
