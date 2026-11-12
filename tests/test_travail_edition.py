@@ -21,7 +21,7 @@ from hangar.extensions import db
 from hangar.models import Activity, APIToken, Issue, IssueRelation, Module, Page, PageVersion, Project, User
 from hangar.services import add_relation, create_issue, create_project, update_issue
 
-PASSWORD = "hangar2026"
+PASSWORD = "travail-essai-2026"  # mot de passe fixé par le test (la démo en tire un au hasard)
 
 
 class Client(FlaskClient):
@@ -46,7 +46,7 @@ class TravailCase(unittest.TestCase):
         cls.ctx = cls.app.test_request_context("/")
         cls.ctx.push()
         from hangar.seed import seed_demo
-        seed_demo(None, verbose=False)
+        seed_demo(None, verbose=False, password=PASSWORD)
         for u in User.query.all():  # comptes de démo utilisables tout de suite
             u.must_change_password = False
         db.session.commit()

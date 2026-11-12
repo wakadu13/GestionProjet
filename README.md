@@ -20,22 +20,24 @@ Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochai
 **Importer l'emploi du temps chaque semaine** (menu *Emploi du temps*, ou le bandeau du tableau de bord)
 - Dépose le fichier `.ics` exporté de ton planning. **Le dernier fichier importé fait foi** :
   - chaque séance est reconnue par son identifiant (`UID`) : si l'horaire, la salle ou l'intervenant changent, elle est **mise à jour** et marquée « modifiée » (avant → après) ;
-  - une séance absente du nouveau fichier est **retirée** (barrée dans le calendrier), seulement pour les semaines couvertes par le fichier et à partir d'aujourd'hui : le passé n'est jamais effacé ;
+  - une séance absente du nouveau fichier est **retirée** (barrée dans le calendrier), seulement pour les semaines couvertes par le fichier et à partir d'aujourd'hui : le passé n'est jamais effacé. Une semaine n'est couverte que si le fichier y apporte au moins une vraie séance d'une journée : un bloc de plusieurs jours (formation militaire…) ou une séance `(PREVISION)` qui déborde sur une autre semaine n'y retire rien ;
+  - garde-fou : si une semaine voisine perdait la majorité de ses séances alors que le fichier n'y en apporte qu'une ou deux, rien n'y est retiré et la page de l'import l'explique. Une alerte s'affiche aussi quand des séances d'aujourd'hui ou de demain sont retirées ;
   - tes **notes**, **rappels** et **tâches liées** restent attachés à la séance d'un import à l'autre ;
-  - chaque import a sa page de détail (ajouts, modifications, retraits) et le **dernier import peut être annulé**. Le fichier d'origine est conservé.
+  - chaque import a sa page de détail (ajouts, modifications, retraits) et le **dernier import peut être annulé** (les rappels des séances, y compris celui des contrôles, reviennent aussi). Le fichier d'origine est conservé.
 - Format de l'école reconnu : `Réseaux avancés 3 CM` → matière, n° de séance, type (CM, TD/TP, contrôle écrit, sport, militaire, conférence…) ; `(PREVISION)` → séance prévisionnelle (hachurée) ; rubriques `Apprenants` et `Intervenants` de la description. Les autres fichiers `.ics` (Google Agenda, Outlook…) fonctionnent aussi.
 - En ligne de commande : `uv run hangar agenda-import planning.ics` (option `--mode future` pour remplacer tout le planning à venir, `--mode merge` pour ne rien retirer).
 
 **Calendrier** : vues semaine (grille horaire, ligne « maintenant »), mois et liste ; clic sur une séance pour ses détails, une note personnelle, un rappel ou une tâche liée ; clic sur un créneau libre pour créer une tâche à cette heure ; export `.ics` (cours et/ou tâches, avec les rappels) vers Google Agenda / Outlook / téléphone ; impression.
 
-**Tâches** : date, heure de début et de fin (ou journée entière), notes, priorité, catégorie, couleur, séance liée, **répétition** (tous les jours, du lundi au vendredi, chaque semaine, toutes les deux semaines, chaque mois — cocher l'occurrence passe à la suivante), report rapide (demain, lundi, +1 semaine). Raccourci clavier `T`.
+**Tâches** : date, heure de début et de fin (ou journée entière), notes, priorité, catégorie, couleur, séance liée, **répétition** (tous les jours, du lundi au vendredi, chaque semaine, toutes les deux semaines, chaque mois, le même jour : une tâche du 31 revient le 31 quand le mois le permet — cocher l'occurrence passe à la suivante, avec un bouton « Annuler » en cas d'erreur), report rapide (demain, lundi, +1 semaine). Raccourci clavier `T`.
 
 **Rappels et e-mails** (menu *Rappels et e-mails*)
 - Rappels par tâche ou par séance : à l'heure, 15 min, 1 h, la veille, 2 jours, 1 semaine avant… ou à une date précise ; par **e-mail + notification** dans l'application, ou notification seule.
 - **Résumé quotidien** par e-mail (activé par défaut à 7 h) : un seul message avec tout ce qu'il y a à faire — cours du jour (horaires, salles), tâches du jour et en retard, tickets de projet à échéance, cartes de QCM à réviser et examens proches, contrôles de la semaine, changements récents du planning, initiatives à risque. Le matin pour la journée, ou la veille au soir pour le lendemain ; rien n'est envoyé les jours vides ; aperçu dans *Agenda › Résumé quotidien*.
 - **Rappel automatique des contrôles** (la veille, 2 jours, 1 semaine avant), e-mail récapitulatif des **changements après chaque import**.
 - Pour recevoir réellement les e-mails : renseigne ton adresse dans *Rappels et e-mails*, puis (administrateur) configure l'envoi dans *menu de l'espace › E-mails automatiques* — mode **SMTP**, préréglage Gmail avec un [mot de passe d'application](https://myaccount.google.com/apppasswords). Sinon, les messages sont seulement enregistrés en `.eml` dans `data/outbox/`.
-- Les rappels partent tant que Hangar est lancé (`uv run hangar`). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée.
+- Les rappels partent tant que Hangar est lancé (`uv run hangar`). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée (un rappel « à une date précise » part encore jusqu'à 24 h après son heure, même après l'échéance de la tâche). Une tâche répétée a un rappel à chaque occurrence, même si tu n'as pas coché la précédente.
+- Si un e-mail ne part pas à cause d'une panne passagère (Wi-Fi pas encore revenu au réveil du portable, serveur injoignable), Hangar réessaie seul après 1, 5, 15 puis 60 minutes, jusqu'à la fin de la séance ou de la tâche pour un rappel, jusqu'à la fin de la journée pour le résumé (24 h pour les autres e-mails). Un mot de passe refusé ou une adresse rejetée ne sont pas réessayés. Les e-mails en échec s'affichent dans *Rappels et e-mails* et sur le tableau de bord, avec un bouton « Renvoyer les échecs ».
 
 **Matières reliées au wiki et aux QCM** : dans la fenêtre d'une séance, relie la matière à sa collection du wiki et à sa catégorie de QCM (suggestions automatiques d'après le nom, le sigle ou l'intervenant). Pour un contrôle, « Préparer ce contrôle » fixe la date d'examen des QCM liés au jour du contrôle : les révisions s'organisent pour être prêt à temps.
 
@@ -47,7 +49,7 @@ Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaqu
 - **Images hébergées ailleurs** : le wiki ne charge jamais rien d'un autre site. Il affiche un lien « Image externe : légende ↗ » à la place de l'image. Le bouton « Enregistrer ces images dans le wiki » de la page Importer (ou `hangar wiki-import --images`) les télécharge une fois dans `image/` et met les pages à jour (`![[image.png]]`) : elles s'affichent alors aussi hors ligne.
 - **Fichiers récalcitrants** : une note que Windows refuse d'ouvrir (antivirus, OneDrive « en ligne uniquement » sans réseau) ne bloque plus le wiki. Elle est signalée dans le sommaire et relue dès que possible. Une note écrite avec un vieux Bloc-notes (ANSI) s'ouvre normalement et passe au format habituel quand tu l'enregistres (l'original reste dans l'historique).
 - Menu façon Plane : collections (les dossiers), favoris, pages récentes, sommaire, tags, graphe, recherche (pages **et texte des PDF**).
-- Éditeur CodeMirror (aperçu en direct, côte à côte, Ctrl+S, collage d'images, liens suggérés, brouillon de secours), historique des versions avec différences et restauration, import de fichiers (.md, PDF, images, LaTeX), lecteur PDF avec annotations, conversion LaTeX → page.
+- Éditeur CodeMirror (aperçu en direct, côte à côte, Ctrl+S, collage d'images, liens suggérés, brouillon de secours), historique des versions avec différences et restauration (une version au début de chaque séance d'écriture puis toutes les 10 minutes ; avec le temps, une par heure, par jour, par semaine puis par mois ; la corbeille, les restaurations, les imports et l'IA gardent toujours leur version ; au plus 100 versions et 20 Mo par page), import de fichiers (.md, PDF, images, LaTeX), lecteur PDF avec annotations, conversion LaTeX → page.
 - **Lecture** comme dans Revision : le menu se cache pendant la lecture (languette ›, bord de l'écran, ou bouton ▯ pour le garder), plein écran, impression propre (Ctrl+P), palette de commandes intégrée à Ctrl+K (pages, PDF, sets de QCM, sessions de langue, commandes).
 - **Hors ligne et installable** : le wiki s'installe sur téléphone (« Ajouter à l'écran d'accueil ») ; les pages lues restent lisibles sans réseau, et « ⤓ Hors ligne » sur un dossier du sommaire garde d'un coup ses pages, images et PDF.
 - Sous chaque page : « Réviser ce cours » (QCM écrits d'après la page, cartes, QCM et fiche par l'IA) et le **tuteur** (questions sur la page, « 📷 Corriger ma copie »). Le menu du wiki donne aussi accès à tout Revision : Aujourd'hui, QCM, Langues, Demander au wiki, Corriger ma copie, Transformer un cours, Travaux de l'IA, Documentation.
@@ -57,10 +59,11 @@ Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaqu
 
 Section séparée du wiki. Tout fichier `.json` du coffre contenant une clé `questions` est un set (catégorie = dossier, `QCM/` par défaut, comme dans Revision).
 - Types QCM, QCR, texte à trous, réponse rédigée, flashcards, images masquées ; langues (vocabulaire, conjugaison, grammaire).
-- Algorithme **FSRS** : chaque carte revient juste avant d'être oubliée ; « Réviser tout ce qui est dû » ; quotas par set, **date d'examen** avec quotas ajustés automatiquement.
+- Algorithme **FSRS** : chaque carte revient juste avant d'être oubliée ; « Réviser tout ce qui est dû » ; quotas par set, **date d'examen** avec quotas ajustés automatiquement (« Ajuster auto. ») : si tu es en retard, plus de nouvelles questions par jour et des révisions sans limite ; si l'examen est trop proche pour tout savoir, les questions jamais vues sont réparties pour que tu les aies toutes vues avant la veille de l'examen.
+- **Ranger tes fichiers sans perdre ta progression** : la progression suit un set déplacé ou renommé, même dans Obsidian ou l'explorateur de fichiers (Hangar le reconnaît à son contenu, sans toucher au fichier). Si Hangar ne peut pas trancher (deux copies identiques, set très modifié), la page *Statistiques* liste les « progressions sans fichier », avec « Rattacher à… » et « Oublier ».
 - Statistiques (calendrier d'activité, série de jours, temps par matière), espace personnel, import/export JSON, CSV et Anki (`.apkg`), signalements.
 - Les cartes dues apparaissent sur le tableau de bord et dans le résumé quotidien. `uv run hangar qcm-verifier` contrôle les fichiers.
-- **QCM hors ligne** (`/qcm/hors-ligne/`, installable) : télécharge des sets et des paquets de langue, révise sans réseau ; les réponses rejoignent ta progression au retour de la connexion.
+- **QCM hors ligne** (`/qcm/hors-ligne/`, installable) : télécharge des sets et des paquets de langue, révise sans réseau ; les réponses rejoignent ta progression au retour de la connexion, même si le set a été renommé ou déplacé entre-temps. Si son fichier est introuvable pour l'instant (en cours de modification, par exemple), elles restent sur l'appareil jusqu'à ce qu'il revienne.
 - **Rappel quotidien par notification** du navigateur, à l'heure choisie (page « Aujourd'hui ») : ce qu'il reste à réviser et ta série de jours.
 - **Appli Android de Revision** : Hangar répond aux mêmes adresses (connexion par jeton d'appareil, QCM hors ligne, rappel, widget, partage vers le wiki) ; il suffit d'indiquer l'adresse de Hangar dans les réglages de l'appli. Les appareils connectés se révoquent depuis *Mon profil*.
 - Connexion protégée : blocage de 30 minutes après 5 mauvais mots de passe (déblocage par un administrateur ou `uv run hangar connexions-debloquer`).
@@ -70,6 +73,7 @@ Section séparée du wiki. Tout fichier `.json` du coffre contenant une clé `qu
 Bouton **Assistant IA** en haut à droite (ou Ctrl+J) : un panneau comme « Plane AI », qui connaît la page ouverte (cours du wiki, ticket, tableau de bord, set de QCM, workgraph…).
 - **Fournisseurs** (*Réglages › Fournisseurs d'IA*, préréglages en un clic) : **Claude** via l'API Anthropic (SDK officiel, `claude-opus-5-5` par défaut, modèle rapide pour les petites tâches), ou toute API **compatible OpenAI** : **Ollama** (`ollama pull qwen2.5`, adresse `http://localhost:11434/v1`), LM Studio, vLLM, llama.cpp, OpenRouter, Mistral, Groq, Together, ou une adresse personnalisée. Test de connexion, liste des modèles, plafond de dépense mensuel, suivi de l'usage.
 - Réponses en direct, « @ » pour ajouter du contexte, « / » pour les commandes ; l'assistant consulte tickets, tâches, agenda et wiki, et **propose des actions** que tu valides d'un clic : créer la tâche, créer le ticket, ajouter à la page, ajouter au cycle, changer une échéance.
+- Avant de valider une action, « Voir le contenu » montre le texte exact qui sera ajouté (bloc de page, description du ticket, notes de la tâche). L'assistant traite le contenu des pages, des PDF et des commentaires comme des données, jamais comme des consignes, et ses réponses ne chargent aucune image externe : une consigne cachée dans un document ne peut pas faire sortir tes données sans clic.
 - Fonctions d'IA de Revision : expliquer une réponse de QCM, corriger une réponse rédigée, générer un QCM ou des fiches de vocabulaire depuis un cours, « Demander au wiki » (réponses avec sources), tuteur d'une page, améliorer la rédaction dans l'éditeur, transformer un PDF ou du LaTeX en page, corriger une copie photographiée.
 - En ligne de commande : `hangar ia-ajouter ollama`, `ia-tester`, `ia-demander "…"`, `ia-usage`.
 - **Plafond mensuel** (*Réglages › Plafond et consignes*) : il compte aussi les **travaux en lot** dès leur dépôt (chaque lot réserve son coût au plus, remplacé par le coût réel à son retour) et les **réponses arrêtées en cours de route** (bouton Arrêter, coupure). Un nouveau travail est refusé quand le plafond est atteint. Un modèle Claude absent de la table des prix est compté au tarif le plus cher de sa famille, et les réglages affichent « Tarif inconnu » (y compris pour un service payant compatible OpenAI dont tu n'as pas saisi les prix).
@@ -84,6 +88,7 @@ Bouton **Assistant IA** en haut à droite (ou Ctrl+J) : un panneau comme « Plan
 En plus des projets, tickets, cycles et modules :
 - **Initiatives** : objectifs qui regroupent des projets et des modules, avec avancement, **santé** calculée (dans les temps, à risque, en retard) et notes d'avancement datées.
 - **Workgraph** : graphe Espace → Initiatives → Projets → Modules, avec les flèches de dépendances entre tickets (bloque / bloqué par) ; vue Tableau ; regroupements par initiative, projet ou équipe.
+- **Projets privés respectés** : sur la page d'une initiative, dans le Workgraph et dans le texte envoyé à l'assistant IA, tu ne vois que les jalons, modules et dépendances des projets auxquels tu as accès. L'avancement et la santé d'une initiative comptent quand même tous ses projets ; la page indique combien de projets privés liés ne sont pas affichés.
 
 ## Démarrage rapide
 
@@ -101,27 +106,16 @@ Le navigateur s'ouvre sur <http://127.0.0.1:5000>. Raccourcis : `./lancer.sh` (L
 
 Connexion par **identifiant et mot de passe** (pas d'e-mail) ; l'écran de connexion affiche les membres : clique sur ton nom puis tape le mot de passe.
 
-| Identifiant | Mot de passe | Rôle |
-|---|---|---|
-| `wacogne` | `hangar2026` | Administrateur |
-| `lazaro`, `brancourt`, `gali`, `claeys`, `niord`, `flohic`, `loubatier`, `alquarni` | `hangar2026` (à changer à la 1ʳᵉ connexion) | Membres |
+`uv run hangar demo` tire au hasard un **mot de passe provisoire**, commun aux 9 comptes, et l'affiche **une seule fois** dans le terminal : note-le. Chaque compte, administrateur compris, doit le changer à sa première connexion.
 
-> Prénoms retrouvés dans les documents : Raphaël Lazaro, Mathieu Brancourt, Vincent Flohic, Benoit Loubatier. Les autres se complètent depuis **Planning (Gantt)**
-- Page **Planning** par projet et pour tout l'espace : couloirs par module (ou par assigné / cycle), barre de synthèse avec avancement, bandes des sprints, ligne « aujourd'hui », jalons en losanges, **flèches de dépendances** (en rouge quand les dates se contredisent).
-- Zoom jour / semaine / mois / trimestre, glisser pour déplacer, tirer les bords pour changer les dates, filtres, impression / PDF.
-- Onglet **Tendances** de l'analytique : flux cumulé (CFD), burn-up, vélocité par cycle, délais de réalisation, âge des tickets ouverts, date de fin estimée.
+| Identifiant | Rôle |
+|---|---|
+| `wacogne` | Administrateur |
+| `lazaro`, `brancourt`, `gali`, `claeys`, `niord`, `flohic`, `loubatier`, `alquarni` | Membres |
 
-**Bilan**
-- Bilan d'avancement par projet ou pour tout l'espace, sur la semaine, le mois, depuis le début ou une période libre : météo du projet (temps écoulé vs travail terminé), indicateurs, points d'attention générés automatiquement, réalisations par module, en cours, retards, blocages, jalons, avancement des modules et des cycles, contributions de chaque membre, documents produits, prochaines échéances.
-- **Bilans enregistrés** (chiffres figés) avec sections rédigées : faits marquants, difficultés, décisions, prochaines étapes.
-- Export **Word (.docx)**, Markdown, impression / PDF, et **envoi par e-mail**.
+> Base créée par une ancienne version : l'ancien mot de passe de démonstration, qui était public, doit être changé à la prochaine connexion, et `uv run hangar run --host 0.0.0.0` avertit au démarrage tant qu'un compte l'utilise encore.
 
-**E-mails automatiques** (menu de l'espace › E-mails automatiques)
-- Notifications instantanées (assignation, mention, commentaire…), rappel quotidien des échéances, récapitulatif hebdomadaire, bilan hebdomadaire envoyé aux responsables, e-mails manuels avec modèles (relance, convocation, compte rendu, demande de documents).
-- Mode **boîte d'envoi locale** par défaut : rien ne sort de la machine, les messages sont enregistrés en `.eml` dans `data/outbox/` (ouvrables avec Thunderbird/Outlook). Mode **SMTP** pour un envoi réel (préréglages Gmail avec mot de passe d'application, Outlook, Orange, Free).
-- Chaque membre renseigne son adresse de notification et ses préférences dans **Mon profil** (l'adresse ne sert pas à la connexion).
-
-**Équipe** ou **Mon profil**.
+> Prénoms retrouvés dans les documents : Raphaël Lazaro, Mathieu Brancourt, Vincent Flohic, Benoit Loubatier. Les autres se complètent depuis **Équipe** ou **Mon profil**.
 
 ## Travailler à plusieurs (réseau local)
 
@@ -129,14 +123,18 @@ Connexion par **identifiant et mot de passe** (pas d'e-mail) ; l'écran de conne
 uv run hangar run --host 0.0.0.0
 ```
 
-L'adresse à partager (ex. `http://192.168.1.20:5000`) s'affiche dans le terminal. Chaque membre se connecte avec son compte depuis son navigateur. Le serveur (waitress, 8 fils) gère sans souci une équipe de cette taille.
+L'adresse à partager (ex. `http://192.168.1.20:5000`) s'affiche dans le terminal. Chaque membre se connecte avec son compte depuis son navigateur. Le serveur (waitress, 8 fils) gère sans souci une équipe de cette taille. Avant de partager l'adresse, vérifie que chaque compte a choisi son propre mot de passe : au démarrage en réseau, Hangar avertit si un compte a encore l'ancien mot de passe de démonstration.
+
+**Modifier la même chose en même temps.** Si quelqu'un modifie une page ou la description d'un ticket pendant que tu l'écris (un coéquipier, ton autre onglet ou l'assistant IA), Hangar n'écrase rien. Ton enregistrement est refusé avec un message qui dit qui l'a modifiée. Ton texte reste dans l'éditeur et la version actuelle s'affiche à côté : reprends ce qui manque, puis enregistre à nouveau. Le texte remplacé reste toujours dans l'historique : onglet *Historique* d'une page, ou « Voir le texte d'avant » / « Restaurer ce texte » dans l'historique d'un ticket.
+
+**Garde-fous pour l'usage à plusieurs.** Les couleurs (états, étiquettes, projets, avatars, pense-bêtes) ne sont acceptées qu'au format `#rrggbb`. Une pièce jointe de ticket ne s'ouvre dans le navigateur que si c'est une image PNG, JPEG, GIF, WebP ou un PDF (d'après son extension) : tout le reste, SVG compris, est téléchargé et ne peut rien exécuter. Hangar n'affiche aucune image venue d'Internet : dans un ticket, un commentaire, une page ou une réponse de l'IA, `![texte](https://…)` devient un simple lien. La déconnexion se fait avec le bouton du menu (l'ancienne adresse `/deconnexion/` demande une confirmation), et « Télécharger la base actuelle » est un bouton : une image piégée ne peut ni te déconnecter ni créer de copie de la base.
 
 ## Fonctionnalités
 
 **Tickets (work items)**
 - États personnalisables par groupe (Backlog, Non commencé, En cours, Terminé, Annulé), priorités, assignés multiples, étiquettes (avec parent), dates de début et d'échéance, estimations (points, Fibonacci, tailles, heures, jours-homme), cycle, modules.
 - Sous-tickets avec progression, relations *bloque / bloqué par / lié à / doublon de*, liens, pièces jointes (glisser-déposer), duplication, déplacement vers un autre projet, archivage.
-- Commentaires markdown avec réactions, **@mentions** et liens automatiques vers les tickets (`EAE-12`), historique complet de chaque modification, suivi du temps passé.
+- Commentaires markdown avec réactions, **@mentions** et liens automatiques vers les tickets (`EAE-12`), historique complet de chaque modification (l'ancienne description est gardée et peut être restaurée), suivi du temps passé.
 
 **Vues et organisation**
 - 5 dispositions : **liste**, **tableau kanban** (glisser-déposer entre colonnes), **tableur** (modifications en masse), **calendrier** (glisser une échéance), **Gantt** (déplacer / redimensionner les barres).
@@ -150,26 +148,43 @@ L'adresse à partager (ex. `http://192.168.1.20:5000`) s'affiche dans le termina
 - **Pages** : wiki markdown avec modèles (compte rendu de réunion, d'entretien, note de décision, rétrospective, spécification), sommaire, historique des versions avec différences, verrouillage, pages privées, sauvegarde automatique, **import de documents Word (.docx)**.
 - **Analytique** : indicateurs, répartition par état et priorité, tendance créés/terminés, analyse personnalisée (axe X × segment × métrique, export CSV), statistiques par membre.
 
+**Planning (Gantt)**
+- Page **Planning** par projet et pour tout l'espace : couloirs par module (ou par assigné / cycle), barre de synthèse avec avancement, bandes des sprints, ligne « aujourd'hui », jalons en losanges, **flèches de dépendances** (en rouge quand les dates se contredisent).
+- Zoom jour / semaine / mois / trimestre, glisser pour déplacer, tirer les bords pour changer les dates, filtres, impression / PDF.
+- Onglet **Tendances** de l'analytique : flux cumulé (CFD), burn-up, vélocité par cycle, délais de réalisation, âge des tickets ouverts, date de fin estimée.
+
+**Bilan**
+- Bilan d'avancement par projet ou pour tout l'espace, sur la semaine, le mois, depuis le début ou une période libre : météo du projet (temps écoulé vs travail terminé), indicateurs, points d'attention générés automatiquement, réalisations par module, en cours, retards, blocages, jalons, avancement des modules et des cycles, contributions de chaque membre, documents produits, prochaines échéances.
+- **Bilans enregistrés** (chiffres figés) avec sections rédigées : faits marquants, difficultés, décisions, prochaines étapes. Un bilan enregistré n'est visible que par les personnes qui ont accès à tous les projets qu'il couvre ; sinon il reste réservé à son auteur et aux administrateurs. « Actualiser » recalcule le bilan sur ses projets d'origine.
+- Export **Word (.docx)**, Markdown, impression / PDF, et **envoi par e-mail**.
+
+**E-mails automatiques** (menu de l'espace › E-mails automatiques)
+- Notifications instantanées (assignation, mention, commentaire…), rappel quotidien des échéances, récapitulatif hebdomadaire, bilan hebdomadaire envoyé aux responsables, e-mails manuels avec modèles (relance, convocation, compte rendu, demande de documents).
+- Mode **boîte d'envoi locale** par défaut : rien ne sort de la machine, les messages sont enregistrés en `.eml` dans `data/outbox/` (ouvrables avec Thunderbird/Outlook). Mode **SMTP** pour un envoi réel (préréglages Gmail avec mot de passe d'application, Outlook, Orange, Free).
+- En cas de panne passagère, nouvel essai automatique (1, 5, 15 puis 60 min) jusqu'à la date limite du message ; bouton **« Renvoyer les échecs »** après avoir corrigé les réglages (par exemple un mot de passe d'application). Les incidents du fil d'arrière-plan sont notés sur la page des erreurs du serveur (`/erreurs/`).
+- Chaque membre renseigne son adresse de notification et ses préférences dans **Mon profil** (l'adresse ne sert pas à la connexion).
+
 **Équipe**
 - Rôles d'espace (administrateur, membre, invité) et de projet, invitations avec mot de passe provisoire, désactivation, réinitialisation.
 - Profils (statistiques, carte d'activité, tickets, temps passé), **charge de travail hebdomadaire**, capacité, **absences**.
+- Sur le profil d'un membre, l'onglet Temps n'affiche que le temps saisi sur des projets que tu peux voir.
 - Notifications (assignation, mention, commentaire, changement d'état), mise en sommeil, archivage.
 
 **Confort**
 - Palette de commandes `Ctrl+K`, raccourcis clavier (`C` créer, `/` rechercher, `G` puis `H/I/P/N/A/T`, `?` aide), thème clair / sombre, pense-bêtes sur l'accueil, interface responsive.
 
 **Données**
-- Import Excel / CSV / JSON (détection automatique des colonnes : Titre/Tâche, Statut, Priorité, Responsable, Appui, Début, Échéance, Phase, Partie, Dépend de…), export Excel (avec feuille de synthèse), CSV, JSON, Markdown, calendrier iCalendar (.ics).
-- Sauvegardes de la base en un clic (et restauration), export JSON complet.
-- **API REST** `/api/v1` avec jetons personnels (voir *Paramètres › Jetons d'API*).
+- Import Excel / CSV / JSON (détection automatique des colonnes : Titre/Tâche, Statut, Priorité, Responsable, Appui, Début, Échéance, Phase, Partie, Dépend de…), export Excel (avec feuille de synthèse), CSV, JSON, Markdown, calendrier iCalendar (.ics). Un fichier exporté par Hangar se réimporte sans perte, dans le même projet ou dans un autre : étiquettes, modules (un nom qui contient une virgule est écrit entre guillemets), parent et « bloqué par » visent les tickets du fichier. L'option « Mettre à jour les tickets existants » est décochée par défaut. Cochée, elle ne change que les cellules remplies (une colonne absente ou vide garde la valeur du ticket), ne touche jamais aux tickets d'un autre projet (une clé `EAE-…` importée dans `MEM` devient un nouveau ticket) et fait une sauvegarde de la base juste avant.
+- **Sauvegarde complète (.zip)** en un clic ou en ligne de commande (base, wiki, sets de QCM, copies, pièces jointes, agenda), sauvegardes de la base restaurables en un clic, export JSON des projets (Travail).
+- **API REST** `/api/v1` avec jetons personnels (voir *Paramètres › Jetons d'API*). Pour modifier une description sans écraser celle d'un autre, renvoie `description_version` (lu dans le ticket) avec la nouvelle `description` : la réponse est 409 si elle a changé entre-temps.
 
 ## Commandes
 
 ```bash
 uv run hangar                       # lance le serveur (http://127.0.0.1:5000)
 uv run hangar run --port 8080       # autre port ; --host 0.0.0.0 pour le réseau local ; --no-browser
-uv run hangar demo                  # données de démonstration du projet EAE
-uv run hangar demo --force          # efface puis recrée la démonstration
+uv run hangar demo                  # données de démonstration du projet EAE (affiche une fois le mot de passe provisoire)
+uv run hangar demo --force          # remplace la base par la démonstration (demande « oui », sauvegarde avant ; wiki gardé ; --yes)
 uv run hangar rebuild-docs          # recrée les tickets du projet EAE d'après les documents (sauvegarde avant)
 uv run hangar agenda-import planning.ics  # importe l'emploi du temps (.ics) ; --user identifiant, --mode weeks|future|merge
 uv run hangar mail-send             # envoie la file d'e-mails, les rappels de l'agenda et les envois programmés maintenant
@@ -182,8 +197,9 @@ uv run hangar ia-ajouter ollama     # ajoute un fournisseur d'IA (anthropic, oll
 uv run hangar ia-tester             # teste la connexion aux fournisseurs d'IA
 uv run hangar ia-usage              # dépense et jetons de l'IA ce mois-ci
 uv run hangar mail-test adresse@ex.fr  # e-mail de test
-uv run hangar backup                # sauvegarde dans data/backups/
-uv run hangar reset                 # efface toutes les données (sauvegarde de sécurité avant)
+uv run hangar backup                # sauvegarde de la base seule dans data/backups/
+uv run hangar backup --complet --vers E:\Sauvegardes --garder 10   # sauvegarde complète (.zip) ailleurs, garde les 10 dernières ; --sans-secrets
+uv run hangar reset                 # efface la base (sauvegarde avant, pièces jointes mises de côté dans data/backups ; wiki gardé)
 uv run hangar create-admin          # crée ou répare un compte administrateur
 uv run hangar --data /chemin run    # utiliser un autre dossier de données
 uv run python -m unittest discover -s tests   # tests (lancés aussi par GitHub Actions sous Linux et Windows)
@@ -199,12 +215,23 @@ Tout est dans `hangar/data/` :
 - `outbox/` : les e-mails en mode « boîte d'envoi locale »
 - `agenda/` : les fichiers `.ics` importés (un dossier par utilisateur)
 - `vault/` : le coffre du wiki (pages `.md`, images, PDF, sets de QCM `.json`) — ou le dossier indiqué par `HANGAR_VAULT`
-- `wiki_versions/` : l'historique des pages du wiki
+- `wiki_versions/` : l'historique des pages du wiki (un dossier par page ; `<date>-<auteur>.md` = version gardée avant une restauration, une mise à la corbeille, un import ou l'IA, ainsi que toutes les versions d'avant cette mise à jour ; `<date>_<auteur>.md` = version d'écriture, éclaircie avec le temps)
 - `qcm_perso/` : les sets de l'espace personnel de chaque compte
 - `copies/` : les photos des copies corrigées par l'IA
 - `secret.key` : la clé de session (générée automatiquement)
+- `vapid_prive.pem` : la clé des notifications (sans elle, chaque appareil doit se réabonner)
 
-Pour transférer Hangar sur une autre machine, copie le dossier `hangar/` entier (données comprises).
+Pour transférer Hangar sur une autre machine : fais une sauvegarde complète en cochant « Inclure le mot de passe des e-mails et les clés d'API », installe Hangar sur la nouvelle machine, puis restaure-la (voir ci-dessous). Tu peux aussi copier le dossier `hangar/` entier, données comprises, et le coffre s'il est ailleurs.
+
+### Sauvegarder et restaurer
+
+- **Sauvegarde complète (.zip)** (Réglages › Sauvegardes › « Tout télécharger (.zip) » ou « Créer une sauvegarde complète », ou `uv run hangar backup --complet`). Elle contient la base, le coffre du wiki (même s'il est ailleurs avec `HANGAR_VAULT`), `wiki_versions/`, `qcm_perso/`, `copies/`, `uploads/`, `agenda/` et `vapid_prive.pem`. Elle ne contient pas `backups/`, `outbox/` ni `secret.key` (la perdre oblige seulement à se reconnecter). Un fichier `LISEZMOI.txt` dans l'archive en décrit le contenu.
+- **Sauvegarde de la base (.db)** : la base seule. Elle se restaure en un clic sur la page, mais sans le wiki, les sets de QCM ni les fichiers.
+- **Secrets** : la base contient en clair le mot de passe SMTP et les clés d'API de l'IA. Les téléchargements depuis la page les retirent par défaut ; coche la case pour les garder si tu changes de machine. Les copies gardées dans `data/backups/` et celles de `hangar backup` les contiennent (option `--sans-secrets`). Pour ne pas enregistrer le mot de passe SMTP dans la base, laisse le champ vide et définis la variable d'environnement `HANGAR_SMTP_PASSWORD`, comme `ANTHROPIC_API_KEY` pour l'IA.
+- **Sauvegarde automatique sous Windows** : Planificateur de tâches › Créer une tâche de base › Quotidienne › Démarrer un programme. Programme : `uv` (ou son chemin complet, ex. `C:\Users\<toi>\.local\bin\uv.exe`). Arguments : `run hangar backup --complet --vers "D:\OneDrive\Hangar" --garder 14`. Commencer dans : le dossier `hangar`. Le code de sortie vaut 1 si la sauvegarde a échoué (clé débranchée, disque plein) et 2 si des fichiers verrouillés manquent dans l'archive.
+- **Restaurer une sauvegarde complète** : arrête Hangar. Décompresse le .zip dans `data/` en remplaçant les fichiers existants ; supprime d'abord `hangar.db-wal` et `hangar.db-shm` s'ils existent. Si `HANGAR_VAULT` pointe ailleurs, copie le contenu de `vault/` dans ton coffre. Relance Hangar. Si la copie était sans secrets, ressaisis le mot de passe SMTP et les clés d'API.
+- **Export JSON des projets (Travail)** : fichier lisible avec les projets, les tickets (assignés, étiquettes et modules compris), les pages et les commentaires, que l'import JSON d'un projet sait relire. Ce n'est pas une sauvegarde : ni agenda, ni QCM, ni wiki.
+- `demo --force` et `reset` sauvegardent la base avant d'effacer et mettent `uploads/`, `qcm_perso/`, `copies/` et `agenda/` de côté dans `data/backups/hangar_<date>_fichiers/`. Pour revenir en arrière, restaure la sauvegarde puis remets ces dossiers dans `data/`. Le coffre du wiki et son historique ne sont jamais effacés.
 
 ## Structure du code
 
@@ -226,6 +253,8 @@ hangar/
 │   ├── agenda.py           agenda : imports (le dernier fait foi), tâches, rappels, vues semaine / mois
 │   ├── importer.py         import/export Excel, CSV, JSON, Word
 │   ├── charts.py           graphiques SVG générés en Python
+│   ├── securite.py         garde-fous communs : couleurs, adresses locales, fichiers servis, images externes
+│   ├── sauvegarde.py       sauvegardes complètes (.zip), copies sans secrets, rotation
 │   ├── seed.py             données de démonstration
 │   ├── views/              routes (une par domaine : tickets, cycles, pages, équipe, API…)
 │   ├── templates/          gabarits Jinja

@@ -267,7 +267,8 @@ class ExportJsonTests(unittest.TestCase):
         # L'import JSON d'un projet sait le relire, assignés et étiquettes compris
         from hangar.importer import read_table
         (ligne,) = read_table(io.BytesIO(brut), "export.json")
-        self.assertEqual((ligne["assignees"], ligne["labels"], ligne["module"]), ("moi", "Réunion", "Cadrage"))
+        # Listes de noms (un nom qui contient une virgule n'est pas coupé), comme les relit l'import
+        self.assertEqual((ligne["assignees"], ligne["labels"], ligne["module"]), (["moi"], ["Réunion"], ["Cadrage"]))
 
 
 class MotDePasseDemoTests(unittest.TestCase):
