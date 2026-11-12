@@ -126,6 +126,13 @@ def health_info(key: str | None) -> dict | None:
     return {"key": key, "label": HEALTH_LABELS.get(key, key), "color": HEALTH_COLORS.get(key, "#a3a3a3")}
 
 
+def readable_project_ids(user) -> set[int]:
+    """Projets dont un compte peut lire le contenu (titres de tickets, modules, jalons), archivés compris :
+    mêmes règles que partout ailleurs (`visible_projects`)."""
+    from .utils import visible_projects
+    return {p.id for p in visible_projects(user, include_archived=True)}
+
+
 # ---------------------------------------------------------------------------
 # Instantané de l'espace : tickets, modules, relations (chargés une fois par requête)
 # ---------------------------------------------------------------------------
@@ -148,7 +155,8 @@ class Snapshot:
     """Données de tout l'espace nécessaires au Workgraph, aux listes et au résumé quotidien.
 
     Les avancements des initiatives portent sur tous les projets liés (même ceux qu'un compte ne voit pas) ;
-    la visibilité n'intervient qu'à l'affichage."""
+    la visibilité n'intervient qu'à l'affichage : `initiative_for` ne garde, pour un lecteur, que les tickets
+    et dépendances des projets qu'il peut lire."""
 
     def __init__(self, today: date | None = None):
         self.today = today or date.today()
@@ -234,6 +242,18 @@ class Snapshot:
         self._ini_cache[ini.id] = out
         return out
 
+    def initiative_for(self, ini: Initiative, readable: set[int] | None) -> dict:
+        """Résumé de l'initiative vu par un lecteur : l'avancement et la santé restent ceux de toute
+        l'initiative (des chiffres), mais les tickets (`issue_ids`, d'où les jalons) et les dépendances
+        bloquantes se limitent aux projets qu'il peut lire (`readable`, voir `readable_project_ids` ; None = tout)."""
+        s = self.initiative(ini)
+        if readable is None:
+            return s
+        blockers = [b for b in s["blockers"]
+                    if b["blocked"].project_id in readable and b["blocker"].project_id in readable]
+        return {**s, "issue_ids": {i for i in s["issue_ids"] if self.issues[i].project_id in readable},
+                "blockers": blockers, "blockers_hidden": len(s["blockers"]) - len(blockers)}
+
     # -- dépendances --------------------------------------------------------------
     def blockers(self, ids: set[int]) -> list[dict]:
         """Dépendances ouvertes qui freinent un ensemble de tickets (bloqué ouvert, bloquant ouvert)."""
@@ -284,10 +304,17 @@ def refresh_health(ini: Initiative, health: str | None, at: datetime | None = No
     return False
 
 
-def milestones(ini: Initiative, snap: Snapshot, issue_ids: set[int] | None = None) -> list[dict]:
-    """Jalons datés : début et échéance de l'initiative, fins des projets et modules, tickets « Jalon »."""
+def milestones(ini: Initiative, snap: Snapshot, issue_ids: set[int] | None = None,
+               readable: set[int] | None = None) -> list[dict]:
+    """Jalons datés : début et échéance de l'initiative, fins des projets et modules, tickets « Jalon ».
+
+    `readable` : projets que le lecteur peut lire (None = tous) ; ceux des autres projets n'apparaissent pas."""
     today = snap.today
     ids = issue_ids if issue_ids is not None else snap.initiative_issue_ids(ini)
+
+    def ok(pid) -> bool:
+        return readable is None or pid in readable
+
     out = []
 
     def add(d, title, kind, done, url=None, sub=""):
@@ -297,13 +324,14 @@ def milestones(ini: Initiative, snap: Snapshot, issue_ids: set[int] | None = Non
 
     url = url_for("workgraph.initiative_detail", iid=ini.id)
     add(ini.start_date, "Début de l’initiative", "initiative", ini.start_date and ini.start_date <= today, url)
-    for p in ini.projects:
+    for p in (p for p in ini.projects if ok(p.id)):
         st = snap.project_stats(p.id)
         add(p.target_date, f"Fin du projet {p.name}", "project",
             p.archived_at is not None or (st["total"] and st["pct"] == 100),
             url_for("issues.index", pid=p.id), p.identifier)
     mods = {m.id: m for p in ini.projects for m in p.modules if m.archived_at is None}
     mods.update({m.id: m for m in ini.modules})
+    mods = {mid: m for mid, m in mods.items() if ok(m.project_id)}
     for m in sorted(mods.values(), key=lambda m: m.name.lower()):
         add(m.target_date, f"Module « {m.name} »", "module", m.status in ("completed", "cancelled"),
             url_for("modules.detail", pid=m.project_id, mid=m.id), snap.projects[m.project_id].identifier
@@ -313,7 +341,7 @@ def milestones(ini: Initiative, snap: Snapshot, issue_ids: set[int] | None = Non
                 .filter(db.func.lower(Label.name).in_(MILESTONE_LABELS)).all())
         for (iid,) in rows:
             r = snap.issues.get(iid)
-            if r is not None and iid in ids and r.target_date:
+            if r is not None and iid in ids and r.target_date and ok(r.project_id):
                 add(r.target_date, r.title, "issue", r.is_closed,
                     url_for("issues.detail", pid=r.project_id, seq=r.seq), r.key)
     add(ini.target_date, "Échéance de l’initiative", "initiative", ini.status == "completed", url)
@@ -476,7 +504,7 @@ def build_graph(user, tab: str = "initiative", group: str = "lead", filters: dic
                 link(f"i:{ini.id}", f"m:{m.id}", "direct")
 
     # -- dépendances --------------------------------------------------------------
-    deps = _dependencies(snap, nodes, inis if tab == "initiative" else [])
+    deps = _dependencies(snap, nodes, inis if tab == "initiative" else [], readable_project_ids(user))
     for d in deps:
         nodes[d["s"]].setdefault("blocks", 0)
         nodes[d["t"]].setdefault("blocked_by", 0)
@@ -513,8 +541,11 @@ def _keep_initiative(ini: Initiative, snap: Snapshot, filters: dict, user) -> bo
     return True
 
 
-def _dependencies(snap: Snapshot, nodes: dict, inis: list[Initiative]) -> list[dict]:
-    """Dépendances entre nœuds affichés : « s bloque t » (au moins un ticket de s bloque un ticket de t)."""
+def _dependencies(snap: Snapshot, nodes: dict, inis: list[Initiative],
+                  readable: set[int] | None = None) -> list[dict]:
+    """Dépendances entre nœuds affichés : « s bloque t » (au moins un ticket de s bloque un ticket de t).
+
+    Seules comptent les relations entre tickets de projets que le lecteur peut lire (`readable`, None = tous)."""
     member: dict[int, list[str]] = defaultdict(list)  # ticket -> initiatives affichées qui le contiennent
     for ini in inis:
         for iid in snap.initiative(ini)["issue_ids"]:
@@ -533,6 +564,8 @@ def _dependencies(snap: Snapshot, nodes: dict, inis: list[Initiative]) -> list[d
 
     for a, b in snap.blocked_by:
         blocked, blocker = snap.issues[a], snap.issues[b]
+        if readable is not None and (blocked.project_id not in readable or blocker.project_id not in readable):
+            continue
         if blocked.project_id != blocker.project_id:
             add(f"p:{blocker.project_id}", f"p:{blocked.project_id}", blocker, blocked)
         for mb in blocker.modules:
@@ -610,10 +643,11 @@ def overview_text(user, snap: Snapshot | None = None) -> str:
     snap = snap or Snapshot()
     inis = sorted(Initiative.query.all(), key=lambda i: (GRAPH_STATUS_ORDER.get(i.status, 9), i.name.lower()))
     visible = {p.id for p in visible_projects(user)}
+    readable = readable_project_ids(user)
     counts = defaultdict(int)
     parts = []
     for ini in inis:
-        s = snap.initiative(ini)
+        s = snap.initiative_for(ini, readable)
         if s["health"]:
             counts[s["health"]] += 1
         txt = _line_initiative(ini, s)
@@ -621,8 +655,9 @@ def overview_text(user, snap: Snapshot | None = None) -> str:
         if projs:
             txt += "\nProjets : " + ", ".join(f"{p.identifier} {p.name} ({snap.project_stats(p.id)['pct']} %)"
                                                for p in projs)
-        if ini.modules:
-            txt += "\nModules : " + ", ".join(f"{m.name} ({snap.module_stats(m.id)['pct']} %)" for m in ini.modules)
+        mods = [m for m in ini.modules if m.project_id in readable]
+        if mods:
+            txt += "\nModules : " + ", ".join(f"{m.name} ({snap.module_stats(m.id)['pct']} %)" for m in mods)
         if s["blockers"]:
             ext = [b for b in s["blockers"] if b["external"]]
             txt += f"\nDépendances bloquantes ouvertes : {len(s['blockers'])}"
@@ -647,25 +682,32 @@ def overview_text(user, snap: Snapshot | None = None) -> str:
     return head + "\n\n" + "\n\n".join(parts) if parts else head + "\nAucune initiative ni projet."
 
 
-def initiative_text(ini: Initiative, snap: Snapshot | None = None) -> str:
+def initiative_text(ini: Initiative, user, snap: Snapshot | None = None) -> str:
+    """Texte transmis à l'assistant IA : seulement ce que `user` peut lire (rien des projets privés des autres)."""
     from .utils import excerpt, fmt_date
     snap = snap or Snapshot()
-    s = snap.initiative(ini)
+    readable = readable_project_ids(user)
+    s = snap.initiative_for(ini, readable)
     txt = _line_initiative(ini, s)
     if ini.description:
         txt += "\n\nDescription :\n" + excerpt(ini.description, 1500)
-    if ini.projects:
+    projs = [p for p in ini.projects if p.id in readable]
+    hidden = len(ini.projects) - len(projs)
+    if projs or hidden:
         txt += "\n\nProjets liés :"
-        for p in ini.projects:
+        for p in projs:
             st = snap.project_stats(p.id)
             txt += (f"\n- {p.identifier} {p.name} : {st['pct']} %, {st['open']} ouvert(s), {st['overdue']} en retard"
                     + (f", fin {fmt_date(p.target_date, True)}" if p.target_date else ""))
-    if ini.modules:
+        if hidden:
+            txt += f"\n- et {hidden} projet(s) privé(s), non détaillé(s)"
+    mods = [m for m in ini.modules if m.project_id in readable]
+    if mods:
         txt += "\n\nModules liés :"
-        for m in ini.modules:
+        for m in mods:
             st = snap.module_stats(m.id)
             txt += f"\n- {m.name} ({m.status_label}) : {st['pct']} %, {st['open']} ouvert(s)"
-    jal = [j for j in milestones(ini, snap, s["issue_ids"]) if not j["done"]][:10]
+    jal = [j for j in milestones(ini, snap, s["issue_ids"], readable) if not j["done"]][:10]
     if jal:
         txt += "\n\nJalons à venir ou en retard :" + "".join(
             f"\n- {fmt_date(j['date'], True)} : {j['title']}{' (en retard)' if j['late'] else ''}" for j in jal)
@@ -692,7 +734,7 @@ def ai_context(path: str, args, user) -> dict | None:
         ini = db.session.get(Initiative, int(seg))
         if ini is None:
             return None
-        return {"type": "initiative", "title": f"Initiative « {ini.name} »", "text": initiative_text(ini),
+        return {"type": "initiative", "title": f"Initiative « {ini.name} »", "text": initiative_text(ini, user),
                 "url": url_for("workgraph.initiative_detail", iid=ini.id)}
     if path.rstrip("/") in ("/workgraph", "/initiatives"):
         return {"type": "workgraph", "title": "Initiatives et Workgraph", "text": overview_text(user),
