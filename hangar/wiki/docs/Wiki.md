@@ -61,8 +61,12 @@ sur CodeMirror 6 comme Obsidian lui-même :
 - **✦ Améliorer** (avec une IA configurée) : l'IA corrige l'orthographe et rend plus clair le passage sélectionné
   (ou toute la page) sans toucher au sens ni au balisage ; <kbd>Ctrl</kbd>+<kbd>Z</kbd> annule ;
 - **historique des versions** (`/historique/<page>`) : chaque enregistrement qui modifie une page garde le texte
-  précédent, hors du coffre (50 versions par page au plus) ; différences ligne à ligne, texte complet,
-  **restauration**.
+  précédent, hors du coffre ; différences ligne à ligne, texte complet, **restauration**. Quand tu écris d'une
+  traite (Ctrl+S, enregistrement auto), une version est gardée au début de la séance puis toutes les 10 minutes ;
+  en vieillissant, il en reste une par heure sur un jour, une par jour sur un mois, une par semaine sur six mois,
+  puis une par mois. Une restauration, une mise à la corbeille, un import ou un passage de l'IA garde toujours
+  sa propre version. Au plus 100 versions et 20 Mo par page : au-delà, les plus anciennes partent, sauf la
+  toute première (le texte d'origine).
 
 ## Lire hors ligne, installer le wiki sur un téléphone
 

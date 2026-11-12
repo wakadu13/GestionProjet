@@ -322,15 +322,22 @@ def edit(path):
             if not file.resolve().is_relative_to(vault.root.resolve()):
                 abort(400)
             file.parent.mkdir(parents=True, exist_ok=True)
+            # « seance » : l'éditeur a déjà enregistré un changement depuis son ouverture ; la
+            # version vérifiée ci-dessus prouve alors que la page contient encore son propre texte,
+            # et ses enregistrements rapprochés peuvent être regroupés dans l'historique.
+            seance = request.form.get("seance") == "1"
+            change = True
             if file.is_file():
                 ancien = file.read_text(encoding="utf-8")
-                if ancien != content:
-                    historique.sauvegarder(f"{key}.md", ancien, current_user.username)
+                change = ancien != content
+                if change:
+                    historique.sauvegarder(f"{key}.md", ancien, current_user.username, edition=True, regrouper=seance)
             file.write_text(content, encoding="utf-8", newline="\n")
             commun.noter_visite(key, modifiee=True)
             if wants_json():
                 # Ctrl+S dans l'éditeur : on reste sur la page, avec la nouvelle version.
-                return jsonify(ok=True, version=str(file.stat().st_mtime_ns), url=url_for("wiki.page", path=key))
+                return jsonify(ok=True, version=str(file.stat().st_mtime_ns), url=url_for("wiki.page", path=key),
+                               seance="1" if change or seance else "")
             flash("Page enregistrée.", "success")
             return redirect(url_for("wiki.page", path=key))
     else:
@@ -769,7 +776,10 @@ def pdf_annotation():
         citation = f"> [!quote] {source}\n> {texte}\n> — [[{vault.link_for(pdf_)}]]\n"
         if fichier.is_file():
             ancien = fichier.read_text(encoding="utf-8")
-            historique.sauvegarder(fichier.relative_to(vault.root).as_posix(), ancien, current_user.username)
+            # Ajout à la fin : l'ancien texte reste entier dans la page, les citations prises
+            # d'affilée peuvent donc partager une version.
+            historique.sauvegarder(fichier.relative_to(vault.root).as_posix(), ancien, current_user.username,
+                                   edition=True, regrouper=True)
             nouveau = ancien.rstrip("\n") + "\n\n" + citation
             titre = note.title if note is not None else cle.rsplit("/", 1)[-1]
         else:

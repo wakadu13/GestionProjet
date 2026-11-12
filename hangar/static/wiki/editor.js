@@ -34,6 +34,9 @@
   const toolbar = form.querySelector(".toolbar");
   const footer = form.querySelector(".editor-footer");
   const versionInput = form.querySelector("[name=version]");
+  // « 1 » une fois qu'un changement a été enregistré depuis cet éditeur : le serveur regroupe
+  // alors dans l'historique les enregistrements rapprochés de la même séance.
+  const seanceInput = form.querySelector("[name=seance]");
   const csrf = form.querySelector("[name=_csrf]").value;
   const stateLabel = form.querySelector("[data-state]");
   const countLabel = form.querySelector("[data-count]");
@@ -1223,6 +1226,7 @@
     const data = new FormData();
     data.append("_csrf", csrf);
     data.append("version", versionInput.value);
+    if (seanceInput) data.append("seance", seanceInput.value);
     data.append("content", doc.toString());
     status("Enregistrement…");
     saving = fetch(form.action, { method: "POST", body: data, headers: { Accept: "application/json" } })
@@ -1230,6 +1234,7 @@
         const json = await response.json().catch(() => ({}));
         if (response.ok && json.version) {
           versionInput.value = json.version;
+          if (seanceInput) seanceInput.value = json.seance || "";
           savedDoc = doc;
           oublierBrouillon();
           conflict = false;
