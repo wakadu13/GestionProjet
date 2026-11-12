@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
-{% block title %}Mon profil{% endblock %}
-{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('settings', 15) }} Paramètres</span></div></div>{% endblock %}
+{% block title %}Profil{% endblock %}
+{% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('user', 15) }} Profil</span></div></div>{% endblock %}
 {% block content %}
 <div class="settings">
-  {% include "settings/_nav.html" %}
   <div class="settings-body">
     {% if must_change or current_user.must_change_password %}
     <div class="danger-zone" style="border-color:var(--warning);background:var(--warning-bg)"><b>{{ icon('key', 15) }} Choisis un nouveau mot de passe</b><p class="help mt-0" style="margin-top:4px">Ton compte utilise un mot de passe provisoire. Modifie-le ci-dessous pour continuer.</p></div>

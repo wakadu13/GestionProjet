@@ -52,7 +52,7 @@
   choix.addEventListener("change", () => {
     const trouvee = images.find((i) => i.lien === choix.value.trim());
     if (!trouvee) {
-      if (choix.value.trim()) dire("Image inconnue : choisissez-la dans la liste proposée.", "erreur");
+      if (choix.value.trim()) dire("Image inconnue : choisis-la dans la liste proposée.", "erreur");
       return;
     }
     imageRef = trouvee.lien;
@@ -230,11 +230,11 @@
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!imageRef && !fichier) return dire("Choisissez d'abord une image.", "erreur");
-    if (!zones.length) return dire("Tracez au moins une zone sur l'image.", "erreur");
+    if (!imageRef && !fichier) return dire("Choisis d'abord une image.", "erreur");
+    if (!zones.length) return dire("Trace au moins une zone sur l'image.", "erreur");
     const sansNom = zones.find((z) => !z.reponse.trim());
     if (sansNom) {
-      dire(`Nommez la zone ${zones.indexOf(sansNom) + 1} : ce qu'elle cache est la réponse de sa carte.`, "erreur");
+      dire(`Nomme la zone ${zones.indexOf(sansNom) + 1} : ce qu'elle cache est la réponse de sa carte.`, "erreur");
       choisie = sansNom;
       dessinerZones();
       dessinerListe(sansNom);

@@ -16,7 +16,7 @@
     {% endfor %}
   </div>
   <div class="header-actions">
-    <form method="get" class="flex gap-4">
+    <form method="get" class="flex wrap gap-4">
       {% if not project %}
       <select class="input input-sm" name="project" data-autosubmit style="width:auto;max-width:200px">
         <option value="">Tous les projets</option>
@@ -65,7 +65,7 @@
     {% endfor %}
   </div>
   {% else %}
-  <p class="muted small">Enregistre un bilan (par exemple chaque vendredi) pour garder une trace datée de l’avancement, avec vos faits marquants, difficultés et décisions. Les chiffres sont figés au moment de l’enregistrement.</p>
+  <p class="muted small">Enregistre un bilan (par exemple chaque vendredi) pour garder une trace datée de l’avancement, avec les faits marquants, difficultés et décisions de l’équipe. Les chiffres sont figés au moment de l’enregistrement.</p>
   {% endif %}
 </div>
 

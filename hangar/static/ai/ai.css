@@ -146,7 +146,7 @@ html.ai-fullpage .ai-panel { display: none !important; }
 .ai-tool { border: 0; background: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--text-3); cursor: pointer; flex: none; }
 .ai-tool:hover { background: var(--hover); color: var(--text); }
 .ai-hint { flex: 1; min-width: 0; font-size: 11.5px; color: var(--text-3); padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
-.ai-send { width: 30px; height: 30px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer; flex: none; transition: background .12s; }
+.ai-send { width: 30px; height: 30px; border-radius: 8px; border: 0; background: var(--accent); color: var(--on-accent, #fff); display: grid; place-items: center; cursor: pointer; flex: none; transition: background .12s; }
 .ai-send:hover { background: var(--accent-2); }
 .ai-send.stop { background: var(--text); color: var(--surface); }
 .ai-foot { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 6px; }

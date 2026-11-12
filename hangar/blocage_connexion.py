@@ -148,6 +148,25 @@ def bloques(now: datetime | None = None) -> list[dict]:
     return out
 
 
+def essais_restants(identifiant: str, ip: str, now: datetime | None = None) -> int:
+    """Mots de passe faux encore permis avant le blocage (le plus proche des deux plafonds).
+
+    Les identifiants inexistants comptent aussi (noter_echec) : le nombre ne révèle pas quels comptes existent."""
+    now = now or _maintenant()
+    depuis = now - DUREE
+    ligne = EchecConnexion.query.filter_by(identifiant=_cle(identifiant), ip=ip or "").first()
+    reste = LIMITE - ((ligne.echecs or 0) if ligne and ligne.dernier and ligne.dernier > depuis else 0)
+    if ip:
+        total = db.session.query(func.sum(EchecConnexion.echecs)).filter(
+            EchecConnexion.ip == ip, EchecConnexion.dernier > depuis).scalar()
+        reste = min(reste, LIMITE_IP - (total or 0))
+    return max(0, reste)
+
+
 def message(minutes: int) -> str:
+    """Message de la page de connexion pendant un blocage : il dit comment débloquer tout de suite."""
     return (f"Trop d’essais de mot de passe incorrects : connexion bloquée pendant encore {minutes} minute"
-            f"{'s' if minutes > 1 else ''}. Réessaie plus tard, ou demande à un administrateur de la débloquer.")
+            f"{'s' if minutes > 1 else ''}. Réessaie plus tard. Pour débloquer tout de suite : sur le PC qui fait "
+            f"tourner Hangar, ouvre une fenêtre de commande dans le dossier de Hangar et tape "
+            f"« uv run hangar connexions-debloquer ». Un administrateur peut aussi la débloquer depuis son "
+            f"profil (Connexions bloquées).")

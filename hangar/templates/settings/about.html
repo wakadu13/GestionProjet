@@ -4,7 +4,6 @@
 {% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><span class="current">{{ icon('help', 15) }} À propos</span></div></div>{% endblock %}
 {% block content %}
 <div class="settings">
-  {% include "settings/_nav.html" %}
   <div class="settings-body">
     <div class="flex gap-12 mb"><span class="auth-logo" style="margin:0"><span class="lg">{{ icon('plane', 20) }}</span></span><div><h2>Hangar {{ version }}</h2><div class="muted">Gestion de projet et d’équipe, 100 % locale — inspirée de Plane.</div></div></div>
     <div class="panel panel-b md">

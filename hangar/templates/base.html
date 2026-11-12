@@ -17,6 +17,7 @@
 {% set ep = request.endpoint or '' %}
 {% set agcfg = agenda_cfg() %}
 {% set nav = nav_section if nav_section is defined else section_of(ep) %}
+<a class="skip-link" href="#contenu">Aller au contenu</a>
 <div class="shell" data-section="{{ nav }}">
   <header class="topbar">
     <button class="btn btn-ghost btn-icon btn-sm tb-menu" type="button" data-sidebar-toggle title="Menu">{{ icon('menu', 16) }}</button>
@@ -28,11 +29,11 @@
       </button>
       <div class="menu left" style="width:240px">
         <div class="menu-h">@{{ current_user.username }}</div>
-        <a class="menu-item" href="{{ url_for('settings.profile') }}">{{ icon('user') }} Mon profil</a>
+        <a class="menu-item" href="{{ url_for('settings.profile') }}">{{ icon('user') }} Profil</a>
         {% if current_user.is_admin %}
         <a class="menu-item" href="{{ url_for('settings.workspace') }}">{{ icon('settings') }} Paramètres de l’espace</a>
         <a class="menu-item" href="{{ url_for('settings.backup') }}">{{ icon('database') }} Sauvegardes</a>
-        <a class="menu-item" href="{{ url_for('mail.settings') }}">{{ icon('mail') }} E-mails automatiques</a>
+        <a class="menu-item" href="{{ url_for('mail.settings') }}">{{ icon('mail') }} Envoi des e-mails</a>
         {% endif %}
         <a class="menu-item" href="{{ url_for('ai.reglages') }}">{{ icon('sparkle') }} Fournisseurs d’IA</a>
         {% if not current_user.is_guest %}<a class="menu-item" href="{{ url_for('mail.compose') }}">{{ icon('send') }} Écrire un e-mail</a>{% endif %}
@@ -70,7 +71,7 @@
       {% elif nav == 'reglages' %}{% include "partials/sidebar_reglages.html" %}
       {% else %}{% include "partials/sidebar_travail.html" %}{% endif %}
     </aside>
-    <main class="main">
+    <main class="main" id="contenu" tabindex="-1">
       {% block header %}{% endblock %}
       <div class="content {% block content_class %}{% endblock %}">{% block content %}{% endblock %}</div>
     </main>
@@ -84,9 +85,9 @@
 {% block auth %}{% endblock %}
 {% endif %}
 
-<div id="toasts">
+<div id="toasts" aria-live="polite">
   {% for cat, msg in get_flashed_messages(with_categories=true) %}
-  <div class="toast {{ cat if cat in ('success','error','info') else 'info' }}" data-flash>{{ icon('check-circle' if cat == 'success' else ('alert' if cat == 'error' else 'bell'), 16) }}<div>{{ msg }}</div></div>
+  <div class="toast {{ cat if cat in ('success','error','info') else 'info' }}" data-flash role="{{ 'alert' if cat == 'error' else 'status' }}">{{ icon('check-circle' if cat == 'success' else ('alert' if cat == 'error' else 'bell'), 16) }}<div>{{ msg }}</div></div>
   {% endfor %}
 </div>
 <script>
@@ -96,6 +97,7 @@ window.HANGAR = {
   me: {{ {"id": current_user.id, "username": current_user.username, "name": current_user.display_name, "theme": current_user.theme}|tojson }},
   projects: {{ picker_data()|tojson }},
   contextProject: {{ (pid_ctx or none)|tojson }},
+  nav: {{ {"newProject": none if current_user.is_guest else url_for('projects.new'), "urls": {"planning": url_for('planning.workspace'), "bilan": url_for('bilan.index'), "ai": url_for('ai.reglages'), "tokens": url_for('settings.tokens'), "workspace": url_for('settings.workspace') if current_user.is_admin else none, "backup": url_for('settings.backup') if current_user.is_admin else none, "mail": url_for('mail.settings') if current_user.is_admin else none}}|tojson }},
   agenda: {{ {"defaultReminder": agcfg.default_reminder, "channel": agcfg.channel, "hasEmail": agcfg.has_email, "createUrl": url_for('agenda.task_create'), "dayUrl": url_for('agenda.api_day'), "reminderDelete": url_for('agenda.reminder_delete', rid=0), "taskUrl": url_for('agenda.task_update', tid=0), "settingsUrl": url_for('agenda.settings')}|tojson }},
   {% endif %}
   ai: {{ ai_client_config()|tojson }},

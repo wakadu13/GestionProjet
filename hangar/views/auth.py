@@ -58,6 +58,9 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("agenda.dashboard"))
     ws = Workspace.get()
+    # L'erreur s'affiche dans la page, au-dessus du formulaire (et non dans une bulle qui disparaît),
+    # et l'identifiant saisi est gardé.
+    erreur, ident = None, ""
     if request.method == "POST":
         ident = (request.form.get("login") or "").strip().lower()
         password = request.form.get("password") or ""
@@ -65,10 +68,10 @@ def login():
         attente = blocage.bloque(ident, ip)  # trop d'échecs récents : pas d'essai (blocage_connexion.py)
         user = None if attente else User.query.filter(User.username == ident).first()
         if attente:
-            flash(blocage.message(attente), "error")
+            erreur = blocage.message(attente)
         elif user and user.check_password(password):
             if not user.active:
-                flash("Ce compte est désactivé. Contacte un administrateur.", "error")
+                erreur = "Ce compte est désactivé. Contacte un administrateur."
             else:
                 blocage.reussite(ident, ip)
                 login_user(user, remember=bool(request.form.get("remember")))
@@ -78,9 +81,16 @@ def login():
                 return redirect(nxt if is_safe_next(nxt) else url_for("agenda.dashboard"))
         else:
             blocage.noter_echec(ident, ip)
-            flash("Identifiant ou mot de passe incorrect.", "error")
+            erreur = "Identifiant ou mot de passe incorrect."
+            attente = blocage.bloque(ident, ip)
+            reste = blocage.essais_restants(ident, ip)
+            if attente:
+                erreur += " " + blocage.message(attente)
+            elif reste <= 3:
+                erreur += (f" Encore {reste} essai{'s' if reste > 1 else ''} avant un blocage de "
+                           f"{int(blocage.DUREE.total_seconds() // 60)} minutes.")
     accounts = User.query.filter_by(active=True).order_by(User.role, User.first_name, User.last_name).all()
-    return render_template("auth/login.html", ws=ws, accounts=accounts)
+    return render_template("auth/login.html", ws=ws, accounts=accounts, erreur=erreur, ident=ident)
 
 
 @bp.route("/signup", methods=["GET", "POST"])

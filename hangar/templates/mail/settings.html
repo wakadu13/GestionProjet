@@ -1,18 +1,17 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
-{% block title %}E-mails automatiques{% endblock %}
+{% block title %}Envoi des e-mails{% endblock %}
 {% block header %}
 <div class="page-header">
   {{ ui.mobile_toggle() }}
-  <div class="crumbs"><span class="current">{{ icon('mail', 15) }} E-mails automatiques</span></div>
+  <div class="crumbs"><span class="current">{{ icon('send', 15) }} Envoi des e-mails</span></div>
   <div class="header-actions"><a class="btn btn-sm btn-primary" href="{{ url_for('mail.compose') }}">{{ icon('send', 14) }} Écrire un e-mail</a></div>
 </div>
 {% endblock %}
 {% block content %}
 <div class="settings">
-  {% include "settings/_nav.html" %}
   <div class="settings-body">
-    <h2>E-mails automatiques</h2>
+    <h2>Envoi des e-mails</h2>
     <p class="help">Notifications, rappels d’échéance, récapitulatif hebdomadaire et bilan envoyés par e-mail aux membres qui ont renseigné une adresse.</p>
 
     <div class="stats mb">
@@ -98,7 +97,7 @@
     </div>
 
     <h2 id="members">Adresses des membres</h2>
-    <p class="help">Utilisées uniquement pour les e-mails (la connexion reste par identifiant). Chacun peut aussi la renseigner dans « Mon profil ».</p>
+    <p class="help">Utilisées uniquement pour les e-mails (la connexion reste par identifiant). Chacun peut aussi la renseigner dans Réglages › Profil.</p>
     <form method="post" class="panel mb-lg">
       {{ ui.csrf() }}<input type="hidden" name="action" value="members">
       <table class="table">

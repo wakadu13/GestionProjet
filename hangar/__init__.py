@@ -157,11 +157,18 @@ def _register_hooks(app: Flask) -> None:
     @app.errorhandler(400)
     @app.errorhandler(403)
     @app.errorhandler(404)
+    @app.errorhandler(405)
     @app.errorhandler(413)
     def _http_error(err):
+        description = getattr(err, "description", None)
+        if not description or description == getattr(type(err), "description", None):
+            # Texte anglais par défaut de Werkzeug (abort(403) sans explication) : on le remplace.
+            description = HTTP_MESSAGES.get(err.code, "La demande n’a pas abouti.")
+        # 405 : les méthodes acceptées, comme dans la réponse d'origine
+        headers = {"Allow": ", ".join(err.valid_methods)} if getattr(err, "valid_methods", None) else {}
         if request.path.startswith("/api/"):
-            return {"ok": False, "error": getattr(err, "description", str(err))}, err.code
-        return render_template("errors.html", error=err), err.code
+            return {"ok": False, "error": description}, err.code, headers
+        return render_template("errors.html", error=err, description=description), err.code, headers
 
     @app.errorhandler(500)
     def _server_error(err):
@@ -230,6 +237,16 @@ def _register_template_helpers(app: Flask) -> None:
             ctx["sidebar"] = _sidebar_data
             ctx["picker_data"] = _picker_data
         return ctx
+
+
+# Explication affichée quand une erreur n'en donne pas (les textes par défaut de Werkzeug sont en anglais).
+HTTP_MESSAGES = {
+    400: "La demande n’a pas pu être traitée. Recharge la page et réessaie.",
+    403: "Tu n’as pas accès à cette page ou à cette action. Demande à un administrateur si tu en as besoin.",
+    404: "Cette page n’existe pas ou plus. Vérifie l’adresse, ou repars de l’accueil.",
+    405: "Cette adresse ne s’ouvre pas directement : passe par le bouton prévu dans l’application.",
+    413: "Fichier trop volumineux.",
+}
 
 
 SECTIONS = {"agenda": "agenda", "wiki": "wiki", "qcm": "qcm", "ai": "ia", "settings": "reglages", "mail": "reglages"}

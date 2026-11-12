@@ -1,5 +1,5 @@
 {% import "macros.html" as ui with context %}
-<dialog class="modal" id="create-issue-modal">
+<dialog class="modal" id="create-issue-modal" aria-labelledby="ci-heading">
   <form method="post" action="{{ url_for('issues.create') }}" data-create-form>
     {{ ui.csrf() }}
     <input type="hidden" name="next" value="{{ request.full_path }}">
@@ -9,9 +9,9 @@
       <select class="input input-sm" name="project_id" data-ci-project style="width:auto;max-width:260px" required>
         {% for pid, p in picker_data().items() if p.editable or p.intake %}<option value="{{ pid }}" data-editable="{{ 1 if p.editable else 0 }}">{{ p.emoji }} {{ p.name }}</option>{% endfor %}
       </select>
-      <h2 data-ci-heading>Nouveau ticket</h2>
+      <h2 id="ci-heading" data-ci-heading>Nouveau ticket</h2>
       <span class="badge hide" data-ci-parent-badge>{{ icon('subissue', 12) }} sous-ticket</span>
-      <button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close>{{ icon('x') }}</button>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm close" data-close aria-label="Fermer" title="Fermer">{{ icon('x') }}</button>
     </div>
     <div class="modal-b">
       <input class="input input-lg input-bare" name="title" placeholder="Titre du ticket" required autocomplete="off" style="font-weight:600;margin-bottom:10px">

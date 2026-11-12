@@ -57,8 +57,8 @@ async function openReader(reader) {
     pdf = await pdfjsLib.getDocument({ url: src, wasmUrl: wasm, isEvalSupported: false, enableXfa: false }).promise;
   } catch (e) {
     statusLine.textContent = e && e.name === "PasswordException"
-      ? "Ce PDF est protégé par un mot de passe : téléchargez-le pour l'ouvrir."
-      : "Impossible d'afficher ce PDF (fichier abîmé ou illisible). Vous pouvez le télécharger.";
+      ? "Ce PDF est protégé par un mot de passe : télécharge-le pour l'ouvrir."
+      : "Impossible d'afficher ce PDF (fichier abîmé ou illisible). Tu peux le télécharger.";
     statusLine.classList.add("is-error");
     return;
   }

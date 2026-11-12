@@ -15,10 +15,11 @@
       {% endfor %}
     </div>
     {% endif %}
+    {% if erreur %}<div class="form-error" role="alert">{{ icon('alert', 16) }}<div>{{ erreur }}</div></div>{% endif %}
     <form method="post">
       {{ ui.csrf() }}
-      <div class="field"><label>Identifiant</label><input class="input" name="login" autofocus required autocomplete="username"></div>
-      <div class="field"><label>Mot de passe</label><input class="input" type="password" name="password" required autocomplete="current-password"></div>
+      <div class="field"><label for="login-ident">Identifiant</label><input class="input" id="login-ident" name="login" value="{{ ident or '' }}" {% if not ident %}autofocus{% endif %} required autocomplete="username"></div>
+      <div class="field"><label for="login-password">Mot de passe</label><input class="input" id="login-password" type="password" name="password" {% if ident %}autofocus{% endif %} required autocomplete="current-password"></div>
       <label class="checkbox mb"><input type="checkbox" name="remember" value="1" checked> Rester connecté</label>
       <button class="btn btn-primary w-full" style="height:38px">Se connecter</button>
     </form>
