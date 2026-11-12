@@ -178,8 +178,16 @@
   });
   document.addEventListener('submit', (e) => {
     const f = e.target;
-    if (f.dataset.confirm && !confirm(f.dataset.confirm)) e.preventDefault();
+    // Confirmation du formulaire (data-confirm) ou du seul bouton qui l'envoie (data-confirm-msg).
+    const msg = f.dataset.confirm || (e.submitter && e.submitter.dataset.confirmMsg);
+    if (msg && !confirm(msg)) e.preventDefault();
   }, true);
+  // Imprimer, revenir en arrière : sans attribut onclick ni lien « javascript: », que la politique de
+  // sécurité des pages (CSP) bloque.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-imprimer]')) { e.preventDefault(); window.print(); return; }
+    if (e.target.closest('[data-retour]') && history.length > 1) { e.preventDefault(); history.back(); }
+  });
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-toggle]');
     if (!t) return;

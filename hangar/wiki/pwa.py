@@ -9,6 +9,7 @@ application (``/qcm/…``), jamais touchée par ce service worker.
 from __future__ import annotations
 
 import json
+from urllib.parse import quote
 
 from flask import abort, jsonify, make_response, render_template, request, url_for
 
@@ -22,10 +23,11 @@ THEME = "#7852ee"
 
 
 def _statique(nom: str, versionne: bool = True) -> str:
-    """Adresse d'un fichier statique, telle que les gabarits l'écrivent (``?v=`` compris) : le cache du
-    service worker est indexé par l'adresse exacte."""
-    url = url_for("static", filename=nom)
-    return f"{url}?v={__version__}" if versionne else url
+    """Adresse d'un fichier statique, telle que les gabarits l'écrivent : ``url_for`` y ajoute l'empreinte
+    du fichier (``?v=…``, web.py). Le cache du service worker est indexé par l'adresse exacte ;
+    ``versionne=False`` pour un fichier demandé sans ``?v=`` (polices de KaTeX lues par sa feuille de
+    style, module et décodeurs de PDF.js importés par adresse relative)."""
+    return url_for("static", filename=nom) if versionne else url_for("static", filename=nom, v=None)
 
 
 def fichiers_lecteur_pdf() -> list[str]:
@@ -33,8 +35,8 @@ def fichiers_lecteur_pdf() -> list[str]:
     from pathlib import Path
     wasm = Path(__file__).resolve().parent.parent / "static" / "wiki" / "vendor" / "pdfjs" / "wasm"
     return [_statique("wiki/lecteur_pdf.js"), _statique("wiki/vendor/pdfjs/pdf.min.js", False),
-            _statique("wiki/vendor/pdfjs/pdf.worker.min.js", False),
-            _statique("wiki/vendor/pdfjs/pdf_viewer.min.css", False)] + sorted(
+            _statique("wiki/vendor/pdfjs/pdf.worker.min.js"),
+            _statique("wiki/vendor/pdfjs/pdf_viewer.min.css")] + sorted(
         _statique(f"wiki/vendor/pdfjs/wasm/{f.name}", False) for f in wasm.glob("*.wasm"))
 
 
@@ -42,16 +44,21 @@ def a_precharger() -> list[str]:
     """Ce que le service worker garde dès son installation : la page « hors connexion » et ce qu'il faut
     pour afficher une page du wiki (feuilles de style, scripts, formules, coloration du code, icônes)."""
     from pathlib import Path
+
+    from ..web import adresse_icones
+    from .views import vendor_wiki
     fonts = Path(__file__).resolve().parent.parent / "static" / "vendor" / "katex" / "fonts"
+    vendor = vendor_wiki()
     return [
-        url_for("wiki.hors_connexion"), url_for("wiki.manifeste"),
-        _statique("css/app.css"), _statique("js/app.js"), _statique("ai/ai.css"), _statique("ai/ai.js"),
+        url_for("wiki.hors_connexion"), url_for("wiki.manifeste"), adresse_icones(),
+        _statique("css/app.css"), _statique("js/app.js"), _statique("js/appareil.js"),
+        _statique("ai/ai.css"), _statique("ai/ai.js"),
         _statique("wiki/wiki.css"), _statique("wiki/wiki.js"), _statique("wiki/plein_ecran.js"),
         _statique("wiki/palette.js"), _statique("wiki/tuteur.js"), _statique("wiki/hors_ligne_wiki.js"),
-        _statique("wiki/icone-192.png", False), _statique("wiki/icone-512.png", False),
-        _statique("vendor/highlight/github.min.css", False), _statique("vendor/highlight/github-dark.min.css", False),
-        _statique("vendor/highlight/highlight.min.js", False),
-        _statique("vendor/katex/katex.min.css", False), _statique("vendor/katex/katex.min.js", False),
+        _statique("wiki/menu_wiki.js"),
+        _statique("wiki/icone-192.png"), _statique("wiki/icone-512.png"),
+        _statique("vendor/highlight/github.min.css"), _statique("vendor/highlight/github-dark.min.css"),
+        vendor["highlight/highlight.min.js"], vendor["katex/katex.min.css"], vendor["katex/katex.min.js"],
     ] + sorted(_statique(f"vendor/katex/fonts/{f.name}", False) for f in fonts.glob("*.woff2"))
 
 
@@ -76,9 +83,9 @@ def manifeste():
         "start_url": url_for("wiki.home"), "scope": "/", "display": "standalone",
         "background_color": "#ffffff", "theme_color": THEME, "lang": "fr",
         "icons": [
-            {"src": _statique("wiki/icone-192.png", False), "sizes": "192x192", "type": "image/png",
+            {"src": _statique("wiki/icone-192.png"), "sizes": "192x192", "type": "image/png",
              "purpose": "any maskable"},
-            {"src": _statique("wiki/icone-512.png", False), "sizes": "512x512", "type": "image/png",
+            {"src": _statique("wiki/icone-512.png"), "sizes": "512x512", "type": "image/png",
              "purpose": "any maskable"},
         ],
     }
@@ -94,10 +101,30 @@ def hors_connexion():
     return render_template("wiki/hors_connexion.html", cache=CACHE, theme_color=THEME)
 
 
+def _menus(arbre, dossier: str) -> list[str]:
+    """Adresses du menu de gauche (route wiki.menu_dossier) pour le dossier et tous ses sous-dossiers,
+    écrites exactement comme menu_wiki.js les demande (encodeURIComponent de data-menu-dossier, barre
+    finale comprise) : le service worker retrouve ainsi la copie gardée."""
+    noeud = arbre
+    for partie in dossier.split("/") if dossier else []:
+        noeud = next((f for f in noeud["folders"] if f["name"] == partie), None)
+        if noeud is None:
+            return []
+    base = url_for("wiki.menu_dossier")
+    urls = []
+    pile = [noeud] if dossier else list(noeud["folders"])
+    while pile:
+        n = pile.pop(0)
+        urls.append(base + "?dossier=" + quote(n["path"], safe="!~*'()"))  # comme encodeURIComponent
+        pile.extend(n["folders"])
+    return urls
+
+
 @bp.route("/hors-ligne/dossier.json")
 def dossier_hors_ligne():
     """Adresses à mettre en cache pour lire un dossier sans connexion : ses pages, images et PDF (et le
-    lecteur de PDF s'il y en a)."""
+    lecteur de PDF s'il y en a), plus le contenu du menu de gauche pour ce dossier et ses sous-dossiers
+    (chargé à la demande par menu_wiki.js : sans lui, on ne pourrait pas y naviguer hors ligne)."""
     vault = get_vault()
     dossier = request.args.get("dossier", "").replace("\\", "/").strip("/")
     prefixe = f"{dossier}/" if dossier else ""
@@ -113,4 +140,4 @@ def dossier_hors_ligne():
     if not pages and not fichiers:
         abort(404, description="Dossier introuvable ou vide")
     outils = fichiers_lecteur_pdf() if pdf else []
-    return jsonify(dossier=dossier, urls=pages + fichiers + outils, pages=len(pages), pdf=pdf, cache=CACHE)
+    return jsonify(dossier=dossier, urls=pages + fichiers + _menus(vault.tree, dossier) + outils, pages=len(pages), pdf=pdf, cache=CACHE)

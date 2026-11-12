@@ -49,5 +49,5 @@
 </div>
 {% include "agenda/_event_modal.html" %}
 {{ ag.page_data(data) }}
-{% if focus %}<script>window.AGENDA_FOCUS = {{ focus|tojson }};</script>{% endif %}
+{% if focus %}<script nonce="{{ csp_nonce() }}">window.AGENDA_FOCUS = {{ focus|tojson }};</script>{% endif %}
 {% endblock %}

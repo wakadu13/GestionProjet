@@ -37,7 +37,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
   const name = document.querySelector('[data-project-name]'), ident = document.querySelector('[data-project-ident]');
   let touched = !!ident.value;

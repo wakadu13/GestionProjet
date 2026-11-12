@@ -7,9 +7,9 @@
   <title>Hors connexion · Hangar</title>
   <link rel="manifest" href="{{ url_for('wiki.manifeste') }}">
   <link rel="icon" href="{{ url_for('static', filename='wiki/icone-192.png') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ version }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}">
-  <script src="{{ url_for('static', filename='wiki/hors_ligne_wiki.js') }}?v={{ version }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}">
+  <script src="{{ url_for('static', filename='wiki/hors_ligne_wiki.js') }}" defer></script>
 </head>
 <body class="hl-body">
   {# Page servie par le service worker du wiki quand une page n'est ni accessible ni en cache. Elle ne contient

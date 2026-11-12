@@ -1,7 +1,7 @@
 {# Composants des pages QCM #}
 
 {% macro styles(katex=False) %}
-<link rel="stylesheet" href="{{ url_for('static', filename='qcm/qcm.css') }}?v={{ version }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='qcm/qcm.css') }}">
 {% if katex %}<link rel="stylesheet" href="{{ url_for('static', filename='vendor/katex/katex.min.css') }}">{% endif %}
 {% endmacro %}
 

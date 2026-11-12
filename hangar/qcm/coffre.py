@@ -1,17 +1,15 @@
 """Accès au coffre (dossier du wiki) pour les QCM : liste des fichiers, noms valides, images.
 
-Le wiki est porté en parallèle dans `hangar.wiki` ; les QCM n'en dépendent pas : ce module
-recopie le strict nécessaire de `wiki/vault.py` de Revision (parcours du coffre avec un délai
-entre deux parcours, `invalider()`, `INVALID_NAME_RE`, `clean_key`, résolution d'une image par
-son chemin ou son nom, comme Obsidian). Quand le module wiki est là, `invalider()` le prévient
-aussi qu'un fichier vient d'être écrit.
+Ce module recopie le strict nécessaire de `wiki/vault.py` de Revision (`INVALID_NAME_RE`,
+`clean_key`, résolution d'une image par son chemin ou son nom, comme Obsidian). Le parcours du
+coffre (avec un délai entre deux parcours) et `invalider()` sont ceux du wiki
+(`hangar.wiki.vault`) : un seul parcours sert les pages et les QCM.
 """
 from __future__ import annotations
 
 import os
 import re
 import threading
-import time
 from pathlib import Path, PurePosixPath
 
 from flask import current_app
@@ -38,54 +36,27 @@ def clean_key(raw):
 
 
 def scan(root) -> tuple:
-    """(chemin relatif, date de modification, taille) des fichiers d'un dossier, dossiers cachés exclus."""
-    files = []
-    root = Path(root)
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS and not d.startswith(".")]
-        for filename in filenames:
-            if filename.startswith("."):
-                continue
-            full = Path(dirpath, filename)
-            try:
-                stat = full.stat()
-            except OSError:
-                continue
-            files.append((full.relative_to(root).as_posix(), stat.st_mtime_ns, stat.st_size))
-    return tuple(sorted(files))
+    """(chemin relatif, date de modification, taille) des fichiers d'un dossier, dossiers cachés exclus.
 
-
-_scan_lock = threading.Lock()
-_scans: dict = {}
-_generation = 0
+    Même parcours que le wiki (``hangar.wiki.vault.scan``, avec ``os.scandir``)."""
+    from hangar.wiki.vault import scan as scan_wiki  # import tardif : évite un cycle à l'import
+    return scan_wiki(root)
 
 
 def invalider() -> None:
     """Le prochain accès au coffre le relira (un fichier vient d'être écrit)."""
-    global _generation
-    with _scan_lock:
-        _generation += 1
-    try:  # le wiki garde son propre index du coffre
-        from hangar.wiki import vault as wiki_vault
-        getattr(wiki_vault, "invalider", lambda: None)()
-    except Exception:  # noqa: BLE001 — module wiki absent ou différent
-        pass
+    from hangar.wiki import vault as wiki_vault
+    wiki_vault.invalider()
 
 
 def signature(root) -> tuple:
-    """Fichiers d'un dossier (voir scan), parcouru au plus toutes les INTERVALLE secondes."""
-    maintenant = time.monotonic()
-    root = Path(root)
+    """Fichiers d'un dossier (voir scan), parcouru au plus toutes les QCM_VERIF_INTERVALLE secondes.
+
+    Le parcours est celui du wiki (``signature_coffre``) : après quelques secondes d'inactivité, une
+    page qui lit le wiki et les QCM ne parcourt plus le coffre qu'une fois."""
+    from hangar.wiki.vault import signature_coffre
     intervalle = float(current_app.config.get("QCM_VERIF_INTERVALLE", INTERVALLE))
-    with _scan_lock:
-        c = _scans.get(root)
-        if c is not None and c["generation"] == _generation and maintenant - c["quand"] < intervalle:
-            return c["signature"]
-        generation = _generation
-    sig = scan(root) if root.is_dir() else ()
-    with _scan_lock:
-        _scans[root] = {"signature": sig, "quand": maintenant, "generation": generation}
-    return sig
+    return signature_coffre(root, intervalle=intervalle, suivre_ecritures=False)
 
 
 # ---------------------------------------------------------------------------

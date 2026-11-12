@@ -3,7 +3,7 @@
 {% set nav_section = "reglages" %}
 {% import "macros.html" as ui with context %}
 {% block title %}Erreurs du serveur{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}">{% endblock %}
 {% block header %}
 <div class="page-header">{{ ui.mobile_toggle() }}
   <div class="crumbs"><span>{{ icon('settings', 15) }} Réglages</span><span class="sep">{{ icon('chevron-right', 14) }}</span><span class="current">Erreurs du serveur</span></div>

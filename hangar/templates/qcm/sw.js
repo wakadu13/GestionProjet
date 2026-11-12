@@ -4,34 +4,38 @@
 // - Garde les images des questions (/qcm/fichiers/, /fichiers/, images de « Mon espace »).
 // - Envoie les réponses en attente dès que la connexion revient (Background Sync).
 // - Affiche le rappel quotidien de révision (notifications web, qcm/rappels.py).
-importScripts("{{ url_for('static', filename='qcm/qcm_attente.js') }}?v={{ version }}");
+// Les fichiers statiques portent l'empreinte de leur contenu (?v=…, voir web.py) : une adresse
+// versionnée est servie depuis le cache d'abord, sans aller-retour avec le serveur.
+importScripts("{{ url_for('static', filename='qcm/qcm_attente.js') }}");
 
 const VERSION = "{{ version }}";
-const CACHE_COQUILLE = "hangar-qcm-coquille-" + VERSION; // remplacé à chaque version de Hangar
 const CACHE_DONNEES = QcmAttente.CACHE;                  // images des questions, gardées
 const COQUILLE = "{{ url_for('qcm.hors_ligne') }}";
 const MANIFESTE = "{{ url_for('qcm.manifeste') }}";
 const ICONE = "{{ url_for('static', filename='qcm/icone-192.png') }}";
-const V = "?v=" + VERSION;
 const A_PRECHARGER = [
   COQUILLE,
   MANIFESTE,
   ICONE,
-  "{{ url_for('static', filename='css/app.css') }}" + V,
-  "{{ url_for('static', filename='qcm/qcm.css') }}" + V,
-  "{{ url_for('static', filename='qcm/hors_ligne.css') }}" + V,
-  "{{ url_for('static', filename='qcm/qcm_attente.js') }}" + V,
-  "{{ url_for('static', filename='qcm/fsrs.js') }}" + V,
-  "{{ url_for('static', filename='qcm/quiz.js') }}" + V,
-  "{{ url_for('static', filename='qcm/quiz_langue.js') }}" + V,
-  "{{ url_for('static', filename='qcm/langues_hors_ligne.js') }}" + V,
-  "{{ url_for('static', filename='qcm/qcm_hors_ligne.js') }}" + V,
+  "{{ adresse_icones() }}",
+  "{{ url_for('static', filename='css/app.css') }}",
+  "{{ url_for('static', filename='qcm/qcm.css') }}",
+  "{{ url_for('static', filename='qcm/hors_ligne.css') }}",
+  "{{ url_for('static', filename='qcm/qcm_attente.js') }}",
+  "{{ url_for('static', filename='qcm/fsrs.js') }}",
+  "{{ url_for('static', filename='qcm/quiz.js') }}",
+  "{{ url_for('static', filename='qcm/quiz_langue.js') }}",
+  "{{ url_for('static', filename='qcm/langues_hors_ligne.js') }}",
+  "{{ url_for('static', filename='qcm/qcm_hors_ligne.js') }}",
   "{{ url_for('static', filename='vendor/katex/katex.min.css') }}",
   "{{ url_for('static', filename='vendor/katex/katex.min.js') }}",
 {%- for f in polices_katex %}
-  "{{ url_for('static', filename='vendor/katex/fonts/' ~ f) }}",
+  "{{ url_for('static', filename='vendor/katex/fonts/' ~ f, v=None) }}",
 {%- endfor %}
 ];
+// Coquille remplacée dès qu'un de ses fichiers change (même sans nouvelle version de Hangar).
+const EMPREINTE = A_PRECHARGER.join("|").split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36);
+const CACHE_COQUILLE = "hangar-qcm-coquille-" + VERSION + "-" + EMPREINTE;
 // Réponses de l'API hors ligne : jamais mises en cache (les données sont dans IndexedDB).
 const API = COQUILLE;
 const IMAGES = ["/qcm/fichiers/", "/fichiers/", "/qcm/mon-espace/images/"];
@@ -89,6 +93,25 @@ async function reseauPuisCache(request, nomCache, cleCache) {
   }
 }
 
+// Fichier versionné (?v=…) : son contenu ne change jamais, la copie en cache suffit. Sans réseau ni copie
+// exacte, une autre version du même fichier (page gardée avant une mise à jour).
+async function cacheDabord(request, nomCache) {
+  const enCache = await caches.match(request);
+  if (enCache) return enCache;
+  try {
+    const reponse = await fetch(request);
+    if (reponse.ok && !reponse.redirected && reponse.type !== "opaqueredirect") {
+      const cache = await caches.open(nomCache);
+      await cache.put(request, reponse.clone());
+    }
+    return reponse;
+  } catch (e) {
+    const autre = await caches.match(request, { ignoreSearch: true });
+    if (autre) return autre;
+    throw e;
+  }
+}
+
 // Page hors ligne et autres pages des QCM : si le réseau ne répond pas, la page hors ligne en
 // cache prend le relais.
 async function navigation(request) {
@@ -113,7 +136,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname.startsWith(API) && url.pathname !== COQUILLE) return;
-  if (url.pathname.startsWith("/static/") || url.pathname === MANIFESTE) {
+  if ((url.pathname.startsWith("/static/") || url.pathname === "/icones.svg") && url.searchParams.has("v")) {
+    event.respondWith(cacheDabord(request, CACHE_COQUILLE));
+  } else if (url.pathname.startsWith("/static/") || url.pathname === MANIFESTE) {
     event.respondWith(reseauPuisCache(request, CACHE_COQUILLE));
   } else if (IMAGES.some((p) => url.pathname.startsWith(p))) {
     event.respondWith(reseauPuisCache(request, CACHE_DONNEES));

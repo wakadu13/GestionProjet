@@ -240,6 +240,9 @@ a.stat:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)
 .menu-item .ic { color: var(--text-3); }
 .menu-item.danger .ic { color: var(--danger); }
 .menu-sep { height: 1px; background: var(--border); margin: 5px 0; }
+.menu-item.menu-coche { white-space: normal; align-items: flex-start; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.menu-item.menu-coche input { margin: 2px 0 0; flex: none; }
+.deconnexion-page .menu-item { padding-left: 0; }
 .menu-h { padding: 6px 9px 3px; font-size: 11px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .panel-menu { width: 330px; max-height: 70vh; overflow: auto; padding: 0; }
 .panel-menu .pm-section { padding: 8px 10px; border-bottom: 1px solid var(--border-2); }

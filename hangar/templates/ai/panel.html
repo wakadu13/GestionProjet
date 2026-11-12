@@ -1,7 +1,7 @@
 {# Panneau latéral de l'assistant IA (façon Plane AI), ouvert avec le bouton « Assistant IA » ou Ctrl+J #}
 {% set aicfg = ai_client_config() %}
 <aside class="ai-panel" id="ai-panel" aria-label="Assistant IA">
-  <link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}">
   <div class="ai-head">
     <b>{{ icon('sparkle', 15) }}<span class="ai-head-t">Assistant IA</span>{% if aicfg.enabled %}<span class="ai-model" title="{{ aicfg.provider }} · {{ aicfg.model }}">{{ aicfg.modelLabel }}</span>{% endif %}</b>
     {% if aicfg.enabled %}
@@ -15,4 +15,4 @@
     {% include "ai/_chat.html" %}
   </div>
 </aside>
-<script src="{{ url_for('static', filename='ai/ai.js') }}?v={{ version }}" defer></script>
+<script src="{{ url_for('static', filename='ai/ai.js') }}" defer></script>

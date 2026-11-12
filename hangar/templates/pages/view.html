@@ -32,7 +32,7 @@
         <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='duplicate') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('copy') }} Dupliquer</button></form>
         {% endif %}
         {% if can_edit %}<button class="menu-item" type="button" data-open="move-page-modal">{{ icon('move') }} Déplacer sous une autre page…</button>{% endif %}
-        <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer / PDF</a>
+        <button class="menu-item" type="button" data-imprimer>{{ icon('printer') }} Imprimer / PDF</button>
         {% if is_owner %}
         <div class="menu-sep"></div>
         <form method="post" action="{{ url_for('pages.action', pid=project.id, page_id=page.id, action='archive') }}">{{ ui.csrf() }}<button class="menu-item">{{ icon('refresh' if page.archived_at else 'archive') }} {{ 'Restaurer' if page.archived_at else 'Archiver' }}</button></form>

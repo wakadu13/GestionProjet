@@ -216,6 +216,6 @@
 <script type="application/json" id="tag-choices">{{ tag_choices|tojson }}</script>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='wiki/vendor/codemirror.min.js') }}?v={{ version }}" defer></script>
-<script src="{{ url_for('static', filename='wiki/editor.js') }}?v={{ version }}" defer></script>
+<script src="{{ url_for('static', filename='wiki/vendor/codemirror.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='wiki/editor.js') }}" defer></script>
 {% endblock %}

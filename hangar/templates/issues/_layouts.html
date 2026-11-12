@@ -463,7 +463,7 @@
     <a class="menu-item" href="{{ url_for('issues.export', pid=project.id, fmt='json') }}?{{ request.query_string.decode() }}">{{ icon('code') }} JSON</a>
     <div class="menu-sep"></div>
     <a class="menu-item" href="{{ url_for('issues.ical', pid=project.id) }}">{{ icon('calendar') }} Calendrier (.ics)</a>
-    <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer</a>
+    <button class="menu-item" type="button" data-imprimer>{{ icon('printer') }} Imprimer</button>
   </div>
 </div>
 {% endmacro %}

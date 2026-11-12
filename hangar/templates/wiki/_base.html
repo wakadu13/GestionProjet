@@ -6,11 +6,11 @@
 <link rel="manifest" href="{{ url_for('wiki.manifeste') }}">
 <meta name="theme-color" content="#7852ee">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='wiki/icone-192.png') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/highlight/github.min.css') }}" data-theme-css="light">
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/highlight/github-dark.min.css') }}" data-theme-css="dark" media="not all">
-<script>window.WIKI = {{ {"vendor": url_for('static', filename='vendor/'), "editUrl": "", "sw": url_for('wiki.service_worker'), "cache": cache_hors_ligne}|tojson }};</script>
-<script src="{{ url_for('static', filename='wiki/wiki.js') }}?v={{ version }}" defer></script>
-<script src="{{ url_for('static', filename='wiki/plein_ecran.js') }}?v={{ version }}" defer></script>
+<script nonce="{{ csp_nonce() }}">window.WIKI = {{ {"vendor": url_for('static', filename='vendor/'), "fichiers": vendor_wiki(), "editUrl": "", "sw": url_for('wiki.service_worker'), "cache": cache_hors_ligne}|tojson }};</script>
+<script src="{{ url_for('static', filename='wiki/wiki.js') }}" defer></script>
+<script src="{{ url_for('static', filename='wiki/plein_ecran.js') }}" defer></script>
 {% block wiki_head %}{% endblock %}
 {% endblock %}
