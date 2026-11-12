@@ -33,7 +33,7 @@
       <div class="menu" style="width:220px">
         <a class="menu-item" href="{{ url_for('bilan.export_live', fmt='docx', pid=project.id if project else None, **request.args.to_dict()) }}">{{ icon('page') }} Word (.docx)</a>
         <a class="menu-item" href="{{ url_for('bilan.export_live', fmt='md', pid=project.id if project else None, **request.args.to_dict()) }}">{{ icon('hash') }} Markdown</a>
-        <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer / PDF</a>
+        <button class="menu-item" type="button" data-imprimer>{{ icon('printer') }} Imprimer / PDF</button>
       </div>
     </div>
     {% if can_save %}<button class="btn btn-sm btn-primary" type="button" data-open="save-bilan">{{ icon('archive', 14) }} Enregistrer ce bilan</button>{% endif %}

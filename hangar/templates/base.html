@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Hangar{% endblock %} · {{ ws.name if ws else 'Hangar' }}</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ version }}">
-  <script>try{if(localStorage.getItem('hangar.sbCollapsed')==='1')document.documentElement.classList.add('sb-collapsed');if(localStorage.getItem('hangar.ai')==='1')document.documentElement.classList.add('ai-open');}catch(e){}</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script nonce="{{ csp_nonce() }}">try{if(localStorage.getItem('hangar.sbCollapsed')==='1')document.documentElement.classList.add('sb-collapsed');if(localStorage.getItem('hangar.ai')==='1')document.documentElement.classList.add('ai-open');}catch(e){}</script>
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -39,10 +39,7 @@
         <a class="menu-item" href="{{ url_for('settings.tokens') }}">{{ icon('key') }} Jetons d’API</a>
         <a class="menu-item" href="{{ url_for('settings.about') }}">{{ icon('help') }} À propos</a>
         <div class="menu-sep"></div>
-        <form method="post" action="{{ url_for('auth.logout') }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <button class="menu-item danger">{{ icon('logout') }} Se déconnecter</button>
-        </form>
+        {% include "partials/deconnexion.html" %}
       </div>
     </div>
     <button class="tb-search" type="button" data-palette title="Rechercher (Ctrl+K)">{{ icon('search', 14) }}<span class="grow">Rechercher dans {{ ws.name }}…</span><kbd>Ctrl K</kbd></button>
@@ -89,7 +86,7 @@
   <div class="toast {{ cat if cat in ('success','error','info') else 'info' }}" data-flash>{{ icon('check-circle' if cat == 'success' else ('alert' if cat == 'error' else 'bell'), 16) }}<div>{{ msg }}</div></div>
   {% endfor %}
 </div>
-<script>
+<script nonce="{{ csp_nonce() }}">
 window.HANGAR = {
   csrf: {{ csrf_token()|tojson }},
   {% if current_user.is_authenticated %}
@@ -102,7 +99,8 @@ window.HANGAR = {
   urls: { search: "{{ url_for('api.search') }}", markdown: "{{ url_for('api.markdown_preview') }}", members: "{{ url_for('api.members') }}", lookup: "{{ url_for('api.lookup') }}", theme: "{{ url_for('api.theme') }}", notif: "{{ url_for('api.notifications_summary') }}", newProject: "{{ url_for('projects.new') }}", home: "{{ url_for('agenda.dashboard') }}", projectsHome: "{{ url_for('home.index') }}", calendar: "{{ url_for('agenda.calendar') }}", tasks: "{{ url_for('agenda.tasks') }}", imports: "{{ url_for('agenda.imports') }}", myIssues: "{{ url_for('home.workspace_issues') }}", notifications: "{{ url_for('home.notifications') }}", analytics: "{{ url_for('analytics.index') }}", team: "{{ url_for('team.index') }}", projects: "{{ url_for('projects.index') }}", workload: "{{ url_for('team.workload') }}", profile: "{{ url_for('settings.profile') }}" }
 };
 </script>
-<script src="{{ url_for('static', filename='js/app.js') }}?v={{ version }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% if current_user.is_authenticated %}<script src="{{ url_for('static', filename='js/appareil.js') }}" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

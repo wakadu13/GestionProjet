@@ -167,5 +167,5 @@
 
 {# Données des fenêtres de détail #}
 {% macro page_data(data) %}
-<script>window.AGENDA = {{ data|tojson }};</script>
+<script nonce="{{ csp_nonce() }}">window.AGENDA = {{ data|tojson }};</script>
 {% endmacro %}

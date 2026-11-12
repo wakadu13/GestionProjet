@@ -72,7 +72,7 @@
     <button class="btn btn-sm btn-ghost" type="button" data-pl-arrows title="Afficher / masquer les dépendances">{{ icon('link', 14) }} Dépendances</button>
     <button class="btn btn-sm btn-ghost btn-icon" type="button" data-pl-collapse-all title="Tout replier / déplier">{{ icon('chevron-up', 15) }}</button>
     <button class="btn btn-sm" type="button" data-pl-today>{{ icon('target', 14) }} Aujourd’hui</button>
-    <button class="btn btn-sm btn-ghost btn-icon" type="button" onclick="window.print()" title="Imprimer / enregistrer en PDF (astuce : échelle « Mois » et format paysage)">{{ icon('printer', 15) }}</button>
+    <button class="btn btn-sm btn-ghost btn-icon" type="button" data-imprimer title="Imprimer / enregistrer en PDF (astuce : échelle « Mois » et format paysage)">{{ icon('printer', 15) }}</button>
     {% if project %}<a class="btn btn-sm btn-ghost btn-icon" href="{{ url_for('issues.index', pid=project.id, layout='gantt') }}" title="Vue Gantt de la liste des tickets">{{ icon('layers', 15) }}</a>{% endif %}
   </div>
 </div>

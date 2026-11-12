@@ -2,7 +2,7 @@
 {% import "macros.html" as ui with context %}
 {% import "workgraph/_ui.html" as wg with context %}
 {% block title %}{{ ini.name }} · Initiatives{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}">{% endblock %}
 {% block content_class %}flush{% endblock %}
 {% block header %}
 <div class="page-header">
@@ -299,4 +299,4 @@
 {% endif %}
 {% endblock %}
 
-{% block scripts %}<script src="{{ url_for('static', filename='workgraph/workgraph.js') }}?v={{ version }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='workgraph/workgraph.js') }}"></script>{% endblock %}

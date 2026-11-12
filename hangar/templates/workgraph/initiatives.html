@@ -2,7 +2,7 @@
 {% import "macros.html" as ui with context %}
 {% import "workgraph/_ui.html" as wg with context %}
 {% block title %}Initiatives{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}">{% endblock %}
 {% set base = {'layout': layout if layout != 'list' else None, 'sort': sort if sort != 'status' else None, 'q': q or None, 'mine': 1 if mine else None} %}
 {% block header %}
 <div class="page-header">

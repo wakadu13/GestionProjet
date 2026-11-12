@@ -47,6 +47,7 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
         WIKI_HOME=os.environ.get("HANGAR_WIKI_HOME", "Accueil"),
         MAX_CONTENT_LENGTH=50 * 1024 * 1024,
         SESSION_COOKIE_SAMESITE="Lax",
+        REMEMBER_COOKIE_SAMESITE="Lax",  # cookie « Rester connecté » : pas envoyé depuis un autre site
         REMEMBER_COOKIE_DURATION=60 * 60 * 24 * 30,
         TESTING=testing,
         JSON_AS_ASCII=False,
@@ -72,6 +73,8 @@ def create_app(data_dir: str | os.PathLike | None = None, testing: bool = False)
         u = db.session.get(models.User, int(uid))
         return u if u and u.active else None
 
+    from . import web
+    web.init_app(app)  # sécurité, cache des fichiers statiques, icônes, compression (avant les blueprints)
     _register_blueprints(app)
     _register_template_helpers(app)
     _register_hooks(app)
@@ -132,7 +135,7 @@ def _register_hooks(app: Flask) -> None:
 
     @app.before_request
     def _setup_and_csrf():
-        if request.endpoint == "static":
+        if request.endpoint in ("static", "icones"):
             return None
         if not app.config.get("_HAS_USERS"):
             if db.session.query(User.id).first() is None:

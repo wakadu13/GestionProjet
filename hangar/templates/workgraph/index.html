@@ -2,7 +2,7 @@
 {% import "macros.html" as ui with context %}
 {% import "workgraph/_ui.html" as wg with context %}
 {% block title %}Workgraph{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='workgraph/workgraph.css') }}">{% endblock %}
 {% block content_class %}flush{% endblock %}
 {% set keep = {'tab': tab if tab != 'initiative' else None, 'group': group if tab == 'team' and group != 'lead' else None, 'status': f.status or None, 'health': f.health or None, 'hide_closed': 1 if f.hide_closed else None, 'mine': 1 if f.mine else None} %}
 {% block header %}
@@ -189,4 +189,4 @@
 {% endif %}
 {% endblock %}
 
-{% block scripts %}<script src="{{ url_for('static', filename='workgraph/workgraph.js') }}?v={{ version }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='workgraph/workgraph.js') }}"></script>{% endblock %}

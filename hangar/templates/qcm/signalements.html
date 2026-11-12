@@ -62,4 +62,4 @@
   {% endif %}
 </div>
 {% endblock %}
-{% block scripts %}{{ qm.katex_js() }}<script src="{{ url_for('static', filename='qcm/qcm_math.js') }}?v={{ version }}" defer></script>{% endblock %}
+{% block scripts %}{{ qm.katex_js() }}<script src="{{ url_for('static', filename='qcm/qcm_math.js') }}" defer></script>{% endblock %}

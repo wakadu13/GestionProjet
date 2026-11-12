@@ -533,24 +533,44 @@ class Vault:
 
 
 def scan(root):
-    """Liste (chemin relatif, date de modification, taille) des fichiers du coffre."""
+    """Liste (chemin relatif, date de modification, taille) des fichiers du coffre.
+
+    Parcours avec ``os.scandir`` et des chaînes (pas un ``Path`` par fichier) : plusieurs fois plus
+    rapide qu'``os.walk`` + ``Path.stat()``, et sous Windows ``DirEntry.stat()`` ne refait pas d'appel
+    système. Même résultat qu'avant : dossiers cachés et ``IGNORED_DIRS`` exclus, liens vers un dossier
+    non suivis, fichiers cachés ou illisibles ignorés. Partagé par le wiki et les QCM (``qcm/coffre.py``).
+    """
     files = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS and not d.startswith(".")]
-        for filename in filenames:
-            if filename.startswith("."):
-                continue
-            full = Path(dirpath, filename)
-            try:
-                stat = full.stat()
-            except OSError:
-                continue
-            files.append((full.relative_to(root).as_posix(), stat.st_mtime_ns, stat.st_size))
+    pile = [("", os.fspath(root))]
+    while pile:
+        prefixe, dossier = pile.pop()
+        try:
+            entrees = os.scandir(dossier)
+        except OSError:
+            continue
+        with entrees:
+            for entree in entrees:
+                nom = entree.name
+                if nom.startswith("."):
+                    continue
+                try:
+                    est_dossier = entree.is_dir()
+                except OSError:
+                    est_dossier = False
+                if est_dossier:
+                    if nom not in IGNORED_DIRS and not entree.is_symlink():
+                        pile.append((f"{prefixe}{nom}/", entree.path))
+                    continue
+                try:
+                    stat = entree.stat()
+                except OSError:
+                    continue
+                files.append((prefixe + nom, stat.st_mtime_ns, stat.st_size))
     return tuple(sorted(files))
 
 
 # Détection des changements du coffre. Parcourir tout le coffre à chaque requête
-# coûte (deux fois : pages et QCM) ; le parcours est donc fait au plus toutes les
+# coûte ; le parcours, partagé par les pages et les QCM, est donc fait au plus toutes les
 # WIKI_VERIF_INTERVALLE secondes. Les écritures faites par le wiki lui-même sont
 # vues tout de suite : pendant une requête POST le coffre est toujours relu
 # (crochets de requête du blueprint, voir views.py), et invalider() force le prochain parcours (après
@@ -579,15 +599,19 @@ class toujours_verifier:
         invalider()
 
 
-def signature_coffre(root):
+def signature_coffre(root, intervalle=None, suivre_ecritures=True):
     """Liste (chemin, date, taille) des fichiers du coffre, parcourue au plus toutes les
-    WIKI_VERIF_INTERVALLE secondes (partagée par les pages et les QCM)."""
-    intervalle = float(_config("WIKI_VERIF_INTERVALLE", 2.0))
+    WIKI_VERIF_INTERVALLE secondes. Un seul parcours, partagé par les pages et les QCM : les QCM
+    (``qcm/coffre.signature``) passent leur propre intervalle et ``suivre_ecritures=False`` (pendant
+    une requête qui écrit, seul le wiki relit le coffre à chaque accès)."""
+    if intervalle is None:
+        intervalle = float(_config("WIKI_VERIF_INTERVALLE", 2.0))
     maintenant = time.monotonic()
     root = Path(root)
+    forcer = suivre_ecritures and getattr(_local, "forcer", 0)
     with _scan_lock:
         c = _scans.get(root)
-        if (c is not None and c["generation"] == _generation and not getattr(_local, "forcer", 0)
+        if (c is not None and c["generation"] == _generation and not forcer
                 and maintenant - c["quand"] < intervalle):
             return c["signature"]
         generation = _generation

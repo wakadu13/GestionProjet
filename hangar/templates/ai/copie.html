@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
 {% block title %}Corriger ma copie{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}?v={{ version }}"><link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='wiki/wiki.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}">{% endblock %}
 {% block header %}
 <div class="page-header">
   {{ ui.mobile_toggle() }}
@@ -33,4 +33,4 @@
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='ai/revision.js') }}?v={{ version }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ai/revision.js') }}" defer></script>{% endblock %}

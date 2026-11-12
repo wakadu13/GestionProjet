@@ -14,7 +14,7 @@
   {% if sb.can_edit %}<a class="btn btn-sm" href="{{ url_for('wiki.new') }}" title="Créer une page">{{ icon('plus', 14) }} Nouvelle page</a>{% endif %}
   <a class="btn btn-sm btn-icon" href="{{ url_for('wiki.search') }}" title="Rechercher dans le wiki">{{ icon('search', 14) }}</a>
 </div>
-<nav class="sb-scroll wiki-sb">
+<nav class="sb-scroll wiki-sb" data-menu-url="{{ url_for('wiki.menu_dossier') }}">
   <a class="sb-link {% if ep == 'wiki.home' %}active{% endif %}" href="{{ url_for('wiki.home') }}">{{ icon('home') }} Accueil</a>
   <a class="sb-link {% if ep == 'wiki.search' %}active{% endif %}" href="{{ url_for('wiki.search') }}">{{ icon('search') }} Recherche</a>
   <a class="sb-link {% if ep == 'wiki.sommaire' %}active{% endif %}" href="{{ url_for('wiki.sommaire') }}">{{ icon('wiki-list-tree') }} Sommaire <span class="wiki-count">{{ sb.total }}</span></a>
@@ -69,3 +69,4 @@
     <a class="sb-link" href="{{ url_for('wiki.hors_connexion') }}" title="Pages lisibles sans connexion sur cet appareil">{{ icon('download') }} Hors ligne</a>
   </div>
 </nav>
+<script src="{{ url_for('static', filename='wiki/menu_wiki.js') }}" defer></script>

@@ -125,7 +125,16 @@ def _cache_prive(response):
 @bp.app_context_processor
 def _gabarits():
     return {"wiki_sidebar": commun.sidebar_data, "wiki_icone": commun.icone, "cache_hors_ligne": "hangar-wiki-v1",
-            "erreurs_ouvertes": erreurs.ouvertes}
+            "erreurs_ouvertes": erreurs.ouvertes, "vendor_wiki": vendor_wiki}
+
+
+# Bibliothèques chargées à la demande par wiki.js (diagrammes, coloration, formules) : leurs adresses
+# versionnées (?v=…, gardées un an) sont données au script, et préchargées par le service worker.
+VENDOR_WIKI = ("mermaid/mermaid.min.js", "highlight/highlight.min.js", "katex/katex.min.js", "katex/katex.min.css")
+
+
+def vendor_wiki() -> dict:
+    return {nom: url_for("static", filename=f"vendor/{nom}") for nom in VENDOR_WIKI}
 
 
 # Panneau IA : la page du wiki affichée lui est décrite (texte Markdown, titre, adresse).
@@ -236,13 +245,18 @@ def _note_page(vault, note):
     backlinks = sorted(vault.backlinks.get(note.key.lower(), ()), key=lambda n: n.title.lower())
     fiche = vault.notes.get(note.path.with_name(f"{note.path.stem} (Fiche)").with_suffix("").as_posix().lower())
     mots = len(re.findall(r"\w+", note.clean_body))
-    commun.noter_visite(note.key)
-    edition = can_edit()
+    # « ⤓ Hors ligne » : page gardée sur l'appareil, pas lue ; ni « Récents », ni QCM, ni tuteur.
+    complete = not commun.prechargement()
+    if complete:
+        commun.noter_visite(note.key)
+    edition = can_edit() and complete
     return render("wiki/page.html", vault=vault, note=note, content=content, toc=toc, backlinks=backlinks,
                   fiche=fiche, favori=commun.est_favori(note), mots=mots, lecture=max(1, round(mots / 220)),
                   proprietes=proprietes(note), crumbs=fil_ariane(note.folders), icone=commun.icone(note),
-                  qcm_page=_qcm_de_la_page(note), cartes=_cartes_de_la_page(vault, note) if edition else None,
-                  tuteur=_tuteur_de_la_page(note), perimee=note.path.as_posix() in vault.illisibles,
+                  qcm_page=_qcm_de_la_page(note) if complete else [],
+                  cartes=_cartes_de_la_page(vault, note) if edition else None,
+                  tuteur=_tuteur_de_la_page(note) if complete else None,
+                  perimee=note.path.as_posix() in vault.illisibles,
                   fiche_en_cours=edition and fiche is None and commun.ai_dispo() and _fiche_en_cours(note))
 
 
@@ -268,6 +282,22 @@ def page(path):
         return render("wiki/missing.html", vault=vault, name=path, filename=f"{path}.md", backlinks=backlinks,
                       can_create=clean_key(path) is not None, crumbs=fil_ariane(path.split("/")[:-1])), 404
     return _note_page(vault, note)
+
+
+@bp.route("/menu-wiki/")
+def menu_dossier():
+    """Contenu d'un dossier du menu de gauche (sous-dossiers, pages, PDF), chargé à son ouverture par
+    menu_wiki.js : chaque page n'écrit que les dossiers de premier niveau et la branche de la page
+    affichée, au lieu de tout le coffre (gardé hors ligne, le menu complet pesait 200 Ko par page)."""
+    chemin = request.args.get("dossier", "").replace("\\", "/").strip("/")
+    noeud = get_vault().tree
+    parties = chemin.split("/") if chemin else []
+    for partie in parties:
+        noeud = next((f for f in noeud["folders"] if f["name"] == partie), None)
+        if noeud is None:
+            abort(404, description="Dossier introuvable")
+    return render_template("wiki/_menu_dossier.html", node=noeud, depth=len(parties),
+                           sb={"ouverts": set(), "note": None, "attachment": None})
 
 
 @bp.route("/favoris-wiki/<path:path>", methods=["POST"])

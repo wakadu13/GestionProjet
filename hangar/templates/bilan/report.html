@@ -16,7 +16,7 @@
       <div class="menu" style="width:220px">
         <a class="menu-item" href="{{ url_for('bilan.export_report', rid=r.id, fmt='docx') }}">{{ icon('page') }} Word (.docx)</a>
         <a class="menu-item" href="{{ url_for('bilan.export_report', rid=r.id, fmt='md') }}">{{ icon('hash') }} Markdown</a>
-        <a class="menu-item" href="javascript:window.print()">{{ icon('printer') }} Imprimer / PDF</a>
+        <button class="menu-item" type="button" data-imprimer>{{ icon('printer') }} Imprimer / PDF</button>
       </div>
     </div>
     {% if not current_user.is_guest %}<button class="btn btn-sm" type="button" data-open="send-bilan">{{ icon('mail', 14) }} Envoyer</button>{% endif %}

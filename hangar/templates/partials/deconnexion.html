@@ -1,0 +1,12 @@
+{# « Se déconnecter » (menu de l'espace, page /logout) : la case efface aussi ce que Hangar garde sur cet
+   appareil (pages du wiki lues ou gardées hors ligne, QCM téléchargés, brouillons) ; voir js/appareil.js.
+   Cochée d'office, sauf sur la machine qui fait tourner Hangar (127.0.0.1, localhost). #}
+<form method="post" action="{{ url_for('auth.logout') }}" class="deconnexion" data-deconnexion
+      data-qcm-attente="{{ url_for('static', filename='qcm/qcm_attente.js') }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <button class="menu-item danger">{{ icon('logout') }} Se déconnecter</button>
+  <label class="menu-item menu-coche" title="Pages du wiki lues ou gardées hors ligne, QCM téléchargés et brouillons de l’éditeur, sur ce navigateur">
+    <input type="checkbox" name="effacer_appareil" value="1" data-effacer-appareil{% if not appareil_local() %} checked{% endif %}>
+    <span>Effacer aussi les pages gardées sur cet appareil</span>
+  </label>
+</form>

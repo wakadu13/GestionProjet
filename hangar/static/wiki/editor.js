@@ -1422,7 +1422,19 @@
   // Le texte non enregistré est gardé dans le navigateur (onglet fermé, batterie à plat,
   // session expirée) et proposé à la prochaine ouverture de la page.
 
-  const brouillonCle = "wiki-brouillon:" + noteKey;
+  // Rangé sous le compte : un autre compte qui ouvre la même page sur ce navigateur ne le voit pas.
+  const compte = (window.HANGAR && window.HANGAR.me && window.HANGAR.me.id) || "";
+  const brouillonCle = "wiki-brouillon:" + (compte ? compte + ":" : "") + noteKey;
+  (function reprendreAncienneCle() {
+    // Brouillon gardé par une version précédente (clé sans compte) : rattaché au compte qui rouvre la page.
+    const ancienne = "wiki-brouillon:" + noteKey;
+    if (!compte || ancienne === brouillonCle) return;
+    try {
+      const b = localStorage.getItem(ancienne);
+      if (b !== null && localStorage.getItem(brouillonCle) === null) localStorage.setItem(brouillonCle, b);
+      localStorage.removeItem(ancienne);
+    } catch (e) { /* stockage indisponible */ }
+  })();
   const brouillonNotice = form.querySelector("[data-brouillon-notice]");
   let brouillonTimer = null;
 

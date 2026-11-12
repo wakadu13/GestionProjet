@@ -146,7 +146,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
   const fields = document.querySelector('[data-smtp-fields]');
   document.querySelectorAll('[data-mail-mode]').forEach((r) => r.addEventListener('change', () => { fields.hidden = r.value !== 'smtp' || !r.checked; }));

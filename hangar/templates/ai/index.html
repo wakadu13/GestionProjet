@@ -2,7 +2,7 @@
 {% import "macros.html" as ui with context %}
 {% set aicfg = ai_client_config() %}
 {% block title %}{{ conv.title if conv else 'Assistant IA' }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}"><script>document.documentElement.classList.add('ai-fullpage');</script>{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}"><script nonce="{{ csp_nonce() }}">document.documentElement.classList.add('ai-fullpage');</script>{% endblock %}
 {% block header %}
 <div class="page-header">
   {{ ui.mobile_toggle() }}

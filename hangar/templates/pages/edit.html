@@ -49,7 +49,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function () {
     var f = document.getElementById('page-form');
     if (!f) return;

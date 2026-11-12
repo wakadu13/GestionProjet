@@ -34,7 +34,7 @@
     <div class="sb-section-h"><span>Sans réseau</span></div>
     <a class="sb-link" href="{{ qcm_hors_ligne_url() }}" title="Sets téléchargés sur cet appareil, révisables sans connexion">{{ icon('smartphone') }} QCM hors ligne</a>
     {% if appli_android() %}<a class="sb-link" href="{{ appli_locale }}connexion.html">{{ icon('settings') }} Réglages de l’appli</a>
-    <script src="{{ url_for('static', filename='qcm/appli.js') }}?v={{ version }}" defer></script>{% endif %}
+    <script src="{{ url_for('static', filename='qcm/appli.js') }}" defer></script>{% endif %}
   </div>
   <div class="sb-section">
     <div class="sb-section-h"><span>Contenu</span></div>

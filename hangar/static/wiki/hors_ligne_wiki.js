@@ -54,7 +54,9 @@
           for (const u of urls) {
             b.textContent = `${faits} / ${urls.length}…`;
             try {
-              const rep = await fetch(u, { credentials: "same-origin" });
+              // En-tête de préchargement : la page n'entre pas dans tes « Récents », et ses parties
+              // personnelles (QCM de la page, échanges avec le tuteur) ne sont pas gardées.
+              const rep = await fetch(u, { credentials: "same-origin", headers: { "X-Hangar-Prechargement": "1" } });
               if (rep.ok && !rep.redirected && rep.status === 200) await cache.put(u, rep); else rates++;
             } catch (err) { rates++; }
             faits++;

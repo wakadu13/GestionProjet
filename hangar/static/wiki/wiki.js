@@ -3,7 +3,11 @@
 // contient, depuis les copies locales de static/vendor/ (aucun CDN) ; impression ; Ctrl+E.
 (function () {
   "use strict";
-  const VENDOR = (window.WIKI && window.WIKI.vendor) || "/static/vendor/";
+  const W = window.WIKI || {};
+  const VENDOR = W.vendor || "/static/vendor/";
+  // Adresse versionnée (?v=…) donnée par le serveur : gardée un an par le navigateur, et préchargée
+  // par le service worker pour la lecture hors ligne.
+  const vendor = (nom) => (W.fichiers && W.fichiers[nom]) || VENDOR + nom;
   const loaded = {};
 
   function loadScript(src) {
@@ -56,10 +60,7 @@
     document.querySelectorAll(".wiki-sommaire details").forEach((d) => { d.open = open; });
   });
 
-  // Impression : bouton « Imprimer » ; encadrés repliés ouverts le temps de l'impression.
-  document.addEventListener("click", (e) => {
-    if (e.target.closest && e.target.closest("[data-imprimer]")) window.print();
-  });
+  // Impression (bouton « Imprimer », géré par app.js) : encadrés repliés ouverts le temps de l'impression.
   let replies = [];
   window.addEventListener("beforeprint", () => {
     replies = [...document.querySelectorAll(".markdown details:not([open])")];
@@ -114,7 +115,7 @@
         code.parentElement.replaceWith(div);
         nodes.push(div);
       });
-      loadScript(VENDOR + "mermaid/mermaid.min.js").then(() => {
+      loadScript(vendor("mermaid/mermaid.min.js")).then(() => {
         window.mermaid.initialize({ startOnLoad: false, theme: theme.resolved() === "dark" ? "dark" : "default", securityLevel: "strict" });
         window.mermaid.run({ nodes });
       }).catch(() => {});
@@ -123,7 +124,7 @@
     // Coloration syntaxique.
     const blocks = root.querySelectorAll(".markdown pre code, pre.markdown code");
     if (blocks.length) {
-      loadScript(VENDOR + "highlight/highlight.min.js").then(() => {
+      loadScript(vendor("highlight/highlight.min.js")).then(() => {
         blocks.forEach((el) => { if (!el.dataset.highlighted) window.hljs.highlightElement(el); });
       }).catch(() => {});
     }
@@ -144,8 +145,8 @@
   let katexReady = null;
   function loadKatex() {
     if (!katexReady) {
-      loadStyle(VENDOR + "katex/katex.min.css");
-      katexReady = loadScript(VENDOR + "katex/katex.min.js").then(() => window.katex);
+      loadStyle(vendor("katex/katex.min.css"));
+      katexReady = loadScript(vendor("katex/katex.min.js")).then(() => window.katex);
     }
     return katexReady;
   }
@@ -155,9 +156,30 @@
   window.wikiInitPage = (root) => { enhance(root); plan(); };
   enhance(document);
 
+  // Copie servie par le service worker faute de réseau (ou serveur trop lent) : on le dit, avec sa date.
+  function copieHorsLigne() {
+    const date = document.body.dataset.copieHorsLigne;
+    if (date === undefined || document.querySelector(".wiki-copie-hl")) return;
+    const d = new Date(date);
+    const quand = Number.isNaN(d.getTime()) ? ""
+      : ` du ${d.toLocaleDateString("fr-FR")} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+    const bandeau = document.createElement("div");
+    bandeau.className = "wiki-copie-hl";
+    bandeau.setAttribute("role", "status");
+    const texte = document.createElement("span");
+    texte.textContent = `Copie gardée sur cet appareil${quand} : Hangar ne répond pas, cette page n'est peut-être pas à jour.`;
+    const bouton = document.createElement("button");
+    bouton.type = "button";
+    bouton.className = "btn btn-xs";
+    bouton.textContent = "Réessayer";
+    bouton.addEventListener("click", () => location.reload());
+    bandeau.append(texte, bouton);
+    (document.querySelector("main.main .content") || document.body).prepend(bandeau);
+  }
+  copieHorsLigne();
+
   // Lecture hors ligne : service worker du wiki (/sw.js, portée « / » ; il ne s'occupe que des adresses de
   // lecture du wiki et des fichiers statiques). Il faut HTTPS, ou l'adresse localhost.
-  const W = window.WIKI || {};
   if ("serviceWorker" in navigator && W.sw && window.isSecureContext) {
     navigator.serviceWorker.register(W.sw, { scope: "/" })
       .then(() => navigator.serviceWorker.ready)

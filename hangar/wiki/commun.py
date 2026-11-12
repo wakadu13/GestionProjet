@@ -82,6 +82,16 @@ def page_courante(vault=None):
     return g.wiki_courante
 
 
+ENTETE_PRECHARGEMENT = "X-Hangar-Prechargement"
+
+
+def prechargement() -> bool:
+    """Page demandée par « ⤓ Hors ligne » (hors_ligne_wiki.js) pour être gardée sur l'appareil, pas
+    ouverte par le compte : elle n'entre pas dans les « Récents », et ses parties personnelles (QCM de
+    la page, échanges avec le tuteur) ne sont ni calculées ni gardées dans le cache."""
+    return request.headers.get(ENTETE_PRECHARGEMENT) == "1"
+
+
 def noter_visite(key, modifiee=False):
     """Retient la page (sa clé) dans les « Récents » du compte (vue ou modifiée)."""
     from .models import WikiVisit

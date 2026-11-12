@@ -2,7 +2,7 @@
 {% import "macros.html" as ui with context %}
 {% set FEATURES = {'chat': 'Assistant (panneau)', 'cli': 'Ligne de commande', 'tuteur': 'Tuteur', 'expliquer': 'Explications de QCM', 'qrc': 'Correction de réponses', 'qcm': 'QCM générés', 'copie': 'Copies corrigées', 'wiki': 'Demander au wiki', 'transformation': 'Transformations de cours', 'ameliorer': 'Améliorer la rédaction'} %}
 {% block title %}Réglages de l’IA{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}">{% endblock %}
 {% block header %}<div class="page-header">{{ ui.mobile_toggle() }}<div class="crumbs"><a href="{{ url_for('ai.index') }}">{{ icon('sparkle', 15) }} Assistant IA</a><span class="sep">/</span><span class="current">Fournisseurs et usage</span></div></div>{% endblock %}
 {% block content %}
 <div class="inner ai-settings" data-ai-settings data-try-url="{{ url_for('ai.provider_try') }}">
@@ -238,4 +238,4 @@
   {% endif %}
 </div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='ai/reglages.js') }}?v={{ version }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='ai/reglages.js') }}"></script>{% endblock %}

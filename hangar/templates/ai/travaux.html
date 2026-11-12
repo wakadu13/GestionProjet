@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
 {% block title %}Travaux de l’IA{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% if en_cours %}<meta http-equiv="refresh" content="8">{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}">{% if en_cours %}<meta http-equiv="refresh" content="8">{% endif %}{% endblock %}
 {% block header %}
 <div class="page-header">
   {{ ui.mobile_toggle() }}

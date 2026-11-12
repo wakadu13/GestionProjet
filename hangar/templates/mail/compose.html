@@ -38,7 +38,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
   const T = {{ templates|tojson }};
   const sel = document.querySelector('[data-mail-template]');

@@ -44,7 +44,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
   const form = document.querySelector('[data-latex-form]');
   const sortie = document.querySelector('[data-latex-sortie]');

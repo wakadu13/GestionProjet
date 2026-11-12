@@ -20,7 +20,7 @@
         <a class="menu-item" href="{{ url_for('agenda.export', what='events') }}">{{ icon('graduation', 14) }} Cours seulement (.ics)</a>
         <a class="menu-item" href="{{ url_for('agenda.export', what='tasks') }}">{{ icon('list-check', 14) }} Tâches seulement (.ics)</a>
         <div class="menu-sep"></div>
-        <button class="menu-item" type="button" onclick="window.print()">{{ icon('printer', 14) }} Imprimer / PDF</button>
+        <button class="menu-item" type="button" data-imprimer>{{ icon('printer', 14) }} Imprimer / PDF</button>
       </div>
     </div>
     <button class="btn btn-sm btn-primary" type="button" data-new-task data-date="{{ ref.isoformat() }}">{{ icon('plus', 14) }} Nouvelle tâche</button>

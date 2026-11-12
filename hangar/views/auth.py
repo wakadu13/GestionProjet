@@ -111,6 +111,9 @@ def signup():
 @bp.route("/logout", methods=["POST", "GET"])
 @login_required
 def logout():
+    if request.method != "POST":
+        # Un lien (même venu d'un autre site) ne déconnecte pas : il faut le bouton, avec son jeton CSRF.
+        return render_template("auth/logout.html")
     logout_user()
     flash("Tu es déconnecté.", "info")
     return redirect(url_for("auth.login"))

@@ -1,7 +1,11 @@
-"""Icônes SVG embarquées (style trait, inspirées de Lucide) : aucune ressource externe."""
+"""Icônes SVG embarquées (style trait, inspirées de Lucide) : aucune ressource externe.
+
+Les icônes de trait (``icon``) sont dessinées une seule fois, dans la feuille ``/icones.svg`` (web.py) ;
+les icônes colorées (``state_icon``, ``priority_icon``) restent écrites dans la page."""
 from markupsafe import Markup, escape
 
 from .models import PRIORITY_COLORS, STATE_GROUP_COLORS
+from .web import adresse_icones
 
 ICONS = {
     "home": '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/>',
@@ -108,12 +112,16 @@ ICONS = {
 
 
 def icon(name: str, size: int = 16, cls: str = "", stroke: float = 1.75, title: str | None = None) -> Markup:
-    body = ICONS.get(name, ICONS["hash"])
+    """Icône : référence ``<use>`` vers la feuille d'icônes (``/icones.svg``, gardée en cache, voir
+    ``web.py``) plutôt que son dessin recopié à chaque emploi. Le trait (couleur, extrémités) est dans la
+    feuille ; l'épaisseur et le remplissage restent ici, pour qu'une règle CSS (étoile des favoris) ou
+    ``stroke=`` puisse les changer."""
+    if name not in ICONS:
+        name = "hash"
     t = f"<title>{escape(title)}</title>" if title else ""
     return Markup(
-        f'<svg class="ic {cls}" width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
-        f'stroke="currentColor" stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round" '
-        f'aria-hidden="true">{t}{body}</svg>'
+        f'<svg class="ic {cls}" width="{size}" height="{size}" fill="none" stroke-width="{stroke}" '
+        f'aria-hidden="true">{t}<use href="{adresse_icones()}#{name}"/></svg>'
     )
 
 

@@ -28,7 +28,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 document.querySelectorAll('[data-account]').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('[data-account]').forEach((x) => x.classList.toggle('active', x === b));
   document.querySelector('[name=login]').value = b.dataset.account;

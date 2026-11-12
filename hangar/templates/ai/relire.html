@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "macros.html" as ui with context %}
 {% block title %}Relire · {{ contenu.titre }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}?v={{ version }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='ai/ai.css') }}">{% endblock %}
 {% block header %}
 <div class="page-header">
   {{ ui.mobile_toggle() }}
@@ -64,7 +64,7 @@
     {% endif %}
     <div class="ai-rl-actions panel panel-b">
       <button class="btn btn-primary">{{ icon('check', 14) }} Publier</button>
-      <button class="btn btn-danger-ghost" name="action" value="supprimer" data-confirm-msg="Supprimer ce brouillon ?" onclick="return confirm('Supprimer ce brouillon ?')">Supprimer le brouillon</button>
+      <button class="btn btn-danger-ghost" name="action" value="supprimer" data-confirm-msg="Supprimer ce brouillon ?">Supprimer le brouillon</button>
       <span class="help grow">Vérifie chaque bonne réponse contre le cours : c’est là que l’IA se trompe le plus souvent.</span>
     </div>
   </form>

@@ -5,12 +5,14 @@
 {%- if e %}<span class="wiki-emoji" aria-hidden="true">{{ e }}</span>{% else %}{{ icon('wiki-file-text', size) }}{% endif -%}
 {%- endmacro %}
 
-{# Arborescence des collections (dossiers → pages et PDF), dossier de la page affichée ouvert #}
+{# Arborescence des collections (dossiers → pages et PDF). Seule la branche de la page affichée est écrite
+   dans la page ; un autre dossier est rempli à son ouverture (menu_wiki.js, route wiki.menu_dossier). #}
 {% macro tree(node, sb, depth=0) %}
 {% for f in node.folders %}
-<details class="wiki-tree-folder" {% if f.path in sb.ouverts %}open{% endif %}>
+{% set ouvert = f.path in sb.ouverts %}
+<details class="wiki-tree-folder" {% if ouvert %}open{% else %}data-menu-dossier="{{ f.path }}"{% endif %}>
   <summary class="sb-link wiki-tree-sum" style="--d: {{ depth }}">{{ icon('chevron-right', 12, 'wiki-chev') }}{{ icon('folder', 15) }}<span class="ellipsis grow">{{ f.name }}</span><span class="wiki-count">{{ f.count }}</span></summary>
-  <div class="wiki-tree-children">{{ tree(f, sb, depth + 1) }}</div>
+  <div class="wiki-tree-children">{% if ouvert %}{{ tree(f, sb, depth + 1) }}{% endif %}</div>
 </details>
 {% endfor %}
 {% for n in node.notes %}
