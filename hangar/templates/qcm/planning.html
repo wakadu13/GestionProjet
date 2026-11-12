@@ -14,7 +14,7 @@
     </div>
   </div>
   <div class="qcm-callout">{{ icon('help', 16) }}<div class="small">Conseil : limite surtout les <b>nouvelles</b> questions (10 à 30 par jour) et laisse les révisions sans limite, sinon elles s’accumulent.
-    Dans les 30 jours avant l’examen, les révisions visent 95 % de rappel au lieu de 90 % (intervalles plus serrés). « Ajuster automatiquement » passe les nouvelles par jour au nombre conseillé si l’estimation dit « en retard ».</div></div>
+    Dans les 30 jours avant l’examen, les révisions visent 95 % de rappel au lieu de 90 % (intervalles plus serrés). « Ajuster auto. » passe les nouvelles par jour au nombre conseillé et lève la limite des révisions si l’estimation dit « en retard » ; si l’examen est trop proche pour tout savoir, il répartit les questions jamais vues pour que tu les aies toutes vues avant la veille de l’examen.</div></div>
 
   {% if examens %}
   <div class="panel mb">
@@ -55,7 +55,7 @@
             <label title="Questions jamais vues découvertes chaque jour">Nouvelles / jour<input class="input input-sm" type="number" name="nouvelles_jour" min="1" max="9999" value="{{ d.nouvelles_jour or '' }}" placeholder="illimité"></label>
             <label title="Questions déjà vues revenues à échéance, revues chaque jour">Révisions / jour<input class="input input-sm" type="number" name="revisions_jour" min="1" max="9999" value="{{ d.revisions_jour or '' }}" placeholder="illimité"></label>
             <label>Date d’examen<input class="input input-sm" type="date" name="date_objectif" value="{{ d.date_objectif.isoformat() if d.date_objectif else '' }}"></label>
-            <label class="chk" title="Si l’estimation dit « en retard », les nouvelles questions par jour passent au nombre conseillé et les révisions ne sont plus limitées"><input type="checkbox" name="auto" value="1"{% if d.auto_quota %} checked{% endif %}> Ajuster auto.</label>
+            <label class="chk" title="Si l’estimation dit « en retard », les nouvelles questions par jour passent au nombre conseillé et les révisions ne sont plus limitées. Si l’examen est trop proche pour tout savoir, les nouvelles sont réparties pour toutes les voir avant la veille de l’examen."><input type="checkbox" name="auto" value="1"{% if d.auto_quota %} checked{% endif %}> Ajuster auto.</label>
             <button class="btn btn-sm btn-primary" type="submit">OK</button>
           </form>
           {% if e %}
@@ -66,9 +66,13 @@
               {% else %}Avec ces réglages, il faudrait plus d’un an : augmente les quotas.{% endif %}</p>
             {% if e.statut == "ok" %}<p>Pour être prêt le {{ e.objectif|date }} : {% if e.commencer_maintenant %}<b>commence dès aujourd’hui</b>{% if e.marge %} ({{ e.marge }} jour{{ 's' if e.marge > 1 }} de marge){% endif %}.{% else %}commence <b>au plus tard le {{ e.debut|date_long }}</b> ({{ e.marge }} jours de marge si tu commences aujourd’hui).{% endif %}</p>
             {% elif e.statut == "retard" %}<p class="qcm-plan-alert">Il ne reste que {{ e.jours_dispo }} jour{{ 's' if e.jours_dispo > 1 }} avant le {{ e.objectif|date }} : passe à <b>{{ e.nouvelles_conseillees }} nouvelle{{ 's' if e.nouvelles_conseillees > 1 }} par jour</b>{% if e.revisions_limitees %}, <b>sans limite de révisions</b>{% endif %} (~{{ e.questions_conseillees }} questions et ~{{ e.minutes_conseillees }} min par jour) pour être prêt à temps.</p>
-            {% elif e.statut == "impossible" %}<p class="qcm-plan-alert">Il ne reste que {{ e.jours_dispo }} jour{{ 's' if e.jours_dispo > 1 }} avant le {{ e.objectif|date }} : même sans limite, la révision espacée demande {% if e.jours_min %}au moins {{ e.jours_min }} jours{% else %}plus d’un an{% endif %}. Le mode « Intensif » permet de rattraper une partie du retard.</p>
+            {% elif e.statut == "impossible" %}<p class="qcm-plan-alert">Il ne reste que {{ e.jours_dispo }} jour{{ 's' if e.jours_dispo > 1 }} avant le {{ e.objectif|date }} : même sans limite, la révision espacée demande {% if e.jours_min %}au moins {{ e.jours_min }} jours{% else %}plus d’un an{% endif %} pour tout savoir.
+              {% if e.auto %}Ajustement automatique actif : {% if e.nouvelles_auto %}<b>{{ e.nouvelles_auto }} nouvelle{{ 's' if e.nouvelles_auto > 1 }} par jour</b>{% else %}<b>nouvelles sans limite</b>{% endif %} et <b>révisions sans limite</b>, pour avoir vu toutes les questions avant la veille de l’examen.
+              {% elif e.nouvelles_conseillees %}Pour avoir vu toutes les questions avant la veille de l’examen : au moins <b>{{ e.nouvelles_conseillees }} nouvelle{{ 's' if e.nouvelles_conseillees > 1 }} par jour</b>{% if e.revisions_limitees %}, <b>sans limite de révisions</b>{% endif %} (ou coche « Ajuster auto. »).
+              {% elif e.revisions_limitees %}Toutes les questions sont déjà vues : lève la limite des révisions (ou coche « Ajuster auto. »).{% endif %}
+              Le mode « Intensif » permet aussi de rattraper une partie du retard.</p>
             {% elif e.statut == "passee" %}<p class="muted">La date d’examen est passée.</p>{% endif %}
-            <p class="muted small">Hypothèses : {{ e.precision }} % de bonnes réponses{% if not e.precision_mesuree %} (valeur par défaut){% endif %}, {{ e.secondes }} s par question{% if not e.secondes_mesurees %} (valeur par défaut, mesurée au fil des réponses){% endif %} ; une question est « sue » quand sa stabilité FSRS atteint {{ e.stabilite_objectif }} jours.{% if e.retention > 90 %} Examen proche : les révisions visent {{ e.retention }} % de rappel.{% endif %}{% if e.auto and e.statut == "retard" %} Ajustement automatique : {{ e.nouvelles_conseillees }} nouvelles par jour appliquées.{% endif %}</p>
+            <p class="muted small">Hypothèses : {{ e.precision }} % de bonnes réponses{% if not e.precision_mesuree %} (valeur par défaut){% endif %}, {{ e.secondes }} s par question{% if not e.secondes_mesurees %} (valeur par défaut, mesurée au fil des réponses){% endif %} ; une question est « sue » quand sa stabilité FSRS atteint {{ e.stabilite_objectif }} jours.{% if e.retention > 90 %} Examen proche : les révisions visent {{ e.retention }} % de rappel.{% endif %}{% if e.auto and e.statut == "retard" %} Ajustement automatique actif : {{ e.nouvelles_conseillees }} nouvelles par jour, révisions sans limite.{% endif %}</p>
             {% endif %}
           </div>
           {% endif %}

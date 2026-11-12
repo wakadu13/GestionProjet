@@ -14,7 +14,7 @@ from flask import abort, flash, jsonify, redirect, render_template, request, url
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from . import fsrs, langues, quiz, services
+from . import fsrs, langues, quiz, rattachement, services
 from .models import Activite, QuizProgress, TempsRevision, _get_or_create
 from .services import dossier_de
 from .views import _render_html, bp
@@ -25,7 +25,7 @@ TAILLE_MAX_SESSION = 200
 def _sets(langue, dossier="", fichier="", user_id=None):
     """Fichiers d'une langue vus par le compte (communs et personnels), restreints à un
     dossier ou à un seul fichier (paquet)."""
-    sets = quiz.get_library().pour(user_id).sets_langue(langue)
+    sets = services.bibliotheque(user_id).sets_langue(langue)
     if fichier:
         sets = [s for s in sets if s.id == fichier]
     elif dossier:
@@ -146,7 +146,8 @@ def langue_play(langue):
 
 def _exercice(data, user_id=None):
     """(set, exercice) désignés par la requête, ou une réponse d'erreur."""
-    set_langue = quiz.get_library().pour(user_id).langues.get(str(data.get("set_id", "")))
+    library = services.bibliotheque(user_id)
+    set_langue = library.langues.get(rattachement.resoudre(library, str(data.get("set_id", ""))))
     exo = set_langue.exercice(str(data.get("exo_id", ""))) if set_langue else None
     if exo is None:
         return None, None, (jsonify(error="exercice inconnu"), 404)

@@ -16,9 +16,9 @@ from flask import Response, abort, flash, jsonify, redirect, render_template, re
 from flask_login import current_user, login_required
 
 from ..extensions import db
-from . import anki, coffre, langues, paquets, quiz
+from . import anki, coffre, langues, paquets, quiz, rattachement
 from .coffre import DOSSIER_QCM, clean_key, invalider
-from .models import QuizDeck, QuizProgress, Signalement
+from .models import AliasSet, EmpreinteSet, QuizDeck, QuizProgress, Signalement
 from .services import ancre, bibliotheque, peut_modifier
 from .views import CATEGORIE_IMPORT, TAILLE_MAX_IMPORT, _categories_import, _ia, _render_html, bp, question_payload
 
@@ -170,9 +170,12 @@ def _retirer_dossiers_vides(dossier, racine):
 
 
 def _oublier(set_ids):
-    """Efface la progression et les réglages de sets (pour tous les comptes)."""
+    """Efface la progression et les réglages de sets (pour tous les comptes), et de quoi y rattacher
+    des réponses envoyées plus tard (empreinte, anciens noms) : elles seront abandonnées."""
     QuizProgress.query.filter(QuizProgress.set_id.in_(set_ids)).delete(synchronize_session=False)
     QuizDeck.query.filter(QuizDeck.set_id.in_(set_ids)).delete(synchronize_session=False)
+    EmpreinteSet.query.filter(EmpreinteSet.set_id.in_(set_ids)).delete(synchronize_session=False)
+    AliasSet.query.filter(AliasSet.nouveau.in_(set_ids)).delete(synchronize_session=False)
 
 
 def _retour(defaut):
@@ -186,9 +189,13 @@ def deplacer():
     """Range un set (QCM ou fichier de langue) dans un dossier, créé au besoin.
 
     Les sets d'une langue vont dans QCM/<langue>/<dossier>, les autres dans
-    QCM/<dossier>. La progression suit le set (son identifiant change)."""
+    QCM/<dossier>. La progression suit le set (son identifiant change), avec les explications de
+    l'IA ; celle restée sous le nouveau nom (set renommé autrefois hors de Hangar) est fusionnée
+    question par question, plus effacée."""
     _exiger_modification()
-    library = quiz.get_library().commune()
+    base = quiz.get_library()
+    rattachement.verifier(base)  # renommages faits hors de Hangar d'abord
+    library = base.commune()
     element = _element(library, request.form.get("set", ""))
     if element is None:
         abort(404, description="Set inconnu")
@@ -215,10 +222,7 @@ def deplacer():
     _retirer_dossiers_vides(source.parent, racine)
     invalider()
     nouvel_id = rel.with_suffix("").as_posix()
-    _oublier([nouvel_id])  # restes éventuels d'un ancien set du même nom
-    QuizProgress.query.filter_by(set_id=element.id).update({"set_id": nouvel_id}, synchronize_session=False)
-    QuizDeck.query.filter_by(set_id=element.id).update({"set_id": nouvel_id}, synchronize_session=False)
-    Signalement.query.filter_by(set_id=element.id).update({"set_id": nouvel_id}, synchronize_session=False)
+    rattachement.rattacher(db.session, element.id, nouvel_id)
     db.session.commit()
     flash(f"« {element.titre} » rangé dans le dossier {dossier} ({rel}).", "success")
     return redirect(retour.split("#")[0] + "#" + ancre(nouvel_id))
@@ -255,6 +259,40 @@ def supprimer():
     db.session.commit()
     flash(f"{libelle} supprimé.", "success")
     return redirect(_retour(url_for("qcm.index")).split("#")[0])
+
+
+@bp.route("/qcm/progression-orpheline/", methods=["POST"])
+@login_required
+def progression_orpheline():
+    """Progression restée sans fichier (set renommé, déplacé ou supprimé hors de Hangar, pas
+    reconnu tout seul) : « rattacher » à un set du coffre, ou « oublier » (sa propre progression).
+
+    Le rattachement vaut pour tous les comptes (avec l'alias, pour les réponses hors ligne) quand
+    les deux sets sont dans le même espace et que le compte peut le ranger : sets communs pour les
+    admins et membres, son espace personnel pour chacun. Sinon, seule sa propre progression suit."""
+    uid = current_user.id
+    library = bibliotheque(uid)
+    ancien = request.form.get("ancien", "")
+    retour = _retour(url_for("qcm.stats")).split("#")[0] + "#orphelins"
+    if not ancien or _element(library, ancien) is not None or ancien in library.ids_invalides:
+        abort(404, description="Progression inconnue")
+    action = request.form.get("action", "")
+    if action == "oublier":
+        QuizProgress.query.filter_by(user_id=uid, set_id=ancien).delete(synchronize_session=False)
+        QuizDeck.query.filter_by(user_id=uid, set_id=ancien).delete(synchronize_session=False)
+        db.session.commit()
+        flash(f"Progression de « {ancien} » oubliée.", "success")
+        return redirect(retour)
+    if action != "rattacher":
+        abort(400)
+    cible = _element(library, request.form.get("nouveau", ""))
+    if cible is None:
+        abort(404, description="Set inconnu")
+    pour_tous = rattachement.rattachement_global(ancien, cible.id, uid, peut_modifier(current_user))
+    rattachement.rattacher(db.session, ancien, cible.id, user_id=None if pour_tous else uid)
+    db.session.commit()
+    flash(f"Progression de « {ancien} » rattachée à « {cible.titre} ».", "success")
+    return redirect(retour)
 
 
 # ---------------------------------------------------------------------------
@@ -489,8 +527,7 @@ def perso():
                 abort(404, description="Set inconnu")
             element.fichier.unlink(missing_ok=True)
             _retirer_dossiers_vides(element.fichier.parent, quiz.dossier_perso(uid))
-            QuizProgress.query.filter_by(set_id=element.id).delete(synchronize_session=False)
-            QuizDeck.query.filter_by(set_id=element.id).delete(synchronize_session=False)
+            _oublier([element.id])
             db.session.commit()
             invalider()
             flash(f"« {element.titre} » supprimé de ton espace.", "success")

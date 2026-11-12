@@ -69,6 +69,12 @@
     <div class="small muted">Vérifie-les avec <code>uv run hangar qcm-verifier</code>.</div></div></div>
   {% endif %}
 
+  {% if orphelins %}
+  <div class="qcm-callout warning">{{ icon('alert', 16) }}<div><b>{{ orphelins }} progression{{ 's' if orphelins > 1 }} sans fichier</b> :
+    un set a sans doute été renommé, déplacé ou supprimé hors de Hangar.
+    <a href="{{ url_for('qcm.stats') }}#orphelins">Rattache-l{{ 'es' if orphelins > 1 else 'a' }} au bon set</a> pour retrouver tes révisions.</div></div>
+  {% endif %}
+
   {% if total_sets or total_paquets %}
   <form class="qcm-search" method="get" role="search">
     <div class="input-wrap">{{ icon('search', 14) }}<input class="input" type="search" name="q" value="{{ q }}" placeholder="Rechercher un QCM (titre, catégorie, question)…" aria-label="Rechercher un QCM" autocomplete="off" data-quiz-search></div>

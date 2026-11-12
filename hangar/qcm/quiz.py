@@ -328,6 +328,9 @@ class Library:
         self.langues: dict[str, SetLangue] = {}
         self.errors: list[str] = []
         self.erreurs_perso: dict[str, list[str]] = {}
+        # Identifiants des fichiers présents mais invalides (en cours de modification, par exemple) :
+        # leur progression ne doit pas être prise pour celle d'un set supprimé (rattachement.py).
+        self.ids_invalides: set[str] = set()
         for rel, _mtime, _size in files:
             if not rel.lower().endswith(".json"):
                 continue
@@ -338,6 +341,7 @@ class Library:
                 # d'un vrai set malformé, qu'on signale.
                 if "questions' (liste) manquante" not in str(e):
                     self.errors.append(str(e))
+                    self.ids_invalides.add(PurePosixPath(rel).with_suffix("").as_posix())
                 continue
             charge.fichier = self.root / rel
             if isinstance(charge, SetLangue):
@@ -362,6 +366,7 @@ class Library:
             except ValueError as e:
                 if "questions' (liste) manquante" not in str(e):
                     self.erreurs_perso.setdefault(proprietaire, []).append(str(e))
+                    self.ids_invalides.add(PERSO + PurePosixPath(rel).with_suffix("").as_posix())
                 continue
             charge.proprietaire, charge.fichier = proprietaire, chemin
             if isinstance(charge, SetLangue):

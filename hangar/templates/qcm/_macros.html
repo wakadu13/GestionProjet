@@ -25,7 +25,7 @@
 {%- if e -%}
 {%- if e.su -%}<span class="qcm-plan-badge ok">prêt ✓</span>
 {%- elif e.statut == "ok" -%}<span class="qcm-plan-badge {% if e.commencer_maintenant %}urgent{% endif %}">{% if e.commencer_maintenant %}à commencer maintenant{% else %}commencer le {{ e.debut|date }} au plus tard{% endif %}</span>
-{%- elif e.statut in ("retard", "impossible") -%}<span class="qcm-plan-badge retard">en retard</span>
+{%- elif e.statut in ("retard", "impossible") -%}<span class="qcm-plan-badge retard">en retard</span>{% if e.auto %} <span class="qcm-plan-badge" title="« Ajuster auto. » est coché : les nouvelles questions du jour sont augmentées pour être prêt à temps (ou toutes vues avant la veille de l’examen) et les révisions ne sont plus limitées">ajustement auto.</span>{% endif %}
 {%- elif e.statut == "passee" -%}<span class="qcm-plan-badge">examen passé</span>
 {%- endif -%}
 {%- endif -%}

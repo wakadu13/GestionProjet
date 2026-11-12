@@ -15,7 +15,7 @@ rappel quotidien (rappels.py).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import current_app, jsonify, make_response, render_template, request, url_for
@@ -23,7 +23,7 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..icons import ICONS
-from . import fsrs, langues, planning, quiz, services
+from . import fsrs, langues, planning, quiz, rattachement, services
 from .langues_views import _payload as _payload_langue
 from .models import Activite, QuizDeck, QuizProgress, TempsRevision, _get_or_create
 from .services import bibliotheque, dossier_de
@@ -31,6 +31,7 @@ from .views import bp, question_payload
 
 MAX_REPONSES = 5000  # par requête de synchronisation
 MAX_SETS = 500       # par requête de téléchargement
+JOURS_MAX_HORS_LIGNE = 365  # réponse plus ancienne : horloge de l'appareil fausse, ignorée
 
 ICONS.setdefault("smartphone", '<rect x="6.5" y="2.5" width="11" height="19" rx="2.2"/><path d="M10.5 18.5h3"/>')
 ICONS.setdefault("bell-ring", '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8.5 3 8.5H3S6 15 6 8"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0"/>'
@@ -117,19 +118,34 @@ def _fichier_langue(user_id, fichier):
 @bp.route("/qcm/hors-ligne/sets/")
 @login_required
 def hl_sets():
-    """Sets demandés (?id=…&id=…) avec questions pré-rendues, progression et quotas."""
+    """Sets demandés (?id=…&id=…) avec questions pré-rendues, progression et quotas.
+
+    `manquants` : sets à retirer de l'appareil (supprimés). Un set renommé ou déplacé y figure
+    aussi sous son ancien identifiant, et revient dans `sets` sous le nouveau (`renommes` :
+    {ancien: nouveau}). `indisponibles` : sets momentanément introuvables (fichier en cours de
+    modification, progression pas encore rattachée), que l'appareil garde. Ces deux dernières clés
+    n'apparaissent que si elles ont du contenu (l'application Android les ignore)."""
     uid = current_user.id
     library = bibliotheque(uid)
     decks = QuizDeck.map_for(uid)
-    sets, manquants = [], []
-    for set_id in request.args.getlist("id")[:MAX_SETS]:
-        fichier = library.langues.get(set_id)
+    sets, manquants, renommes, indisponibles = [], [], {}, []
+    demandes = request.args.getlist("id")[:MAX_SETS]
+    envoyes = set()
+    for set_id in demandes:
+        actuel = rattachement.resoudre(library, set_id)
+        if actuel != set_id and (actuel in library.sets or actuel in library.langues):
+            manquants.append(set_id)
+            renommes[set_id] = actuel
+            if actuel in demandes or actuel in envoyes:
+                continue
+        envoyes.add(actuel)
+        fichier = library.langues.get(actuel)
         if fichier is not None:
             sets.append(_fichier_langue(uid, fichier))
             continue
-        qset = library.get(set_id)
+        qset = library.get(actuel)
         if qset is None:
-            manquants.append(set_id)
+            (indisponibles if rattachement.attendu(library, uid, actuel) else manquants).append(set_id)
             continue
         progress = QuizProgress.map_for(uid, qset.id)
         deck = decks.get(qset.id)
@@ -150,7 +166,8 @@ def hl_sets():
             "quotas": {"nouvelles_jour": deck.nouvelles_jour if deck else None,
                        "revisions_jour": deck.revisions_jour if deck else None},
         })
-    return _sans_cache(jsonify(joueur=current_user.username, sets=sets, manquants=manquants))
+    extra = {k: v for k, v in (("renommes", renommes), ("indisponibles", indisponibles)) if v}
+    return _sans_cache(jsonify(joueur=current_user.username, sets=sets, manquants=manquants, **extra))
 
 
 def _date_reponse(valeur, now):
@@ -170,8 +187,15 @@ def hl_synchro():
     Corps : {"reponses": [{"uid", "set_id", "question_id", "correct", "note", "duree_ms", "date"}]}
     (module Langues : "exo_id" et une note FSRS 1 à 4). Une réponse plus ancienne que la dernière
     révision connue de la question est ignorée : soit elle a déjà été reçue (renvoi après une
-    coupure), soit la question a été revue depuis sur un autre appareil. Renvoie les uid traités
-    (enregistrés ou ignorés), que l'appareil peut retirer de sa file d'attente."""
+    coupure), soit la question a été revue depuis sur un autre appareil. Une réponse datée de plus
+    de JOURS_MAX_HORS_LIGNE jours (horloge de l'appareil fausse) est ignorée aussi. Une réponse
+    envoyée sous l'ancien identifiant d'un set renommé ou déplacé rejoint ce set (rattachement.py).
+
+    Renvoie les uid traités (enregistrés ou ignorés), que l'appareil peut retirer de sa file
+    d'attente, et, s'il y en a, `en_attente` : les réponses d'un set momentanément introuvable
+    (fichier en cours de modification, progression pas encore rattachée), non acquittées pour que
+    l'appareil les renvoie plus tard au lieu de les perdre. Les réponses d'un set supprimé ou d'une
+    question retirée sont acquittées (elles resteraient sinon pour toujours sur l'appareil)."""
     data = request.get_json(silent=True, force=True)
     reponses = data.get("reponses") if isinstance(data, dict) else None
     if not isinstance(reponses, list):
@@ -179,30 +203,45 @@ def hl_synchro():
     uid = current_user.id
     library = bibliotheque(uid)
     now = quiz.maintenant()
-    valides, traitees = [], []
+    plus_ancienne = now - timedelta(days=JOURS_MAX_HORS_LIGNE)
+    actuels, attendus = {}, {}
+    valides, traitees, en_attente = [], [], []
     for r in reponses[:MAX_REPONSES]:
         if not isinstance(r, dict) or "uid" not in r:
             continue
-        traitees.append(str(r["uid"]))
+        cle = str(r["uid"])
         try:
             quand = _date_reponse(r["date"], now)
-            if "exo_id" in r:
-                # Module Langues : note FSRS 1 à 4.
-                note = int(r["note"])
-                if note not in fsrs.NOTES:
-                    continue
-                set_id, exo_id = str(r["set_id"]), str(r["exo_id"])
-                fichier = library.langues.get(set_id)
-                if fichier is not None and fichier.exercice(exo_id) is not None:
-                    valides.append((quand, set_id, exo_id, note, r.get("duree_ms"), True))
-                continue
-            reponse = r["note"] if r.get("note") in quiz.NOTES else bool(r["correct"])
-            set_id, question_id = str(r["set_id"]), str(r["question_id"])
+            envoye = str(r["set_id"])
+            langue = "exo_id" in r
+            if langue:
+                reponse, question_id = int(r["note"]), str(r["exo_id"])  # module Langues : note FSRS 1 à 4
+            else:
+                reponse = r["note"] if r.get("note") in quiz.NOTES else bool(r["correct"])
+                question_id = str(r["question_id"])
         except (KeyError, ValueError, TypeError):
+            traitees.append(cle)  # mal formée : elle ne passerait jamais
             continue
-        qset = library.get(set_id)
-        if qset is not None and any(q.id == question_id for q in qset.questions):
-            valides.append((quand, set_id, question_id, reponse, r.get("duree_ms"), False))
+        if (langue and reponse not in fsrs.NOTES) or quand < plus_ancienne:
+            traitees.append(cle)
+            continue
+        if envoye not in actuels:
+            actuels[envoye] = rattachement.resoudre(library, envoye)
+        set_id = actuels[envoye]
+        if set_id not in attendus:
+            attendus[set_id] = rattachement.attendu(library, uid, set_id)
+        if attendus[set_id]:
+            en_attente.append(cle)
+            continue
+        traitees.append(cle)
+        if langue:
+            fichier = library.langues.get(set_id)
+            if fichier is not None and fichier.exercice(question_id) is not None:
+                valides.append((quand, set_id, question_id, reponse, r.get("duree_ms"), True))
+        else:
+            qset = library.get(set_id)
+            if qset is not None and any(q.id == question_id for q in qset.questions):
+                valides.append((quand, set_id, question_id, reponse, r.get("duree_ms"), False))
 
     decks = QuizDeck.map_for(uid)
     enregistrees = 0
@@ -223,7 +262,8 @@ def hl_synchro():
         db.session.flush()
         enregistrees += 1
     db.session.commit()
-    return _sans_cache(jsonify(traitees=traitees, enregistrees=enregistrees))
+    extra = {"en_attente": en_attente} if en_attente else {}
+    return _sans_cache(jsonify(traitees=traitees, enregistrees=enregistrees, **extra))
 
 
 # ---------------------------------------------------------------------------

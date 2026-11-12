@@ -12,7 +12,7 @@ from datetime import datetime, time, timedelta
 from flask import has_request_context, request, url_for
 from markupsafe import escape
 
-from . import langues, planning, quiz
+from . import langues, planning, quiz, rattachement
 from .models import _JAMAIS, Activite, ObjectifRevision, QuizDeck, QuizProgress, TempsRevision
 
 JOURS_EXAMEN_PROCHE = 14  # objectifs d'examen signalés dans le résumé quotidien
@@ -21,8 +21,11 @@ MOIS_COURTS = ["Jan", "Fév", "Mars", "Avr", "Mai", "Juin", "Juil", "Août", "Se
 
 
 def bibliotheque(user_id):
-    """Bibliothèque vue par un compte : sets communs et son espace personnel."""
-    return quiz.get_library().pour(user_id)
+    """Bibliothèque vue par un compte : sets communs et son espace personnel. Les sets renommés ou
+    déplacés hors de Hangar y retrouvent d'abord leur progression (rattachement.verifier)."""
+    library = quiz.get_library()
+    rattachement.verifier(library)
+    return library.pour(user_id)
 
 
 def peut_modifier(user) -> bool:

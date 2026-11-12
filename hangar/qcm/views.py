@@ -19,7 +19,7 @@ from flask_login import current_user, login_required
 
 from ..extensions import db
 from ..icons import ICONS
-from . import coffre, masque, planning, quiz, rendu, services
+from . import coffre, masque, planning, quiz, rattachement, rendu, services
 from .models import _JAMAIS, Activite, ObjectifRevision, QuizDeck, QuizProgress, Signalement, TempsRevision, _get_or_create
 from .services import ancre, bibliotheque, file_du_jour, peut_modifier
 
@@ -184,7 +184,7 @@ def index():
         "qcm/index.html", categories=categories, langues=langues, total_sets=len(library.sets),
         total_paquets=len(library.langues), etat=e, act=act, examens=examens[:4], errors=library.errors, q=q,
         matches=matches, can_edit=peut_modifier(current_user), categories_import=_categories_import(),
-        ia=_ia())
+        ia=_ia(), orphelins=len(rattachement.orphelins(uid, library, suggestions=False)))
 
 
 def _shuffled(pairs):
@@ -327,9 +327,11 @@ def record():
     except (KeyError, ValueError, TypeError):
         return jsonify(error="requête invalide"), 400
     uid = current_user.id
-    qset = bibliotheque(uid).get(set_id)
+    library = bibliotheque(uid)
+    qset = library.get(rattachement.resoudre(library, set_id))  # set renommé depuis l'affichage de la page
     if qset is None or not any(q.id == question_id for q in qset.questions):
         return jsonify(error="question inconnue"), 404
+    set_id = qset.id
     now = quiz.maintenant()
     quand = _date_reponse(data.get("date"), now)
     obj = _get_or_create(QuizProgress, user_id=uid, set_id=set_id, question_id=question_id)
@@ -360,13 +362,19 @@ def stats():
     semaines, temps, temps_totaux = TempsRevision.tableau(uid, aujourdhui)
     calendrier = Activite.calendrier(uid, aujourdhui)
     temps_max = max([l["total"] for l in temps] + [1])
+    # Progressions restées sans fichier (set renommé ou supprimé hors de Hangar) : « Rattacher à… ».
+    can_edit = peut_modifier(current_user)
+    orphelins = rattachement.orphelins(uid, library)
+    choix = [(el.id, f"{el.id} · {el.titre}")
+             for el in sorted((*library.sets.values(), *library.langues.values()), key=lambda el: el.id.lower())
+             ] if orphelins else []
     return render_template(
         "qcm/stats.html", categories=sorted(categories.items(), key=lambda t: t[0].lower()),
-        boites=range(quiz.BOITE_MAX + 1), ia=_ia(), can_edit=peut_modifier(current_user),
+        boites=range(quiz.BOITE_MAX + 1), ia=_ia(), can_edit=can_edit,
         previsions=prev, previsions_max=max([p["n"] for p in prev] + [1]),
         previsions_total=sum(p["n"] for p in prev), semaines=semaines, temps=temps, temps_totaux=temps_totaux,
         temps_max=temps_max, activite=Activite.resume(uid, aujourdhui), calendrier=calendrier,
-        mois=services.mois_du_calendrier(calendrier), etat=e,
+        mois=services.mois_du_calendrier(calendrier), etat=e, orphelins=orphelins, choix_rattachement=choix,
     )
 
 
