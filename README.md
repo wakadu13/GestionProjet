@@ -17,6 +17,8 @@ Aucun service en ligne n'est nécessaire : les données restent sur ta machine e
 
 Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochaine (avec compte à rebours), le programme du jour, la semaine en grille horaire, les tâches à faire, les contrôles à venir et les changements du dernier planning importé.
 
+Il affiche aussi « Mes tickets » : tes tickets de projet en retard ou à rendre dans les 7 jours. L'icône « Travail » porte une pastille pour les tickets en retard ou à rendre aujourd'hui.
+
 **Importer l'emploi du temps chaque semaine** (menu *Emploi du temps*, ou le bandeau du tableau de bord)
 - Dépose le fichier `.ics` exporté de ton planning. **Le dernier fichier importé fait foi** :
   - chaque séance est reconnue par son identifiant (`UID`) : si l'horaire, la salle ou l'intervenant changent, elle est **mise à jour** et marquée « modifiée » (avant → après) ;
@@ -29,17 +31,23 @@ Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochai
 
 **Calendrier** : vues semaine (grille horaire, ligne « maintenant »), mois et liste ; clic sur une séance pour ses détails, une note personnelle, un rappel ou une tâche liée ; clic sur un créneau libre pour créer une tâche à cette heure ; export `.ics` (cours et/ou tâches, avec les rappels) vers Google Agenda / Outlook / téléphone ; impression.
 
+Les fichiers `.ics` exportés (agenda et « Calendrier (.ics) » des tickets) respectent la norme iCalendar (RFC 5545 : fuseau Europe/Paris décrit, textes échappés, lignes repliées). Les rappels d'une tâche sans heure sonnent à l'heure de référence (8 h par défaut), comme dans Hangar.
+
 **Tâches** : date, heure de début et de fin (ou journée entière), notes, priorité, catégorie, couleur, séance liée, **répétition** (tous les jours, du lundi au vendredi, chaque semaine, toutes les deux semaines, chaque mois, le même jour : une tâche du 31 revient le 31 quand le mois le permet — cocher l'occurrence passe à la suivante, avec un bouton « Annuler » en cas d'erreur), report rapide (demain, lundi, +1 semaine). Raccourci clavier `T`.
 
 **Rappels et e-mails** (menu *Rappels et e-mails*)
 - Rappels par tâche ou par séance : à l'heure, 15 min, 1 h, la veille, 2 jours, 1 semaine avant… ou à une date précise ; par **e-mail + notification** dans l'application, ou notification seule.
 - **Résumé quotidien** par e-mail (activé par défaut à 7 h) : un seul message avec tout ce qu'il y a à faire — cours du jour (horaires, salles), tâches du jour et en retard, tickets de projet à échéance, cartes de QCM à réviser et examens proches, contrôles de la semaine, changements récents du planning, initiatives à risque. Le matin pour la journée, ou la veille au soir pour le lendemain ; rien n'est envoyé les jours vides ; aperçu dans *Agenda › Résumé quotidien*.
+  - Si Hangar était fermé à l'heure prévue : le résumé du matin part à la première ouverture avant 18 h, puis plus du tout (pas de programme d'une journée finie). En mode soir, si le résumé n'a pas pu partir la veille, celui du jour part à la première ouverture du lendemain, avant 18 h. Le résumé du soir rappelle aussi ce qui reste à faire et à rendre aujourd'hui. Le récapitulatif hebdomadaire et le bilan du vendredi sont rattrapés au premier lancement suivant de la même semaine.
+- **« Aucun e-mail »** (profil) arrête tous les e-mails automatiques : notifications, rappels de l'agenda (la notification dans l'appli reste), résumé quotidien, e-mail après un import, récapitulatifs. Les e-mails que tu demandes toi-même (test, « M'envoyer le résumé maintenant ») partent quand même. Le résumé quotidien n'est pas activé pour un compte qui ne s'est jamais connecté.
 - **Rappel automatique des contrôles** (la veille, 2 jours, 1 semaine avant), e-mail récapitulatif des **changements après chaque import**.
 - Pour recevoir réellement les e-mails : renseigne ton adresse dans *Rappels et e-mails*, puis (administrateur) configure l'envoi dans *Réglages › Envoi des e-mails* (aussi dans le menu de l'espace) — mode **SMTP**, préréglage Gmail avec un [mot de passe d'application](https://myaccount.google.com/apppasswords). Sinon, les messages sont seulement enregistrés en `.eml` dans `data/outbox/`.
 - Les rappels partent tant que Hangar est lancé (`uv run hangar`). Sous Windows, fais-le démarrer tout seul avec ta session : voir [Sous Windows](#sous-windows--démarrage-avec-la-session-et-mise-à-jour). Si l'application était fermée à l'heure d'un rappel, il est envoyé à la réouverture, sauf si la séance ou la tâche est déjà terminée (un rappel « à une date précise » part encore jusqu'à 24 h après son heure, même après l'échéance de la tâche). Une tâche répétée a un rappel à chaque occurrence, même si tu n'as pas coché la précédente.
 - Si un e-mail ne part pas à cause d'une panne passagère (Wi-Fi pas encore revenu au réveil du portable, serveur injoignable), Hangar réessaie seul après 1, 5, 15 puis 60 minutes, jusqu'à la fin de la séance ou de la tâche pour un rappel, jusqu'à la fin de la journée pour le résumé (24 h pour les autres e-mails). Un mot de passe refusé ou une adresse rejetée ne sont pas réessayés. Les e-mails en échec s'affichent dans *Rappels et e-mails* et sur le tableau de bord, avec un bouton « Renvoyer les échecs ».
 
 **Matières reliées au wiki et aux QCM** : dans la fenêtre d'une séance, relie la matière à sa collection du wiki et à sa catégorie de QCM (suggestions automatiques d'après le nom, le sigle ou l'intervenant). Pour un contrôle, « Préparer ce contrôle » fixe la date d'examen des QCM liés au jour du contrôle : les révisions s'organisent pour être prêt à temps.
+
+Une fois la matière reliée à une catégorie de QCM, son prochain contrôle devient tout seul la date d'examen des sets sans date. Si un nouvel import avance, repousse ou retire le contrôle, la date d'examen suit (ou est effacée), et la page de l'import le dit. Une date que tu as choisie toi-même dans *QCM › Planning* n'est jamais modifiée. Annuler l'import remet les dates.
 
 ## Wiki : les cours (coffre Obsidian)
 
@@ -68,11 +76,28 @@ Section séparée du wiki. Tout fichier `.json` du coffre contenant une clé `qu
 - Le planning estime quand tu seras prêt pour ton examen sans ralentir Hangar, même quand tu rates encore beaucoup de questions : l'accueil, le calendrier et les pages QCM restent rapides quand une date d'examen est posée.
 - **Ranger tes fichiers sans perdre ta progression** : la progression suit un set déplacé ou renommé, même dans Obsidian ou l'explorateur de fichiers (Hangar le reconnaît à son contenu, sans toucher au fichier). Si Hangar ne peut pas trancher (deux copies identiques, set très modifié), la page *Statistiques* liste les « progressions sans fichier », avec « Rattacher à… » et « Oublier ».
 - Statistiques (calendrier d'activité, série de jours, temps par matière), espace personnel, import/export JSON, CSV et Anki (`.apkg`), signalements.
+- Imports contrôlés avant lecture : paquet Anki (50 Mo envoyés, 200 Mo une fois décompressé, 5 000 cartes et 15 secondes de lecture au plus), document Word (20 Mo de texte décompressé), classeur Excel (200 Mo décompressés et 20 000 lignes). Un paquet d'une version récente d'Anki doit être exporté en cochant « Compatibilité avec les anciennes versions d'Anki ». Un fichier de QCM mal formé ne bloque plus la section : il est nommé dans les erreurs de la page QCM et par `qcm-verifier`.
 - Les cartes dues apparaissent sur le tableau de bord et dans le résumé quotidien. `uv run hangar qcm-verifier` contrôle les fichiers.
 - **QCM hors ligne** (`/qcm/hors-ligne/`, installable) : télécharge des sets et des paquets de langue, révise sans réseau ; les réponses rejoignent ta progression au retour de la connexion, même si le set a été renommé ou déplacé entre-temps. Si son fichier est introuvable pour l'instant (en cours de modification, par exemple), elles restent sur l'appareil jusqu'à ce qu'il revienne.
+  - À une adresse http://192.168.x.x, un téléphone sans l'appli Android peut télécharger des sets, mais la page QCM hors ligne ne s'ouvrira pas sans réseau : le navigateur ne la garde qu'en HTTPS ou sur l'ordinateur qui fait tourner Hangar. La page le signale. Utilise l'appli Android, ou sers Hangar en HTTPS. Hors ligne, dans les 30 jours avant un examen, une carte réussie revient au même moment qu'en ligne.
 - **Rappel quotidien par notification** du navigateur, à l'heure choisie (page « Aujourd'hui ») : ce qu'il reste à réviser et ta série de jours.
+  - Le rappel du soir et le widget Android comptent comme le tableau de bord : les révisions dues plus les nouvelles questions prévues par tes quotas, par exemple « 3 à revoir · 5 nouvelles à découvrir ». Le rappel se tait quand tout est fait. Les notifications web marchent avec Chrome, Edge, Firefox et Safari ; une autre adresse de notification est refusée. Si l'envoi échoue (pas d'Internet), Hangar réessaie 15 minutes plus tard ; un abonnement refusé trois fois de suite est supprimé, et il suffit de réactiver le rappel sur l'appareil.
 - **Appli Android de Revision** : Hangar répond aux mêmes adresses (connexion par jeton d'appareil, QCM hors ligne, rappel, widget, partage vers le wiki) ; il suffit d'indiquer l'adresse de Hangar dans les réglages de l'appli. Les appareils connectés se révoquent depuis *Réglages › Profil*.
 - Connexion protégée : à partir de 3 essais restants, la page de connexion annonce combien il en reste ; après 5 mauvais mots de passe, la connexion est bloquée 30 minutes. Le message reste affiché sur la page et donne la façon de débloquer tout de suite : sur le PC qui fait tourner Hangar, `uv run hangar connexions-debloquer`, ou un administrateur depuis son profil (Connexions bloquées).
+
+### Passer de Revision (Raspberry Pi) à Hangar
+
+`wiki-import` copie tes cours et tes sets, mais pas ta progression. Elle est restée dans la base de Revision sur le Pi : états des questions, échéances, série de jours, temps par matière, quotas et dates d'examen. Fais les étapes dans cet ordre et n'éteins pas le Pi avant la fin :
+
+1. Sur le téléphone, synchronise une dernière fois l'appli avec le Pi (page QCM hors ligne, « Synchroniser »).
+2. Importe le coffre : `uv run hangar wiki-import https://github.com/wakadu13/Revision` (ou le dossier `vault/`).
+3. Copie sur le PC le dossier de données de Revision (le fichier `db.sqlite3` et le dossier `perso/`), puis reprends ta progression :
+   `uv run hangar qcm-import-revision chemin\vers\db.sqlite3 --compte <ton identifiant Hangar>`
+   - `--joueur <nom>` : ton nom d'utilisateur dans Revision, s'il est différent de ton identifiant Hangar ;
+   - `--coffre chemin\vers\vault` : retrouve par leur contenu les sets que tu as renommés ou déplacés depuis ;
+   - `--essai` : affiche le bilan sans rien enregistrer.
+   La base de Revision n'est jamais modifiée et tu peux relancer la commande sans risque : rien n'est compté deux fois. Ton espace perso (`perso/<nom>/`) et les explications de l'IA sont repris aussi. Un set introuvable garde sa progression ; tu la retrouves sur la page des statistiques des QCM, où tu peux la rattacher.
+4. Seulement ensuite, indique l'adresse de Hangar dans les réglages de l'appli Android. Si tu le fais avant, sa première synchronisation remplace la progression du téléphone par celle, encore vide, de Hangar.
 
 ## Assistant IA (Claude ou IA open source)
 
@@ -113,6 +138,8 @@ Sous Windows, il suffit ensuite de **double-cliquer sur `lancer.bat`** dans le d
 
 Connexion par **identifiant et mot de passe** (pas d'e-mail) ; l'écran de connexion affiche les membres : clique sur ton nom puis tape le mot de passe.
 
+> Un nouveau mot de passe doit faire au moins 8 caractères. Le changer déconnecte tes autres navigateurs, y compris les cookies « Rester connecté », ainsi que l'application Android. Le bouton « Déconnecter mes autres appareils », dans *Réglages › Profil*, fait la même chose sans changer le mot de passe ; l'application Android n'est déconnectée que si tu coches la case. Après cette mise à jour, chacun doit se reconnecter une fois. Restaurer une sauvegarde déconnecte aussi tout le monde. Pour déconnecter tout le monde d'un coup, supprime `data/secret.key` puis relance Hangar.
+
 `uv run hangar demo` tire au hasard un **mot de passe provisoire**, commun aux 9 comptes, et l'affiche **une seule fois** dans le terminal : note-le. Chaque compte, administrateur compris, doit le changer à sa première connexion.
 
 | Identifiant | Rôle |
@@ -133,6 +160,7 @@ Les rappels, le résumé du matin et les notifications ne partent que si Hangar 
 - **`mettre-a-jour.bat`** : fait une sauvegarde complète (dans `data\backups`, les 5 dernières sont gardées), récupère la nouvelle version (`git pull`), installe ce qu'il faut, puis relance Hangar. Il s'arrête sans rien changer si quelque chose cloche (pas d'Internet, fichiers de Hangar modifiés à la main, sauvegarde impossible).
 
 Sans fenêtre, les messages d'erreur vont dans `data\journal\` : `hangar.log` (erreurs et avertissements) et `console.log` (ce qu'afficherait la fenêtre). Les erreurs des pages et des envois automatiques sont aussi listées pour les administrateurs sur la page des erreurs du serveur (`/erreurs/`).
+Sur `/erreurs/`, les mots de passe, clés et jetons sont masqués, y compris dans les erreurs enregistrées avant cette version : tu peux copier une trace pour demander de l'aide.
 
 **Version qui tourne** : *Réglages › À propos* affiche la version lancée. Si tu as mis Hangar à jour sans le relancer, cette page et `lancer.bat` te préviennent que l'ancienne version tourne encore : ferme sa fenêtre (ou redémarre l'ordinateur s'il démarre avec ta session), puis relance-le.
 
@@ -154,11 +182,41 @@ Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse
 
 **Sécurité des pages** : chaque réponse porte les en-têtes nosniff, X-Frame-Options et Referrer-Policy, et une politique de contenu (CSP) qui n'exécute que les scripts de Hangar, ne charge que ses images et ne se connecte qu'à Hangar. En cas de souci avec une page : `HANGAR_CSP=rapport` (les blocages sont seulement signalés dans la console du navigateur) ou `HANGAR_CSP=non`.
 
+> Sur le réseau local, la page de connexion montre la liste des comptes (« Qui es-tu ? »). Pour la cacher aux autres appareils du réseau, décoche le réglage dans *Réglages › Espace de travail*. Elle reste toujours visible sur cet ordinateur et n'est jamais montrée quand Hangar est en ligne. Au démarrage avec `--host 0.0.0.0`, Hangar rappelle que les échanges ne sont pas chiffrés : évite les Wi-Fi publics.
+
+## Mettre Hangar en ligne
+
+Hangar est fait pour tourner sur ton ordinateur ou sur le réseau local. Pour le rendre joignable depuis Internet, place-le derrière un tunnel Cloudflare ou un serveur HTTPS (Caddy, nginx…) et lance-le avec l'option qui correspond :
+
+| Situation | Commande | Variables équivalentes |
+|---|---|---|
+| Tunnel Cloudflare (cloudflared) | `uv run hangar run --cloudflare` | `HANGAR_CLOUDFLARE=1` et `HANGAR_HTTPS=1` |
+| Autre proxy qui écrit X-Forwarded-For (Caddy, nginx) | `uv run hangar run --behind-proxy --https` | `HANGAR_BEHIND_PROXY=1` et `HANGAR_HTTPS=1` |
+| HTTPS sans proxy | `uv run hangar run --https` | `HANGAR_HTTPS=1` |
+
+Ces réglages font lire à Hangar l'adresse réelle des visiteurs (pour le blocage des essais de mot de passe) et l'adresse publique en https (liens des jetons d'API et des exports). Ils activent aussi les cookies sécurisés et l'en-tête HSTS. Sans eux, Hangar ne croit aucun en-tête de proxy : n'active pas ces options pour un usage en local ou en http sur le réseau, sinon la connexion ne marche plus. Une fois en ligne, la page de connexion n'affiche plus la liste des comptes. Avant de partager l'adresse, change les mots de passe de démonstration. Pour surveiller le serveur : `/api/status/` répond sans connexion.
+
+Variables d'environnement reconnues :
+
+| Variable | Rôle |
+|---|---|
+| `HANGAR_DATA` | dossier des données (par défaut `data/`) |
+| `HANGAR_VAULT` | dossier du coffre Obsidian du wiki |
+| `HANGAR_WIKI_HOME` | page d'accueil du wiki (par défaut « Accueil ») |
+| `HANGAR_SMTP_PASSWORD` | mot de passe SMTP, pour ne pas l'enregistrer dans la base |
+| `HANGAR_PUSH_CONTACT` | adresse de contact des notifications web |
+| `HANGAR_CLOUDFLARE` | derrière un tunnel Cloudflare (adresse du visiteur lue dans CF-Connecting-IP) |
+| `HANGAR_BEHIND_PROXY` | derrière un autre proxy (dernière adresse de X-Forwarded-For) |
+| `HANGAR_HTTPS` | visiteurs en HTTPS : cookies sécurisés et HSTS |
+| `HANGAR_CSP` | `rapport` ou `non` : politique de sécurité des pages seulement signalée, ou désactivée |
+| `HANGAR_COMPRESSION` | `jamais` ou `toujours` : compression des pages |
+
 ## Fonctionnalités
 
 **Tickets (work items)**
 - États personnalisables par groupe (Backlog, Non commencé, En cours, Terminé, Annulé), priorités, assignés multiples, étiquettes (avec parent), dates de début et d'échéance, estimations (points, Fibonacci, tailles, heures, jours-homme), cycle, modules.
 - Sous-tickets avec progression, relations *bloque / bloqué par / lié à / doublon de*, liens, pièces jointes (glisser-déposer), duplication, déplacement vers un autre projet, archivage.
+- Suppression définitive d'un ticket réservée à l'administrateur et au responsable du projet (fiche, suppression en masse ou API) ; les autres membres peuvent archiver. Les fichiers joints sont supprimés avec le ticket.
 - Commentaires markdown avec réactions, **@mentions** et liens automatiques vers les tickets (`EAE-12`), historique complet de chaque modification (l'ancienne description est gardée et peut être restaurée), suivi du temps passé.
 
 **Vues et organisation**
@@ -168,6 +226,7 @@ Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse
 
 **Pilotage**
 - **Cycles** (sprints) : avancement, burndown, répartition par assigné / étiquette, transfert des tickets non terminés.
+- **Fermeture automatique** (Paramètres du projet › Automatisations) : seuls les tickets vraiment inactifs sont fermés (saisir du temps, ajouter un sous-ticket, un lien ou une pièce jointe compte comme une activité) ; elle épargne les tickets qui ont des sous-tickets ouverts, les demandes d'invité en attente et les projets archivés. Les assignés et les abonnés sont prévenus.
 - **Modules** (phases, lots) avec statut, responsable, membres, dates, progression.
 - **Intake** : boîte de réception des demandes (accepter, refuser, reporter, marquer comme doublon).
 - **Pages** : wiki markdown avec modèles (compte rendu de réunion, d'entretien, note de décision, rétrospective, spécification), sommaire, historique des versions avec différences, verrouillage, pages privées, sauvegarde automatique, **import de documents Word (.docx)**.
@@ -185,6 +244,7 @@ Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse
 
 **Envoi des e-mails** (*Réglages › Envoi des e-mails*, aussi dans le menu de l'espace)
 - Notifications instantanées (assignation, mention, commentaire…), rappel quotidien des échéances, récapitulatif hebdomadaire, bilan hebdomadaire envoyé aux responsables, e-mails manuels avec modèles (relance, convocation, compte rendu, demande de documents).
+- Les e-mails écrits à la main partent de l'adresse d'expédition configurée, souvent ton Gmail. Par défaut, un membre ne peut donc écrire qu'aux membres de l'équipe, que ce soit depuis « Écrire un e-mail » ou en envoyant un bilan. Pour lui permettre d'écrire à d'autres adresses, coche « Les membres peuvent écrire hors de l'équipe » : il reste alors limité à 20 adresses extérieures par message et à 100 e-mails par 24 heures. Les administrateurs n'ont pas de limite. Les réponses reviennent à l'auteur du message.
 - Mode **boîte d'envoi locale** par défaut : rien ne sort de la machine, les messages sont enregistrés en `.eml` dans `data/outbox/` (ouvrables avec Thunderbird/Outlook). Mode **SMTP** pour un envoi réel (préréglages Gmail avec mot de passe d'application, Outlook, Orange, Free).
 - En cas de panne passagère, nouvel essai automatique (1, 5, 15 puis 60 min) jusqu'à la date limite du message ; bouton **« Renvoyer les échecs »** après avoir corrigé les réglages (par exemple un mot de passe d'application). Les incidents du fil d'arrière-plan sont notés sur la page des erreurs du serveur (`/erreurs/`).
 - Le bilan hebdomadaire envoyé automatiquement (ou par `hangar mail-send`) est le bilan complet, le même que le bouton « Lancer ». Si son calcul échoue, un résumé simplifié part quand même et l'erreur est notée sur `/erreurs/`.
@@ -203,6 +263,7 @@ Pour un navigateur d'une autre machine (téléphone, autre PC), Hangar compresse
 
 **Données**
 - Import Excel / CSV / JSON (détection automatique des colonnes : Titre/Tâche, Statut, Priorité, Responsable, Appui, Début, Échéance, Phase, Partie, Dépend de…), export Excel (avec feuille de synthèse), CSV, JSON, Markdown, calendrier iCalendar (.ics). Un fichier exporté par Hangar se réimporte sans perte, dans le même projet ou dans un autre : étiquettes, modules (un nom qui contient une virgule est écrit entre guillemets), parent et « bloqué par » visent les tickets du fichier. L'option « Mettre à jour les tickets existants » est décochée par défaut. Cochée, elle ne change que les cellules remplies (une colonne absente ou vide garde la valeur du ticket), ne touche jamais aux tickets d'un autre projet (une clé `EAE-…` importée dans `MEM` devient un nouveau ticket) et fait une sauvegarde de la base juste avant.
+- Exports : les fichiers Excel, CSV et Word s'ouvrent même si un titre contient un saut de ligne collé depuis PowerPoint. Un texte qui commence par « = » reste du texte dans Excel ; dans un CSV, une apostrophe est ajoutée devant un texte qui commence par =, +, - ou @ (Hangar la retire à la réimportation). À l'import, seules les personnes déjà membres du projet sont assignées ; seul un administrateur du projet peut, par un import, y faire entrer d'autres comptes (les invités ajoutés ainsi sont signalés). La case « Créer les membres manquants » est réservée à l'administrateur de l'espace : les comptes créés sont désactivés, à activer ensuite dans Équipe.
 - **Sauvegarde complète (.zip)** en un clic ou en ligne de commande (base, wiki, sets de QCM, copies, pièces jointes, agenda), sauvegardes de la base restaurables en un clic, export JSON des projets (Travail).
 - **API REST** `/api/v1` avec jetons personnels (voir *Réglages › Jetons d'API*, ou *Jetons d'API* dans le menu de l'espace). Pour modifier une description sans écraser celle d'un autre, renvoie `description_version` (lu dans le ticket) avec la nouvelle `description` : la réponse est 409 si elle a changé entre-temps.
 
@@ -220,6 +281,7 @@ uv run hangar wiki-import [<dossier|url git>] [--remplacer] [--images]   # impor
 uv run hangar wiki-coffre "C:\chemin\du\coffre"   # utilise ce coffre Obsidian à chaque lancement (sans dossier : affiche le coffre ; --defaut : data/vault)
 uv run hangar wiki-indexer-pdf      # lit le texte de tous les PDF du wiki (recherche)
 uv run hangar qcm-verifier          # vérifie les fichiers de QCM et de langue
+uv run hangar qcm-import-revision db.sqlite3 --compte <identifiant>   # reprend la progression de Revision (--joueur, --coffre, --essai)
 uv run hangar qcm-rappels           # envoie maintenant les rappels de révision dus (notifications)
 uv run hangar connexions-debloquer  # lève les blocages de connexion
 uv run hangar ia-fournisseurs       # liste les fournisseurs d'IA configurés (celui utilisé par défaut)
