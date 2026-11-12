@@ -25,7 +25,8 @@
   {{ ui.csrf() }}
   {# Après un conflit, la 1re sauvegarde archive la version actuelle (explicit=1) avant de la remplacer. #}
   <input type="hidden" name="explicit" value="{{ '1' if error else '0' }}">
-  <input type="hidden" name="version" value="{{ version }}">
+  {# `page_version` : empreinte de la page ; `version` reste la version de l'appli (?v= de app.css / app.js) #}
+  <input type="hidden" name="version" value="{{ page_version }}">
   <div class="conflict-box {% if not error %}hide{% endif %}" role="alert" data-page-conflict style="margin:10px 16px 0">{{ icon('alert', 15) }}<div><span data-page-conflict-text>{{ error }}</span>
     {% if error %}<div class="small" style="margin-top:4px">Ton texte est dans l’éditeur. La version actuelle de la page est ci-dessous : reprends-en ce qui manque, puis clique sur « Enregistrer ». Elle restera de toute façon dans l’historique.</div>{% else %}<div class="small" style="margin-top:4px">L’enregistrement automatique est arrêté. Clique sur « Enregistrer » pour comparer ton texte avec la version actuelle, ou copie ton texte puis recharge la page.</div>{% endif %}</div></div>
   {% if error %}

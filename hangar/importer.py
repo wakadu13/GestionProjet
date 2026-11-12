@@ -191,33 +191,38 @@ def _split(v) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def _cut_names(s: str, brackets: bool) -> list[str] | None:
+# « Terrain / Analyse », « R&D », « Plan + suivi », « Santé et sécurité » : deux noms possibles (voir _split_names)
+_NAME_JOINERS = re.compile(r"\s*(?:[/&+]|\bet\b)\s*")
+
+
+def _cut_names(s: str, brackets: bool) -> list[tuple[str, bool]] | None:
     """Coupe sur « , », « ; » et les retours à la ligne, sauf entre guillemets ("a, b") et, si `brackets`, entre
-    parenthèses. Renvoie None si les parenthèses ne sont pas équilibrées."""
-    parts, buf, depth, i = [], [], 0, 0
+    parenthèses. Renvoie des couples (nom, était entre guillemets), ou None si les parenthèses ne sont pas
+    équilibrées."""
+    parts, buf, quoted, depth, i = [], [], False, 0, 0
     while i < len(s):
         ch = s[i]
         if ch == '"' and not "".join(buf).strip():  # nom entre guillemets ("" = guillemet dans le nom)
-            j, quoted = i + 1, []
+            j, inside = i + 1, []
             while j < len(s) and not (s[j] == '"' and s[j + 1:j + 2] != '"'):
-                quoted.append(s[j])
+                inside.append(s[j])
                 j += 2 if s[j] == '"' else 1
-            buf, i = quoted, j + 1
+            buf, quoted, i = inside, True, j + 1
             continue
         if brackets and ch in "([":
             depth += 1
         elif brackets and ch in ")]":
             depth -= 1
         if ch in ",;\n" and depth == 0:
-            parts.append("".join(buf))
-            buf = []
+            parts.append(("".join(buf), quoted))
+            buf, quoted = [], False
         else:
             buf.append(ch)
         i += 1
-    parts.append("".join(buf))
+    parts.append(("".join(buf), quoted))
     if depth != 0:
         return None
-    return [p.strip() for p in parts if p.strip()]
+    return [(p.strip(), q) for p, q in parts if p.strip()]
 
 
 def _split_names(v, known=()) -> list[str]:
@@ -235,18 +240,20 @@ def _split_names(v, known=()) -> list[str]:
         return [s]
     names = _cut_names(s, brackets=True)
     out = []
-    for n in names if names is not None else _cut_names(s, brackets=False):
-        # « Terrain / Analyse » : deux noms seulement s'ils existent déjà tous les deux
-        sub = [p.strip() for p in re.split(r"\s*(?:[/&+]|\bet\b)\s*", n) if p.strip()]
+    for n, quoted in names if names is not None else _cut_names(s, brackets=False):
+        # « Terrain / Analyse » : deux noms seulement s'ils existent déjà tous les deux. Jamais entre guillemets :
+        # c'est ainsi que l'export écrit un nom qui contient « / », « & », « + » ou « et ».
+        sub = [] if quoted else [p.strip() for p in _NAME_JOINERS.split(n) if p.strip()]
         out += sub if len(sub) > 1 and n.lower() not in known and all(p.lower() in known for p in sub) else [n]
     return out
 
 
 def _join_names(names) -> str:
-    """Inverse de `_split_names` pour l'export : un nom qui contient un séparateur est mis entre guillemets."""
+    """Inverse de `_split_names` pour l'export : un nom qui contient un séparateur (« , » « ; » « / » « & » « + »
+    « et »…) est mis entre guillemets, pour être relu entier même si ses morceaux existent comme noms."""
     out = []
     for n in names:
-        if any(c in n for c in ',;"\n'):
+        if any(c in n for c in ',;"\n') or _NAME_JOINERS.search(n):
             n = '"' + n.replace('"', '""') + '"'
         out.append(n)
     return ", ".join(out)

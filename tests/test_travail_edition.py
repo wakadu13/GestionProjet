@@ -260,6 +260,51 @@ class ImportExportTests(TravailCase):
         self.assertEqual(_split_names(_join_names(names)), names)
         self.assertEqual(_split_names(["A, B", "C"]), ["A, B", "C"])  # liste JSON prise telle quelle
         self.assertEqual(_split_names("Phase (1, 2"), ["Phase (1", "2"])  # parenthèse non fermée
+        # Un nom exporté qui contient « / », « & », « + » ou « et » n'est jamais coupé, même si ses morceaux
+        # existent déjà comme étiquettes dans le projet cible.
+        known = ["Terrain", "Analyse", "Santé", "sécurité", "R", "D", "Plan", "suivi"]
+        for names in (["Terrain / Analyse"], ["Santé et sécurité", "Terrain"], ["R&D", "Plan + suivi"]):
+            with self.subTest(names=names):
+                self.assertEqual(_split_names(_join_names(names), known), names)
+        # Fichier venu d'ailleurs, sans guillemets : la coupe sur deux noms connus reste possible
+        self.assertEqual(_split_names("Terrain / Analyse", known), ["Terrain", "Analyse"])
+
+    def test_round_trip_keeps_names_with_joiners(self):
+        """Étiquettes et modules « Terrain / Analyse », « Santé et sécurité »… à côté de « Terrain », « Analyse »,
+        « Santé » et « sécurité » dans le même projet : l'export puis l'import les recrée tels quels, vers un projet
+        vide (les lignes précédentes du fichier ont déjà créé les morceaux) ou vers un projet qui les a déjà."""
+        from hangar.services import get_or_create_label, get_or_create_module
+        c, tok = self.client()
+        src = self.project("JNS")
+        label_names = ["Terrain", "Analyse", "Terrain / Analyse", "Santé", "sécurité", "Santé et sécurité",
+                       "R&D", "Plan + suivi"]
+        labels = {n: get_or_create_label(src, n) for n in label_names}
+        mods = {n: get_or_create_module(src, n) for n in ("Cadrage", "Restitution", "Cadrage / Restitution")}
+        db.session.flush()
+        rows = [(["Terrain"], ["Cadrage"]), (["Analyse"], ["Restitution"]),
+                (["Terrain / Analyse"], ["Cadrage / Restitution"]), (["Santé", "sécurité"], []),
+                (["Santé et sécurité", "Terrain"], ["Cadrage", "Cadrage / Restitution"]),
+                (["R&D", "Plan + suivi"], [])]
+        for k, (ls, ms) in enumerate(rows):
+            create_issue(src, {"title": f"Ticket {k}", "label_ids": [labels[n].id for n in ls],
+                               "module_ids": [mods[n].id for n in ms]}, self.me)
+        db.session.commit()
+        want = [(sorted(ls), sorted(ms)) for ls, ms in rows]
+        for n, fmt in enumerate(("csv", "xlsx", "json")):
+            for filled in (False, True):
+                with self.subTest(fmt=fmt, filled=filled):
+                    target = self.project(f"JN{'P' if filled else 'V'}{n}")
+                    if filled:  # projet qui a déjà les morceaux
+                        for name in ("Terrain", "Analyse", "Santé", "sécurité"):
+                            get_or_create_label(target, name)
+                        get_or_create_module(target, "Cadrage")
+                        get_or_create_module(target, "Restitution")
+                        db.session.commit()
+                    self.do_import(c, tok, target, self.export(c, src, fmt), self.FILES[fmt])
+                    got = [(sorted(l.name for l in i.labels), sorted(m.name for m in i.modules))
+                           for i in self.copies(target)]
+                    self.assertEqual(got, want)
+                    self.assertEqual(sorted(l.name for l in target.labels), sorted(label_names))
 
     def test_reimport_without_update_warns_about_duplicates(self):
         c, tok = self.client()
@@ -341,6 +386,25 @@ class PageConcurrencyTests(TravailCase):
         self.assertIn("Antoine Wacogne", j["error"])
         db.session.expire_all()
         self.assertIn("Texte du secrétaire", self.page.content)
+
+    def test_editor_keeps_app_version_for_scripts(self):
+        """L'empreinte de la page ne remplace pas la version de l'appli dans les adresses de app.css / app.js :
+        sinon ces fichiers seraient retéléchargés à chaque modification de la page."""
+        from hangar import __version__
+        from hangar.views.pages import page_version
+        a, ta = self.client("wacogne")
+        b, tb = self.client("lazaro")
+        vb = self.open_editor(b)
+        self.autosave(a, ta, "## Notes\nTexte du secrétaire\n", self.open_editor(a))
+        conflict = b.post(self.url, data={"_csrf": tb, "title": "Compte rendu de réunion", "explicit": "1",
+                                          "content": "## Notes\nAutre texte\n", "version": vb})
+        self.assertEqual(conflict.status_code, 409)
+        for html in (a.get(self.url).get_data(as_text=True), conflict.get_data(as_text=True)):
+            assets = re.findall(r"(app\.(?:css|js))\?v=([^\"'&]+)", html)
+            self.assertEqual({name for name, _ in assets}, {"app.css", "app.js"})
+            self.assertEqual({v for _, v in assets}, {__version__})
+            db.session.expire_all()  # le champ caché porte toujours l'empreinte de la page
+            self.assertEqual(re.search(r'name="version" value="([^"]*)"', html).group(1), page_version(self.page))
 
     def test_same_tab_saves_several_times(self):
         a, ta = self.client()

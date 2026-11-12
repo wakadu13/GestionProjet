@@ -210,7 +210,7 @@ def edit(pid, page_id):
             message = _conflict_message(page)
             if request.headers.get("X-Requested-With") == "fetch":
                 return {"ok": False, "conflict": True, "error": message}, 409
-            return render_template("pages/edit.html", project=project, page=page, version=page_version(page),
+            return render_template("pages/edit.html", project=project, page=page, page_version=page_version(page),
                                    draft={"title": title, "content": content}, error=message), 409
         if changed:
             last = page.versions[0] if page.versions else None
@@ -229,7 +229,7 @@ def edit(pid, page_id):
             return {"ok": True, "saved_at": page.updated_at.strftime("%H:%M:%S"), "version": page_version(page)}
         flash("Page enregistrée.", "success")
         return redirect(url_for("pages.view", pid=pid, page_id=page.id))
-    return render_template("pages/edit.html", project=project, page=page, version=page_version(page))
+    return render_template("pages/edit.html", project=project, page=page, page_version=page_version(page))
 
 
 def page_version(page: Page) -> str:
