@@ -43,6 +43,18 @@
   </div>
   {% endif %}
 
+  {% if mail.failed or mail.retrying %}
+  <div class="ag-warn">
+    {{ icon('alert', 15) }}
+    <span class="grow">
+      {% if mail.failed %}<b>{{ mail.failed }} e-mail{{ 's n’ont' if mail.failed > 1 else ' n’a' }} pas pu partir.</b>
+      {% else %}{{ mail.retrying }} e-mail{{ 's' if mail.retrying > 1 }} en attente : Hangar réessaie tout seul dès que le serveur d’envoi répond.{% endif %}
+      {% if mail.error %}{{ mail.error }}{% endif %} <a href="{{ url_for('agenda.settings') }}">Rappels et e-mails</a>
+    </span>
+    {% if mail.failed %}<form method="post" action="{{ url_for('agenda.mail_retry') }}">{{ ui.csrf() }}<input type="hidden" name="next" value="{{ request.path }}"><button class="btn btn-xs">{{ icon('refresh', 12) }} Renvoyer les échecs</button></form>{% endif %}
+  </div>
+  {% endif %}
+
   <div class="ag-top">
     <div class="ag-now {% if current %}is-now{% endif %}">
       {% set ev = current or next %}

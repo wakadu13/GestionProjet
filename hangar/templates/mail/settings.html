@@ -92,8 +92,10 @@
           <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job }}"><button class="btn btn-sm">{{ lab }}</button></form>
           {% endfor %}
           <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="flush"><button class="btn btn-sm btn-ghost">Traiter la file</button></form>
+          <form method="post" class="inline-form">{{ ui.csrf() }}<input type="hidden" name="action" value="retry_failed"><button class="btn btn-sm btn-ghost" {% if not counts.get('failed') %}disabled title="Aucun e-mail en échec"{% endif %}>{{ icon('refresh', 13) }} Renvoyer les échecs</button></form>
         </div>
-        <p class="help mt-0" style="margin-top:6px">Envoie immédiatement, sans attendre le jour prévu.</p>
+        <p class="help mt-0" style="margin-top:6px">Envoie immédiatement, sans attendre le jour prévu. En cas de panne passagère (pas de réseau, serveur injoignable), Hangar réessaie seul après 1, 5, 15 puis 60 minutes.</p>
+        {% if retry.next %}<p class="help warning-text" style="margin-top:4px">{{ icon('alert', 12) }} Envoi impossible pour l’instant : {{ retry.error }} Prochain essai vers {{ retry.next.strftime('%H:%M') }}.</p>{% endif %}
       </div>
     </div>
 
@@ -129,7 +131,7 @@
           <td><span class="badge">{{ KIND_LABELS.get(m.kind, m.kind) }}</span></td>
           <td class="ellipsis" style="max-width:200px">{{ m.to_address }}</td>
           <td class="ellipsis" style="max-width:320px"><a href="{{ url_for('mail.message', mid=m.id) }}">{{ m.subject }}</a></td>
-          <td><span class="badge {{ {'sent': 'badge-success', 'outbox': 'badge-accent', 'failed': 'badge-danger', 'queued': 'badge-warning'}.get(m.status, '') }}" {% if m.error %}title="{{ m.error }}"{% endif %}>{{ STATUS_LABELS.get(m.status, m.status) }}</span></td>
+          <td><span class="badge {{ {'sent': 'badge-success', 'outbox': 'badge-accent', 'failed': 'badge-danger', 'queued': 'badge-warning'}.get(m.status, '') }}" {% if m.error %}title="{{ m.error }}"{% endif %}>{{ STATUS_LABELS.get(m.status, m.status) }}{% if m.status == 'queued' and m.attempts %} · {{ m.attempts }} essai(s){% endif %}</span></td>
           <td class="right nowrap">
             <a class="btn btn-xs btn-ghost btn-icon" href="{{ url_for('mail.message', mid=m.id) }}" title="Voir">{{ icon('eye', 13) }}</a>
             <form method="post" action="{{ url_for('mail.message_action', mid=m.id, action='resend') }}" class="inline-form">{{ ui.csrf() }}<button class="btn btn-xs btn-ghost btn-icon" title="Renvoyer">{{ icon('refresh', 13) }}</button></form>

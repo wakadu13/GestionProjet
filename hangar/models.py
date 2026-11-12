@@ -906,6 +906,8 @@ class EmailMessage(db.Model):
     error = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=now, index=True)
     sent_at = db.Column(db.DateTime)
+    attempts = db.Column(db.Integer, default=0)       # essais d'envoi en échec (nouvel essai si l'erreur est passagère)
+    expires_at = db.Column(db.DateTime)               # au-delà, plus de nouvel essai (vide = 24 h après la création)
     created_by_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
     reply_to = db.Column(db.String(200))
 
@@ -1078,6 +1080,7 @@ class AgendaTask(db.Model):
     color = db.Column(db.String(10), default="")
     recurrence = db.Column(db.String(10), default="")
     recurrence_until = db.Column(db.Date)
+    recurrence_day = db.Column(db.Integer)           # jour du mois d'origine (« tous les mois » le 31 → 28/29, 30, 31…)
     done_count = db.Column(db.Integer, default=0)    # occurrences terminées (tâches répétées)
     event_id = db.Column(db.Integer, db.ForeignKey("agenda_event.id", ondelete="SET NULL"))
     done_at = db.Column(db.DateTime)
@@ -1107,12 +1110,14 @@ class AgendaReminder(db.Model):
     remind_at = db.Column(db.DateTime, index=True)
     channel = db.Column(db.String(10), default="email")  # email | app
     auto = db.Column(db.Boolean, default=False)          # créé automatiquement (contrôles)
-    status = db.Column(db.String(10), default="pending", index=True)  # pending | sent | missed | skipped
+    status = db.Column(db.String(10), default="pending", index=True)  # pending | sent | missed | skipped | error
     sent_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=now)
+    email_id = db.Column(db.Integer, db.ForeignKey("email_message.id", ondelete="SET NULL"))  # dernier e-mail du rappel
 
     task = db.relationship("AgendaTask", back_populates="reminders")
     event = db.relationship("AgendaEvent", back_populates="reminders")
+    email = db.relationship("EmailMessage")
 
     @property
     def label(self) -> str:

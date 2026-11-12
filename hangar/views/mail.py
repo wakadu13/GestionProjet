@@ -83,6 +83,7 @@ def settings():
             if cfg.mode == "smtp" and not cfg.smtp_host:
                 flash("Mode SMTP choisi sans serveur : renseigne l’adresse du serveur.", "error")
             db.session.commit()
+            mailer.reset_retry()  # réglages changés : le prochain essai part sans attendre
             flash("Configuration des e-mails enregistrée.", "success")
         elif action == "members":
             errors = 0
@@ -112,12 +113,14 @@ def settings():
             job = f.get("job")
             if job in ("reminders", "digest", "bilan"):
                 res = mailer.run_scheduled(force={job})
-                stats = mailer.send_pending()
+                stats = mailer.send_pending(force=True)
                 label = {"reminders": "rappel(s)", "digest": "récapitulatif(s)", "bilan": "bilan(s)"}[job]
                 flash(f"{res.get(job, 0)} {label} préparé(s) — {_stats_text(stats)}.", "success")
         elif action == "flush":
-            stats = mailer.send_pending()
+            stats = mailer.send_pending(force=True)
             flash(f"File traitée — {_stats_text(stats)}.", "success")
+        elif action == "retry_failed":
+            retry_failed_messages()
         elif action == "clear":
             folder = mailer.outbox_dir()
             n = 0
@@ -134,8 +137,22 @@ def settings():
     history = EmailMessage.query.order_by(EmailMessage.created_at.desc(), EmailMessage.id.desc()).limit(100).all()
     return render_template("mail/settings.html", cfg=cfg, users=users, history=history, counts=_counts(),
                            presets=PRESETS, KIND_LABELS=mailer.KIND_LABELS, STATUS_LABELS=mailer.STATUS_LABELS,
-                           WEEKDAYS=mailer.WEEKDAYS, outbox_path=mailer.outbox_dir(),
+                           WEEKDAYS=mailer.WEEKDAYS, outbox_path=mailer.outbox_dir(), retry=mailer.retry_state(),
                            smtp_env=mailer.SMTP_PASSWORD_ENV, smtp_env_set=bool(os.environ.get(mailer.SMTP_PASSWORD_ENV)))
+
+
+def retry_failed_messages(user: User | None = None) -> None:
+    """« Renvoyer les échecs » (tous, ou ceux d'un compte) : essai immédiat et résultat affiché."""
+    ids, too_old = mailer.retry_failed(user=user)
+    old = (f"{too_old} e-mail(s) trop ancien(s) n’ont pas été renvoyés (rappel d’une séance passée, "
+           "résumé d’un autre jour…)." if too_old else "")
+    if not ids:
+        flash(" ".join(x for x in ("Aucun e-mail en échec à renvoyer.", old) if x), "info")
+        return
+    mailer.send_pending(ids=ids)
+    _flash_result([m for m in (db.session.get(EmailMessage, i) for i in ids) if m is not None])
+    if old:
+        flash(old, "info")
 
 
 def _stats_text(stats):
@@ -146,6 +163,8 @@ def _stats_text(stats):
         parts.append(f"{stats['outbox']} enregistré(s) dans la boîte d’envoi locale")
     if stats.get("failed"):
         parts.append(f"{stats['failed']} en échec")
+    if stats.get("waiting"):
+        parts.append(f"{stats['waiting']} en attente d’un nouvel essai")
     return ", ".join(parts) or "aucun message en attente"
 
 
@@ -163,7 +182,7 @@ def _flash_result(messages):
     if queued:
         flash(f"{len(queued)} e-mail(s) en file d’attente.", "info")
     if failed:
-        flash(f"Échec d’envoi : {failed[0].error}", "error")
+        flash(f"Échec d’envoi{f' de {len(failed)} e-mails' if len(failed) > 1 else ''} : {failed[0].error}", "error")
 
 
 def _message(mid) -> EmailMessage:
