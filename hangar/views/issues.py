@@ -500,7 +500,7 @@ def bulk():
     ids = [to_int(x) for x in request.form.getlist("ids") if to_int(x)]
     act = request.form.get("bulk_action")
     value = request.form.get("value")
-    n = 0
+    n = refused = 0
     for issue in Issue.query.filter(Issue.id.in_(ids)).all():
         if not can(current_user, "edit", issue.project):
             continue
@@ -535,13 +535,18 @@ def bulk():
             archive_issue(issue, current_user)
         elif act == "delete":
             if not can_delete_issues(current_user, issue.project):
+                refused += 1
                 continue
             delete_issue(issue)
         else:
             continue
         n += 1
     db.session.commit()
-    flash(f"{n} ticket(s) mis à jour.", "success" if n else "info")
+    if refused:
+        flash("Seuls l’administrateur et le responsable du projet peuvent supprimer un ticket. "
+              "Tu peux l’archiver à la place.", "error")
+    if n or not refused:
+        flash(f"{n} ticket(s) mis à jour.", "success" if n else "info")
     return redirect(back_url(url_for("home.workspace_issues")))
 
 

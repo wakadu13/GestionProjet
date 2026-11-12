@@ -451,6 +451,57 @@ class DroitsTests(TravailCase):
 # Piste 66 : numérotation sans collision
 # ---------------------------------------------------------------------------
 
+class SuppressionEnMasseAffichageTests(TravailCase):
+    """Relecture piste 42 : la barre d'actions groupées ne propose la corbeille qu'à qui peut supprimer,
+    et un refus est expliqué (avec l'archivage proposé) au lieu d'un « 0 ticket(s) mis à jour. »."""
+
+    def test_bouton_corbeille_masque_pour_un_simple_membre(self):
+        self.pub.lead = self.paul
+        db.session.commit()
+        self.issue(self.pub, "Ticket A")
+        url = f"/projects/{self.pub.id}/issues?layout=spreadsheet"
+        c, _ = self.client("membre")
+        html = self.get(c, url).get_data(as_text=True)
+        self.assertIn("data-bulkbar", html)
+        self.assertNotIn('data-bulk-btn="delete"', html)
+        c, _ = self.client("paul")
+        self.assertIn('data-bulk-btn="delete"', self.get(c, url).get_data(as_text=True))
+
+    def test_refus_explique_et_propose_d_archiver(self):
+        a = self.issue(self.pub, "Ticket A")
+        c, tok = self.client("membre")
+        r = self.post(c, "/issues/bulk", data={"_csrf": tok, "ids": [a.id], "bulk_action": "delete"},
+                      follow_redirects=True)
+        html = r.get_data(as_text=True)
+        self.assertIsNotNone(db.session.get(Issue, a.id))
+        self.assertIn("Tu peux l’archiver à la place", html)
+        self.assertNotIn("0 ticket(s) mis à jour", html)
+
+
+class DemoDatesTests(unittest.TestCase):
+    """Relecture piste 38 : charger la démo ne fait pas passer tous ses tickets pour modifiés aujourd'hui."""
+
+    def test_tickets_de_la_demo_gardent_leur_date_de_modification(self):
+        tmp = tempfile.mkdtemp(prefix="hangar-travail-demo-")
+        app = create_app(tmp, testing=True)
+        try:
+            with app.test_request_context("/"):
+                from hangar.seed import seed_demo
+                seed_demo(None, verbose=False, password=PASSWORD)
+                issues = Issue.query.all()
+                self.assertTrue(issues)
+                today = now().date()
+                anciens = [i for i in issues if i.updated_at.date() < today]
+                self.assertGreater(len(anciens), len(issues) // 2)
+                for i in issues:
+                    if i.completed_at:
+                        self.assertEqual(i.updated_at, i.completed_at, i.key)
+                db.session.remove()
+                db.engine.dispose()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class NumerotationTests(TravailCase):
     def test_creations_simultanees_numeros_distincts(self):
         app, pid, uid = self.app, self.pub.id, self.admin.id
