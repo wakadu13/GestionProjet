@@ -67,7 +67,7 @@ def team_items(user: User, d0: date, d1: date, today: date | None = None) -> lis
     """Tickets ouverts qui me sont assignés avec une échéance entre `d0` et `d1`, et fins des sprints des projets
     dont je suis membre (même requête que le résumé quotidien : `digest.tickets_assignes`). Vide si je ne vois
     aucun projet, ou si le module des projets est indisponible."""
-    today = today or date.today()
+    today = today or A.today()
     out: list[TeamItem] = []
     try:
         issues = digest.tickets_assignes(user) or []

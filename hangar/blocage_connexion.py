@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from flask import request
 from sqlalchemy import func
 
+from . import heure
 from .extensions import db
 
 LIMITE = 5        # échecs pour un identifiant depuis une adresse
@@ -47,7 +48,7 @@ class EchecConnexion(db.Model):
 
 
 def _maintenant():
-    return datetime.now().replace(microsecond=0)
+    return heure.now()
 
 
 def _env(nom):

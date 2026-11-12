@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from typing import Callable
 
 from markupsafe import escape
+from . import heure
 
 _SECTIONS: list[tuple[int, str, Callable]] = []
 
@@ -68,7 +69,7 @@ def sections_enregistrees() -> list[str]:
 
 def calculer(user, jour: date, at: datetime | None = None) -> list[Section]:
     from .models import MailConfig
-    at = at or datetime.now().replace(microsecond=0)
+    at = at or heure.now()
     ctx = Contexte(user=user, jour=jour, at=at, cfg=MailConfig.get())
     out = []
     for ordre, cle, fn in list(_SECTIONS):
@@ -108,7 +109,7 @@ def construire(user, jour: date, at: datetime | None = None) -> tuple[str, str, 
     """(objet, html, sections) du résumé, ou None s'il n'y a rien à faire ce jour-là."""
     from . import mailer
     from .utils import DAYS, DAYS_FULL, MONTHS, MONTHS_FULL
-    at = at or datetime.now().replace(microsecond=0)
+    at = at or heure.now()
     sections = calculer(user, jour, at)
     if not any(s.a_faire for s in sections):
         return None

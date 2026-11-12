@@ -1,12 +1,12 @@
 """Équipe : annuaire, profils, charge de travail, disponibilités, gestion des comptes."""
 import random
 import secrets
-from datetime import date, timedelta
+from datetime import timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from .. import charts
+from .. import charts, heure
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import (
@@ -22,7 +22,7 @@ bp = Blueprint("team", __name__, url_prefix="/team")
 
 
 def _member_stats(users, pids):
-    today = date.today()
+    today = heure.today()
     ws, we = week_bounds(today)
     issues = IQ.base_query().filter(Issue.project_id.in_(pids or [0])).all()
     logs = WorkLog.query.filter(WorkLog.date >= ws, WorkLog.date <= we).all()
@@ -78,7 +78,7 @@ def workload():
         for u in p.member_users:
             members[u.id] = u
     users = sorted(members.values(), key=lambda u: cle_tri(u.display_name))
-    today = date.today()
+    today = heure.today()
     ws, _ = week_bounds(today)
     weeks = [ws + timedelta(weeks=k) for k in range(weeks_n)]
     issues = [i for i in IQ.base_query().filter(Issue.project_id.in_(pids or [0])).all() if not i.is_closed]
@@ -132,7 +132,7 @@ def profile(username):
     # Temps et contributions : seulement sur les projets que le lecteur peut voir (archivés compris)
     readable = [p.id for p in visible_projects(current_user, include_archived=True)] or [0]
     # Contributions des 16 dernières semaines (activités par jour)
-    today = date.today()
+    today = heure.today()
     start = today - timedelta(days=today.weekday()) - timedelta(weeks=15)
     acts_all = Activity.query.filter(Activity.actor_id == u.id, Activity.created_at >= start,
                                      Activity.project_id.in_(readable)).all()

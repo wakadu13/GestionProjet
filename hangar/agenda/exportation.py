@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta
 
 from .. import agenda as A  # le paquet : voir hangar/agenda/__init__.py
-from .. import ics
+from .. import heure, ics
 from ..extensions import db
 from ..models import AgendaEvent, AgendaReminder, AgendaSettings, AgendaTask, User
 
@@ -29,7 +29,7 @@ def export_ics(user: User, include_events: bool = True, include_tasks: bool = Tr
     des tâches sans heure calés sur l'heure de référence (8 h par défaut) comme dans Hangar."""
     at = at or A.now()
     stamp = ics.utc_stamp()
-    tz = ics.DEFAULT_TZ
+    tz = heure.nom_iana()  # fuseau des heures enregistrées : Europe/Paris par défaut
     s = A.settings_of_id(user.id)
     allday = s.allday_hour if s.allday_hour is not None else 8
     esc = ics.escape_text

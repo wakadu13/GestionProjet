@@ -8,6 +8,7 @@ from pathlib import Path
 from flask import Flask, abort, g, redirect, render_template, request, session, url_for
 from flask_login import current_user
 
+from . import heure
 from .extensions import db, login_manager
 
 # Seul endroit où le numéro de version est écrit : pyproject.toml le lit ici (version dynamique de hatchling).
@@ -318,7 +319,7 @@ def _register_template_helpers(app: Flask) -> None:
         # Les autres variables communes sont des globales Jinja (ci-dessus) : visibles aussi des macros
         # importées sans contexte. Ici, seulement ce qui dépend de la requête ou du jour.
         ctx = {
-            "today": __import__("datetime").date.today(),
+            "today": heure.today(),
             "can_delete_issues": utils.can_delete_issues,
             "qs": lambda **kw: issue_query.query_string(request.args, **kw),
         }

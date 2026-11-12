@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from flask import Blueprint, render_template, request, session
 from flask_login import current_user, login_required
 
+from .. import heure
 from .. import issue_query as IQ
 from ..models import (
     MODULE_STATUS_COLORS, STATE_GROUP_COLORS, Issue, IssueRelation,
@@ -121,7 +122,7 @@ def _group_issues(project, issues, group_by):
 def build_planning(projects, issues, group_by="module", zoom="week", multi=False):
     """Calcule toutes les positions (pixels) de la feuille de route."""
     dw = ZOOM_W.get(zoom, 16)
-    today = date.today()
+    today = heure.today()
     by_project = {p.id: [] for p in projects}
     for i in issues:
         by_project.setdefault(i.project_id, []).append(i)

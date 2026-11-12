@@ -88,7 +88,7 @@ def task_when(task: AgendaTask, d: date | None = None) -> str:
 def due_label(d: date | None, today: date | None = None) -> str:
     if d is None:
         return ""
-    today = today or date.today()
+    today = today or A.today()
     diff = (d - today).days
     if diff == 0:
         return "aujourd’hui"

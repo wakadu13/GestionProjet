@@ -32,5 +32,11 @@ for _module in _MODULES:
                       if not nom.startswith("__") and nom not in ("A", "annotations")})
 del _module
 
+
+def today():
+    """Aujourd'hui pour l'agenda : le jour de `now()` (heure de l'emploi du temps, voir hangar/heure.py)."""
+    return now().date()
+
+
 __all__ = ["IMPORT_MODES", "RECURRENCES", "REMINDER_OFFSETS", "import_calendar", "undo_import", "week_view",
-           "month_view", "list_view", "dashboard", "run_jobs", "export_ics", "now"]
+           "month_view", "list_view", "dashboard", "run_jobs", "export_ics", "now", "today"]

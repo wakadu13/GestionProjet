@@ -2,6 +2,7 @@
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from .. import heure
 from ..extensions import db
 from ..models import Issue, now
 from ..services import log_activity, notify, to_int
@@ -26,7 +27,7 @@ def index(pid):
     items = q.order_by(Issue.created_at.desc()).all()
     # Les demandes reportées dont la date est passée redeviennent en attente
     for i in items:
-        if i.intake_status == "snoozed" and i.intake_snoozed_until and i.intake_snoozed_until <= __import__("datetime").date.today():
+        if i.intake_status == "snoozed" and i.intake_snoozed_until and i.intake_snoozed_until <= heure.today():
             i.intake_status = "pending"
     db.session.commit()
     if not can(current_user, "edit", project):

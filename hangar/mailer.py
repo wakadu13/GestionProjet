@@ -26,6 +26,7 @@ from email.utils import formatdate, make_msgid
 from flask import current_app, has_app_context
 from markupsafe import escape
 
+from . import heure
 from .extensions import db
 from .models import (
     PRIORITY_LABELS, EmailMessage, Issue, MailConfig, Notification, Project, ProjectMember, User, now,
@@ -692,7 +693,7 @@ def run_scheduled(app=None, at: datetime | None = None, force: set[str] | frozen
     res = {}
     with _ctx(app):
         cfg = _cfg()
-        at = at or datetime.now()
+        at = at or heure.now()
         today = at.date()
         auto = cfg.enabled
         if "reminders" in force or (auto and cfg.send_reminders and at.hour >= (cfg.reminder_hour or 0)

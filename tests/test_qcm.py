@@ -17,6 +17,7 @@ from unittest import mock
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app, digest
 from hangar.extensions import db
 from hangar.models import User
@@ -197,7 +198,7 @@ class FsrsTests(QcmTestCase):
 
 def _midi():
     """Midi aujourd'hui : « + 11 minutes » reste le même jour, quelle que soit l'heure où la suite tourne."""
-    return datetime.combine(date.today(), time(12))
+    return datetime.combine(horloge.today(), time(12))
 
 
 class ReponsesTests(QcmTestCase):
@@ -225,7 +226,7 @@ class ReponsesTests(QcmTestCase):
         self.assertEqual(file[0].id, "carte")
         self.assertNotIn("ohm", [q.id for q in file])  # réussie : pas avant demain
         # Réponse faite hors connexion puis envoyée avec sa date
-        hier = (datetime.now() - timedelta(days=1)).replace(microsecond=0)
+        hier = (horloge.now() - timedelta(days=1)).replace(microsecond=0)
         c.post("/qcm/reponse/", json={"set_id": "QCM/Physique/elec", "question_id": "pairs", "correct": True,
                                       "date": hier.isoformat()}, headers=h)
         self.assertEqual(QuizProgress.query.filter_by(question_id="pairs").one().last_review, hier)
@@ -281,14 +282,14 @@ class PlanningTests(QcmTestCase):
     def test_pages_planning(self):
         c = self.client()
         r = c.post("/qcm/planning/", data={"_csrf": self.token, "set": "QCM/Physique/elec", "nouvelles_jour": "3",
-                                           "date_objectif": (date.today() + timedelta(days=5)).isoformat(), "auto": "1"})
+                                           "date_objectif": (horloge.today() + timedelta(days=5)).isoformat(), "auto": "1"})
         self.assertEqual(r.status_code, 302)
         deck = QuizDeck.query.filter_by(user_id=self.user.id, set_id="QCM/Physique/elec").one()
         self.assertEqual((deck.nouvelles_jour, deck.auto_quota), (3, True))
         r = c.post("/qcm/planning/", data={"_csrf": self.token, "set": "QCM/Physique/elec", "nouvelles_jour": "0"})
         self.assertEqual(QuizDeck.query.filter_by(set_id="QCM/Physique/elec").one().nouvelles_jour, 3)  # refusé
         r = c.post("/qcm/planning/", data={"_csrf": self.token, "categorie": "Physique", "langue": "",
-                                           "date_objectif": (date.today() + timedelta(days=9)).isoformat()})
+                                           "date_objectif": (horloge.today() + timedelta(days=9)).isoformat()})
         self.assertEqual(r.status_code, 302)
         self.assertEqual(QuizDeck.query.filter(QuizDeck.date_objectif.isnot(None)).count(), 2)
         self.assertEqual(c.get("/qcm/planning/").status_code, 200)
@@ -526,15 +527,15 @@ class PagesTests(QcmTestCase):
 
 class ResumeTests(QcmTestCase):
     def _due(self):
-        hier = datetime.now() - timedelta(days=3)
+        hier = horloge.now() - timedelta(days=3)
         for qid in ("ohm", "trou"):
             p = QuizProgress(user_id=self.user.id, set_id="QCM/Physique/elec", question_id=qid)
             p.record(True, quand=hier)
             p.echeance = hier + timedelta(days=1)
             db.session.add(p)
         db.session.add(QuizDeck(user_id=self.user.id, set_id="QCM/Physique/elec", nouvelles_jour=1,
-                                date_objectif=date.today() + timedelta(days=6)))
-        db.session.add(Activite(user_id=self.user.id, jour=date.today() - timedelta(days=1), reponses=5, justes=4))
+                                date_objectif=horloge.today() + timedelta(days=6)))
+        db.session.add(Activite(user_id=self.user.id, jour=horloge.today() - timedelta(days=1), reponses=5, justes=4))
         db.session.commit()
 
     def test_resume_du_jour(self):
@@ -550,16 +551,16 @@ class ResumeTests(QcmTestCase):
 
     def test_section_resume_quotidien(self):
         self.assertIn("qcm.revisions", digest.sections_enregistrees())
-        sections = digest.calculer(self.user, date.today())
+        sections = digest.calculer(self.user, horloge.today())
         self.assertFalse([s for s in sections if s.cle == "qcm.revisions"])  # rien de dû : pas de section
         self._due()
-        sec = next(s for s in digest.calculer(self.user, date.today()) if s.cle == "qcm.revisions")
+        sec = next(s for s in digest.calculer(self.user, horloge.today()) if s.cle == "qcm.revisions")
         self.assertTrue(sec.a_faire)
         self.assertEqual(sec.compte, 3)
         self.assertIn("Électronique de base", sec.html)
         self.assertIn("Examens à moins de 14 jours", sec.html)
         self.assertIn("/qcm/", sec.html)
-        built = digest.construire(self.user, date.today())
+        built = digest.construire(self.user, horloge.today())
         self.assertIn("3 cartes à réviser", built[0])
 
     def test_contexte_ia(self):

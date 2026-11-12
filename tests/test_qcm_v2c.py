@@ -30,6 +30,7 @@ from unittest import mock
 
 from werkzeug.datastructures import FileStorage, MultiDict
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app
 from hangar.extensions import db
 from hangar.models import User
@@ -245,11 +246,11 @@ class ArchivesPiegeesTests(unittest.TestCase):
             CREATE VIEW notes AS WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 300000000)
                 SELECT x AS id, 1 AS mid, 'a' || char(31) || 'b' AS flds, '' AS tags FROM n;
         """)
-        debut = datetime.now()
+        debut = horloge.now()
         with self.assertRaises(anki.ImportAnkiImpossible) as cm:
             anki.lire_apkg(_zip({"collection.anki2": base}), "vue.apkg")
         self.assertIn("ce n'est pas un paquet Anki", str(cm.exception))
-        self.assertLess((datetime.now() - debut).total_seconds(), 2)
+        self.assertLess((horloge.now() - debut).total_seconds(), 2)
 
     def test_apkg_lecture_trop_longue_interrompue(self):
         base = _base_anki(self.tmp, """
@@ -278,11 +279,11 @@ class ArchivesPiegeesTests(unittest.TestCase):
         """)
         contenu = _zip({"collection.anki2": base})
         self.assertLess(len(contenu), 20_000)
-        debut = datetime.now()
+        debut = horloge.now()
         with self.assertRaises(anki.ImportAnkiImpossible) as cm:
             anki.lire_apkg(contenu, "calcul.apkg")
         self.assertIn("ce n'est pas un paquet Anki", str(cm.exception))
-        self.assertLess((datetime.now() - debut).total_seconds(), 2)
+        self.assertLess((horloge.now() - debut).total_seconds(), 2)
 
     def test_apkg_volume_total_des_notes_borne(self):
         # Une colonne ajoutée après coup avec une longue valeur par défaut : chaque note la renvoie
@@ -386,7 +387,7 @@ class RappelTests(BaseTestCase):
         super().setUp()
         cartes = [{"id": f"c{i}", "type": "FLASHCARD", "question": f"Recto {i}", "verso": "V"} for i in range(30)]
         self.ecrire("QCM/Droit/gros.json", {"titre": "Gros set", "questions": cartes})
-        self.now = datetime.now().replace(hour=19, minute=30, second=0, microsecond=0)
+        self.now = horloge.now().replace(hour=19, minute=30, second=0, microsecond=0)
 
     def _vue(self, set_id, qid, echeance, quand):
         db.session.add(QuizProgress(user_id=self.user.id, set_id=set_id, question_id=qid, box=1, seen=1, correct=1,

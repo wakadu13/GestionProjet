@@ -31,6 +31,7 @@
       </div>
       {% endif %}
       <p class="help" style="margin-top:8px">Les rappels sont envoyés tant que Hangar est lancé sur ton ordinateur. Si l’application était fermée au moment d’un rappel, il part à la réouverture, sauf si la séance ou la tâche est déjà passée (un rappel « à date fixe » part encore jusqu’à 24 h après son heure). Pour une tâche répétée, chaque occurrence a son rappel, même si tu n’as pas coché la précédente.</p>
+      <p class="help">{{ icon('clock', 13) }} Horloge de l’agenda : <b>{{ horloge.libelle }}</b>, il est {{ horloge.maintenant.strftime('%H:%M') }}. Les rappels et le résumé partent à cette heure-là.{% if horloge.introuvable %} Le fuseau « {{ horloge.nom }} » demandé au lancement de Hangar est introuvable.{% endif %}{% if horloge.machine_differente %} L’horloge de cet ordinateur indique {{ horloge.machine.strftime('%H:%M') }} : Hangar n’en tient pas compte.{% endif %}</p>
     </div>
 
     <h2>{{ icon('sun', 17) }} Résumé quotidien</h2>

@@ -41,6 +41,7 @@ from sqlalchemy import delete, event
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session as _SessionSA
 
+from . import heure
 from . import blocage_connexion as blocage
 from .extensions import db
 from .models import User
@@ -64,7 +65,7 @@ def _empreinte(cle: str) -> str:
 
 
 def _maintenant():
-    return datetime.now().replace(microsecond=0)
+    return heure.now()
 
 
 class JetonAppareil(db.Model):

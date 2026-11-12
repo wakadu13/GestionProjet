@@ -146,5 +146,148 @@ class PaquetAgendaTests(unittest.TestCase):
             db.engine.dispose()
 
 
+# ---------------------------------------------------------------------------
+# Piste 71 : l'heure « maintenant » est celle de l'emploi du temps (Paris), pas celle de la machine
+# ---------------------------------------------------------------------------
+
+class FuseauMachineUTCTests(unittest.TestCase):
+    def test_machine_en_utc_l_horloge_de_l_agenda_reste_a_l_heure_de_paris(self):
+        """Serveur ou Raspberry Pi réglé en UTC : now() et today() donnent quand même l'heure de Paris."""
+        r = _python("""
+            import time
+            from datetime import datetime, timedelta, timezone
+            from zoneinfo import ZoneInfo
+            if hasattr(time, "tzset"):
+                time.tzset()
+            from hangar import agenda, models
+            paris = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+            for valeur in (models.now(), agenda.now()):
+                print(abs((valeur - paris).total_seconds()) < 5)
+        """, env={"TZ": "UTC", "HANGAR_TZ": ""})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.split(), ["True", "True"])
+
+    def test_rappel_15_min_avant_un_cours_de_8_h_part_a_7_h_45_heure_de_paris(self):
+        """Machine en UTC, 6 h 46 UTC = 7 h 46 à Paris : le rappel « 15 min avant » du cours de 8 h part."""
+        with tempfile.TemporaryDirectory() as d:
+            r = _python("""
+                import time
+                from datetime import date, datetime, time as heure_du_jour, timezone
+                from unittest import mock
+                if hasattr(time, "tzset"):
+                    time.tzset()
+                from hangar import agenda as A, create_app, heure
+                from hangar.extensions import db
+                from hangar.models import AgendaTask, User
+                app = create_app(%r, testing=True)
+                with app.test_request_context("/"):
+                    u = User(username="moi", email="moi@hangar.local", role="admin")
+                    u.set_password("secret1")
+                    db.session.add(u)
+                    db.session.flush()
+                    t = AgendaTask(user_id=u.id, title="Cours", due_date=date(2026, 11, 12),
+                                   start_time=heure_du_jour(8, 0))
+                    db.session.add(t)
+                    db.session.flush()
+                    A.set_task_reminders(t, [15], "app", at=datetime(2026, 11, 11, 12))
+                    db.session.commit()
+                    utc = datetime(2026, 11, 12, 6, 46, tzinfo=timezone.utc)
+                    with mock.patch.object(heure, "_maintenant_utc", return_value=utc):
+                        print(A.now(), A.process_reminders())
+                    print(t.reminders[0].status)
+                    db.session.remove()
+                    db.engine.dispose()
+            """ % d, env={"TZ": "UTC", "HANGAR_TZ": ""})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout.split(), ["2026-11-12", "07:46:00", "1", "sent"])
+
+
+class HeureCommuneTests(unittest.TestCase):
+    def setUp(self):
+        from hangar import heure
+        self.heure = heure
+        self.ancien = os.environ.get("HANGAR_TZ")
+        self.addCleanup(self._remettre)
+
+    def _remettre(self):
+        if self.ancien is None:
+            os.environ.pop("HANGAR_TZ", None)
+        else:
+            os.environ["HANGAR_TZ"] = self.ancien
+
+    def _a(self, utc):
+        from unittest import mock
+        return mock.patch.object(self.heure, "_maintenant_utc", return_value=utc)
+
+    def test_heure_d_ete_et_d_hiver_de_paris(self):
+        from datetime import date, datetime, timezone
+        os.environ.pop("HANGAR_TZ", None)
+        with self._a(datetime(2026, 7, 1, 21, 30, 15, 999, tzinfo=timezone.utc)):
+            self.assertEqual(self.heure.now(), datetime(2026, 7, 1, 23, 30, 15))
+        with self._a(datetime(2026, 12, 31, 23, 30, tzinfo=timezone.utc)):  # déjà le 1er janvier à Paris
+            self.assertEqual(self.heure.today(), date(2027, 1, 1))
+
+    def test_paris_sans_base_des_fuseaux(self):
+        """Windows sans tzdata : l'heure de Paris est calculée avec la règle européenne."""
+        from datetime import datetime, timezone
+        from unittest import mock
+        os.environ.pop("HANGAR_TZ", None)
+        with mock.patch.object(self.heure, "_zone", return_value=None):
+            for utc, attendu in ((datetime(2026, 3, 29, 0, 59), datetime(2026, 3, 29, 1, 59)),
+                                 (datetime(2026, 3, 29, 1, 0), datetime(2026, 3, 29, 3, 0)),
+                                 (datetime(2026, 10, 25, 0, 59), datetime(2026, 10, 25, 2, 59)),
+                                 (datetime(2026, 10, 25, 1, 0), datetime(2026, 10, 25, 2, 0))):
+                with self._a(utc.replace(tzinfo=timezone.utc)):
+                    self.assertEqual(self.heure.now(), attendu)
+
+    def test_fuseau_reglable_et_heure_de_la_machine(self):
+        from datetime import datetime, timezone
+        utc = datetime(2026, 11, 12, 6, 0, tzinfo=timezone.utc)
+        os.environ["HANGAR_TZ"] = "America/Montreal"
+        with self._a(utc):
+            self.assertEqual(self.heure.now(), datetime(2026, 11, 12, 1, 0))
+            self.assertEqual(self.heure.description()["libelle"], "fuseau America/Montreal")
+        os.environ["HANGAR_TZ"] = "local"
+        with self._a(utc):
+            self.assertEqual(self.heure.now(), utc.astimezone().replace(tzinfo=None))
+            self.assertEqual(self.heure.description()["libelle"], "heure de cet ordinateur")
+            self.assertFalse(self.heure.description()["introuvable"])
+        os.environ["HANGAR_TZ"] = "Pas/UnFuseau"
+        with self._a(utc):
+            self.assertEqual(self.heure.now(), utc.astimezone().replace(tzinfo=None))
+            self.assertTrue(self.heure.description()["introuvable"])
+
+    def test_tzdata_dans_les_dependances(self):
+        """Sous Windows, zoneinfo n'a pas de base des fuseaux sans le paquet tzdata."""
+        self.assertIn('"tzdata', (RACINE / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertIn('name = "tzdata"', (RACINE / "uv.lock").read_text(encoding="utf-8"))
+
+    def test_page_rappels_et_e_mails_affiche_le_fuseau(self):
+        import re
+        import shutil
+        from hangar import create_app
+        from hangar.extensions import db
+        from hangar.models import User
+        os.environ.pop("HANGAR_TZ", None)
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        app = create_app(d, testing=True)
+        with app.app_context():
+            u = User(username="moi", email="moi@hangar.local", role="admin")
+            u.set_password("secret1")
+            db.session.add(u)
+            db.session.commit()
+        c = app.test_client()
+        page = c.get("/login").get_data(as_text=True)
+        token = re.search(r'name="_csrf" value="([^"]+)"', page).group(1)
+        c.post("/login", data={"login": "moi", "password": "secret1", "_csrf": token})
+        html = c.get("/agenda/settings").get_data(as_text=True)
+        self.assertIn("heure de Paris", html)
+        self.assertIn("Horloge de l’agenda", html)
+        with app.app_context():
+            db.session.remove()
+            db.engine.dispose()
+
+
 if __name__ == "__main__":
     unittest.main()

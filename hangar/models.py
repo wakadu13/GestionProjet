@@ -16,12 +16,14 @@ from sqlalchemy import func
 from sqlalchemy import inspect as sa_inspect
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from . import heure
 from .extensions import db
 from .texte import cle_tri
 
 
 def now() -> datetime:
-    return datetime.now().replace(microsecond=0)
+    """Maintenant, heure naïve de l'agenda (Europe/Paris par défaut, voir heure.py)."""
+    return heure.now()
 
 
 # ---------------------------------------------------------------------------
@@ -544,12 +546,12 @@ class Issue(db.Model):
 
     @property
     def is_overdue(self) -> bool:
-        return bool(self.target_date and self.target_date < date.today() and not self.is_closed)
+        return bool(self.target_date and self.target_date < heure.today() and not self.is_closed)
 
     @property
     def due_soon(self) -> bool:
         return bool(self.target_date and not self.is_closed
-                    and date.today() <= self.target_date <= date.today() + timedelta(days=3))
+                    and heure.today() <= self.target_date <= heure.today() + timedelta(days=3))
 
     @property
     def visible_children(self):
@@ -751,7 +753,7 @@ class Cycle(db.Model):
     def status(self) -> str:
         if not self.start_date or not self.end_date:
             return "draft"
-        today = date.today()
+        today = heure.today()
         if today < self.start_date:
             return "upcoming"
         if today > self.end_date:
@@ -771,7 +773,7 @@ class Cycle(db.Model):
     def days_left(self):
         if not self.end_date:
             return None
-        return (self.end_date - date.today()).days
+        return (self.end_date - heure.today()).days
 
     def progress(self):
         issues = self.active_issues
@@ -1204,7 +1206,7 @@ class AgendaTask(db.Model):
 
     @property
     def is_overdue(self) -> bool:
-        return not self.is_done and self.due_date is not None and self.due_date < date.today()
+        return not self.is_done and self.due_date is not None and self.due_date < heure.today()
 
 
 class AgendaReminder(db.Model):

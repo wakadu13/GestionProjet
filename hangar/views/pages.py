@@ -1,9 +1,9 @@
 """Pages : documentation du projet (wiki markdown) avec modèles, versions et import Word."""
-from datetime import date
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from .. import heure
 from ..extensions import db
 from ..models import Page, PageVersion, now
 from ..services import text_version, to_int
@@ -176,7 +176,7 @@ def create(pid):
     tname, temoji, tcontent = TEMPLATES.get(tpl, TEMPLATES["blank"])
     title = (request.form.get("title") or "").strip() or (tname if tpl != "blank" else "Sans titre")
     page = Page(project=project, title=title[:255], emoji=request.form.get("emoji") or temoji,
-                content=tcontent.replace("{today}", date.today().strftime("%d/%m/%Y")),
+                content=tcontent.replace("{today}", heure.today().strftime("%d/%m/%Y")),
                 owner=current_user, updated_by=current_user,
                 is_public=request.form.get("is_public", "1") == "1",
                 parent_id=to_int(request.form.get("parent_id")))

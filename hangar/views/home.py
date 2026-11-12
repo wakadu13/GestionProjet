@@ -1,10 +1,10 @@
 """Accueil, tickets de l'espace, notifications, recherche, favoris, pense-bêtes."""
-from datetime import date, timedelta
+from datetime import timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from .. import digest
+from .. import digest, heure
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import (
@@ -24,7 +24,7 @@ def index():
     me = current_user
     projects = visible_projects(me)
     pids = [p.id for p in projects]
-    today = date.today()
+    today = heure.today()
     ws, we = week_bounds(today)
     mine = (IQ.base_query().filter(Issue.project_id.in_(pids), Issue.assignees.any(User.id == me.id)).all()
             if pids else [])

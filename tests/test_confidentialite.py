@@ -11,8 +11,9 @@ import re
 import shutil
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import timedelta
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import create_app
 from hangar import workgraph as W
 from hangar.extensions import db
@@ -29,7 +30,7 @@ class ConfidentialiteCase(unittest.TestCase):
         self.app = create_app(self.tmp, testing=True)
         self.ctx = self.app.test_request_context("/")
         self.ctx.push()
-        self.today = date.today()
+        self.today = horloge.today()
         self.admin = self._user("chef", "admin", "Anne", "Chef")
         self.member = self._user("membre", "member", "Marc", "Membre")
         self.guest = self._user("invite", "guest", "Ines", "Invitée")

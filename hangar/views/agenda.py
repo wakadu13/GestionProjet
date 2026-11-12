@@ -10,6 +10,7 @@ from flask import (Blueprint, Response, abort, flash, g, jsonify, redirect, rend
 from flask_login import current_user, login_required
 
 from .. import agenda as A
+from .. import heure
 from .. import ics
 from ..extensions import db
 from ..models import (PRIORITY_LABELS, RECURRENCES, REMINDER_OFFSETS, TASK_COLORS, AgendaEvent, AgendaImport,
@@ -55,7 +56,7 @@ def _agenda_context():
         if not current_user.is_authenticated:
             return {}
         s = A.settings_of(current_user)
-        today = date.today()
+        today = now().date()
         due = AgendaTask.query.filter(AgendaTask.user_id == current_user.id, AgendaTask.done_at.is_(None),
                                       AgendaTask.due_date <= today).all()
         g.agenda_cfg = {
@@ -175,7 +176,7 @@ def calendar():
     if view not in ("week", "month", "list"):
         view = "week"
     session["agenda_view"] = view
-    today = date.today()
+    today = now().date()
     ref = parse_date(request.args.get("date")) or today
     s = A.settings_of(current_user)
     if view == "month":
@@ -209,7 +210,7 @@ def export():
     text = A.export_ics(current_user, include_events=what in ("all", "events"), include_tasks=what in ("all", "tasks"),
                         include_team=what == "all")
     return Response(text, mimetype="text/calendar; charset=utf-8",
-                    headers={"Content-Disposition": f"attachment; filename=agenda-{date.today():%Y%m%d}.ics"})
+                    headers={"Content-Disposition": f"attachment; filename=agenda-{now().date():%Y%m%d}.ics"})
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +312,7 @@ def tasks():
     show = request.args.get("show", "open")
     q = plier((request.args.get("q") or "").strip())
     cat = request.args.get("cat") or ""
-    today = date.today()
+    today = now().date()
 
     def keep(t):
         if q and q not in plier(t.title + " " + (t.notes or "") + " " + (t.category or "")):
@@ -479,7 +480,7 @@ def task_undo(tid):
 @login_required
 def task_snooze(tid):
     t = _own_task(tid)
-    today = date.today()
+    today = now().date()
     to = request.form.get("to", "tomorrow")
     if to == "today":
         t.due_date = today
@@ -673,7 +674,7 @@ def import_upload():
         msg = "Emploi du temps importé : aucun changement par rapport au précédent."
     flash(msg, "success")
     # Des cours d'aujourd'hui ou de demain qui disparaissent : à vérifier tout de suite (annulation possible)
-    today = date.today()
+    today = now().date()
     soon = [d for d in imp.details if d["type"] == "removed"
             and today <= datetime.fromisoformat(d["before"]["start"]).date() <= today + timedelta(days=1)]
     if soon:
@@ -850,7 +851,7 @@ def settings():
                                            AgendaReminder.status.in_(("sent", "missed", "error")))
                .order_by(AgendaReminder.remind_at.desc()).limit(15).all())
     return render_template("agenda/settings.html", s=s, mail=A.mail_status(current_user), pending=pending,
-                           history=history)
+                           history=history, horloge=heure.description())
 
 
 @bp.route("/agenda/push/test", methods=["POST"])

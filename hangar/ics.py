@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 
+from . import heure
+
 DEFAULT_TZ = "Europe/Paris"
 
 # Types de séance connus (code -> (libellé, libellé court))
@@ -88,7 +90,8 @@ class ParsedEvent:
 class ParsedCalendar:
     events: list[ParsedEvent] = field(default_factory=list)
     name: str = ""
-    timezone: str = DEFAULT_TZ
+    # fuseau des heures enregistrées (HANGAR_TZ, Europe/Paris par défaut) si le fichier n'en donne pas
+    timezone: str = field(default_factory=heure.nom_iana)
     warnings: list[str] = field(default_factory=list)
     method: str = ""  # METHOD du calendrier : PUBLISH (calendrier publié), REQUEST (invitation)…
 
@@ -182,6 +185,8 @@ def _to_local(dt: datetime, tz_name: str) -> datetime:
     target = _zone(tz_name)
     if target is not None:
         return dt.astimezone(target).replace(tzinfo=None)
+    if tz_name == "Europe/Paris":  # sans base des fuseaux : règle européenne de l'heure d'été
+        return heure.paris_sans_base(dt.astimezone(timezone.utc))
     return dt.astimezone().replace(tzinfo=None)  # fuseau de la machine
 
 

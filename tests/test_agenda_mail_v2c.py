@@ -20,6 +20,7 @@ import unittest
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
+from hangar import heure as horloge  # heure de l'agenda (Paris), pas celle de la machine
 from hangar import agenda as A
 from hangar import create_app, digest, ics, mailer
 from hangar.extensions import db
@@ -292,7 +293,7 @@ class RattrapageTests(Base):
 
 class TableauDeBordTicketsTests(Base):
     def test_mes_tickets_et_pastille_travail(self):
-        today = date.today()
+        today = horloge.today()
         p, st = self.project()
         self.issue(p, st, "Ticket très en retard", today - timedelta(days=3))
         self.issue(p, st, "Ticket de la semaine", today + timedelta(days=4))
