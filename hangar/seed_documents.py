@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import mimetypes
-import os
 import shutil
 import uuid
 from datetime import date, datetime, time, timedelta
@@ -19,7 +18,7 @@ from flask import current_app
 
 from .extensions import db
 from .models import (
-    PALETTE, Activity, Attachment, Comment, Cycle, Issue, IssueRelation, Label, Module, Notification, Page,
+    PALETTE, Activity, Attachment, Comment, Issue, IssueRelation, Label, Module, Notification, Page,
     Project, SavedView, User, issue_labels, issue_modules,
 )
 from .services import add_relation, ensure_member, log_activity

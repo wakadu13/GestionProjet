@@ -26,7 +26,7 @@ from flask.testing import FlaskClient
 
 from hangar import create_app
 from hangar.extensions import db
-from hangar.models import Attachment, Issue, Label, Project, State, Sticky, User
+from hangar.models import Attachment, Label, Project, State, Sticky, User
 from hangar.services import create_issue, create_project, ensure_member
 
 ROOT = Path(__file__).resolve().parent.parent

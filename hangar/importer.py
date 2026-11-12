@@ -9,7 +9,6 @@ import random
 import re
 import secrets
 import warnings
-import zipfile
 from datetime import date, datetime
 from xml.etree import ElementTree as ET
 

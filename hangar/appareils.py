@@ -125,7 +125,8 @@ def _exempter_csrf():
 def _avant():
     g.pop("jeton_appareil", None)
     entete = request.headers.get("Authorization", "")
-    if entete.startswith(PREFIXE):
+    # /api/v1/ : API publique à jeton personnel (« hgr_… », Réglages › Jetons d'API), vérifié par apiv1.py
+    if entete.startswith(PREFIXE) and not request.path.startswith("/api/v1/"):
         if not request.path.startswith(CHEMINS_AUTORISES):
             return jsonify(error="jeton refusé sur cette adresse"), 403
         jeton = JetonAppareil.trouver(entete[len(PREFIXE):].strip())

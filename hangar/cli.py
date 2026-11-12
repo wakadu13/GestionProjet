@@ -146,7 +146,7 @@ def cmd_run(args):
     journal = lancement.ouvrir_journal(app.config["DATA_DIR"])
     lancement.noter_lancement(app.config["DATA_DIR"], port)
     url = f"http://127.0.0.1:{port}"
-    print(f"\n  ✈️  Hangar {lancement.description(lancement.code_au_demarrage())} — gestion de projet locale")
+    print(f"\n  ✈️  Hangar {lancement.description(lancement.code_au_demarrage())} — agenda, cours, QCM et projets, en local")
     print(f"  → Ouvre {url} dans ton navigateur")
     if args.host in ("0.0.0.0", "::"):
         ip = _lan_ip()

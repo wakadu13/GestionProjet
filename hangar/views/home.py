@@ -8,8 +8,8 @@ from .. import digest
 from .. import issue_query as IQ
 from ..extensions import db
 from ..models import (
-    Activity, Comment, Cycle, Favorite, Issue, Module, Notification, Page, Project, SavedView, State, Sticky,
-    User, blockers_map, issue_assignees, now,
+    Activity, Comment, Cycle, Favorite, Issue, Module, Notification, Page, Sticky,
+    User, blockers_map, now,
 )
 from ..securite import clean_color
 from ..utils import back_url, contient, contient_plie, visible_projects, week_bounds

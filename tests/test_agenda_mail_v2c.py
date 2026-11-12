@@ -23,7 +23,7 @@ from pathlib import Path
 from hangar import agenda as A
 from hangar import create_app, digest, ics, mailer
 from hangar.extensions import db
-from hangar.models import (AgendaEvent, AgendaImport, AgendaReminder, AgendaSettings, AgendaTask, Cycle,
+from hangar.models import (AgendaEvent, AgendaReminder, AgendaSettings, AgendaTask, Cycle,
                            EmailMessage, Issue, MailConfig, Notification, Project, ProjectMember, State, User)
 
 JEU = date(2026, 11, 12)  # un jeudi
