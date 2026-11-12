@@ -5,7 +5,8 @@
 - ``local_url`` : adresse sur Hangar même (« /… »), en déjouant les formes qu'un navigateur lit comme une
   adresse externe (« // », « /\\ », tabulation ou retour à la ligne glissés dedans).
 - ``media_filter`` / ``ExternalImages`` : une image n'est chargée que si elle est sur Hangar ; une image
-  externe d'un texte Markdown devient un simple lien (rien n'est chargé sans clic).
+  externe d'un texte Markdown devient un simple lien (rien n'est chargé sans clic), ou son seul texte si elle
+  est déjà dans un lien (badge, miniature cliquable).
 - ``attachment_type`` / ``protect_file`` : un fichier envoyé par un utilisateur n'est affiché dans le navigateur
   que si c'est une image sûre ou un PDF, d'après son extension, jamais d'après le type annoncé par
   l'expéditeur ; il ne peut jamais exécuter de script (nosniff, CSP « sandbox »).
@@ -66,22 +67,56 @@ def media_filter(tag, attr, value):
 
 class _ExternalImagesAsLinks(Treeprocessor):
     def run(self, root):
-        for parent in root.iter():
-            for i, el in enumerate(list(parent)):
-                if el.tag != "img" or local_url(el.get("src", "")):
-                    continue
-                src = el.get("src", "")
-                a = ElementTree.Element("a", {"href": src})  # nh3 retire ensuite data:, javascript:…
-                if re.match(r"https?://", src, re.I):
-                    a.set("title", "Image externe, non chargée : " + (src if len(src) <= 200 else src[:199] + "…"))
-                a.text = el.get("alt") or "image externe"
-                a.tail = el.tail
-                parent[i] = a
+        sans_texte: list = []
+        self._parcourir(root, None, sans_texte)
+        for lien in sans_texte:  # lien qui ne contenait qu'une image sans texte : il doit rester cliquable
+            if not "".join(lien.itertext()).strip():
+                lien.text = (lien.text or "") + "image externe"
+
+    def _parcourir(self, parent, lien, sans_texte):
+        for el in list(parent):
+            if el.tag != "img" or local_url(el.get("src", "")):
+                self._parcourir(el, el if lien is None and el.tag == "a" else lien, sans_texte)
+            elif lien is None:
+                parent[list(parent).index(el)] = self._en_lien(el)
+            else:
+                # Image dans un lien ([![texte](https://…/image.png)](https://…/cible), badge, miniature) :
+                # un second lien serait imbriqué dans le premier, que nh3 viderait. On garde le lien voulu
+                # et on y met le texte de l'image.
+                alt = el.get("alt") or ""
+                if not alt:
+                    sans_texte.append(lien)
+                self._en_texte(parent, el, alt)
+
+    @staticmethod
+    def _en_lien(el):
+        src = el.get("src", "")
+        a = ElementTree.Element("a", {"href": src})  # nh3 retire ensuite data:, javascript:…
+        if re.match(r"https?://", src, re.I):
+            a.set("title", "Image externe, non chargée : " + (src if len(src) <= 200 else src[:199] + "…"))
+        a.text = el.get("alt") or "image externe"
+        a.tail = el.tail
+        return a
+
+    @staticmethod
+    def _en_texte(parent, el, texte):
+        enfants = list(parent)
+        i = enfants.index(el)
+        avant = enfants[i - 1].tail if i else parent.text
+        if texte and avant and not avant[-1].isspace():
+            texte = " " + texte  # deux images côte à côte : « a b », pas « ab »
+        texte += el.tail or ""
+        if i:
+            enfants[i - 1].tail = (enfants[i - 1].tail or "") + texte
+        else:
+            parent.text = (parent.text or "") + texte
+        parent.remove(el)
 
 
 class ExternalImages(Extension):
     """Extension Markdown : ``![texte](https://…)`` devient un lien « texte » au lieu d'une image chargée
-    à l'affichage (qui révélerait à ce site que la page est lue, et ce que contient son adresse)."""
+    à l'affichage (qui révélerait à ce site que la page est lue, et ce que contient son adresse). Dans un lien
+    (``[![texte](https://…/image.png)](https://…/cible)``), elle laisse son texte au lien, qui garde sa cible."""
 
     def extendMarkdown(self, md):  # noqa: N802 - nom imposé par python-markdown
         md.treeprocessors.register(_ExternalImagesAsLinks(md), "hangar_images_externes", 15)

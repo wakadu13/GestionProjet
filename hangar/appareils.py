@@ -22,7 +22,8 @@ formats JSON et les mêmes en-têtes.
   `/connexion/`. « Se déconnecter » de Hangar ouvre les réglages de l'appli (qui révoque le jeton).
 - Alias des adresses de Revision : `/aujourdhui/`, `/connexion/`, `/deconnexion/`, `/compte/`,
   `/compte/mot-de-passe/`, `/inscription/`, `/utilisateurs/`. Comme dans Revision, la déconnexion se fait
-  en POST (`/logout` ou `/deconnexion/`) ; `/deconnexion/` en GET affiche un bouton de confirmation.
+  en POST (`/logout` ou `/deconnexion/`) ; `/deconnexion/` en GET (et `/logout` en GET, qui y renvoie)
+  affiche un bouton de confirmation.
 
 Le blueprint est enregistré par celui des QCM (`qcm/views.py`) ; ses tables sont créées avec celles
 des QCM (`qcm/models.py`).

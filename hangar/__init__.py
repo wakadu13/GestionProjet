@@ -157,14 +157,26 @@ def _register_hooks(app: Flask) -> None:
             return redirect(url_for("settings.profile", must_change=1))
         return None
 
+    # Message par défaut de Werkzeug (en anglais) quand la vue n'en a pas donné.
+    messages = {
+        404: "Cette page n’existe pas (ou plus). Vérifie l’adresse, ou reviens à l’accueil.",
+        405: "Cette adresse ne s’ouvre pas directement : reviens en arrière et passe par le bouton prévu.",
+    }
+
     @app.errorhandler(400)
     @app.errorhandler(403)
     @app.errorhandler(404)
+    @app.errorhandler(405)
     @app.errorhandler(413)
     def _http_error(err):
+        message = getattr(err, "description", None) or str(err)
+        if err.code in messages and message == type(err).description:
+            message = messages[err.code]
+        # 405 : l'en-tête Allow (méthodes acceptées) reste dans la réponse, comme l'exige HTTP.
+        headers = {"Allow": ", ".join(err.valid_methods)} if getattr(err, "valid_methods", None) else {}
         if request.path.startswith("/api/"):
-            return {"ok": False, "error": getattr(err, "description", str(err))}, err.code
-        return render_template("errors.html", error=err), err.code
+            return {"ok": False, "error": message}, err.code, headers
+        return render_template("errors.html", error=err, message=message), err.code, headers
 
     @app.errorhandler(500)
     def _server_error(err):

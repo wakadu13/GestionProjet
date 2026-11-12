@@ -304,7 +304,9 @@ class DeconnexionTests(Base):
         c = self.login("moi")
         page = c.get(f"/projects/{p.id}/issues/{issue.sequence_id}").get_data(as_text=True)
         self.assertIn('src="/logout"', page)  # l'image est là…
-        self.assertEqual(c.get("/logout").status_code, 405)  # … mais son chargement ne fait plus rien
+        r = c.get("/logout")  # … mais son chargement ne fait plus rien : renvoi vers la page de confirmation
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r.headers["Location"].endswith("/deconnexion/"))
         self.assertEqual(c.get("/home").status_code, 200)
         # Sans jeton CSRF : refusé
         self.assertEqual(c.post("/logout").status_code, 400)
@@ -329,6 +331,55 @@ class DeconnexionTests(Base):
         self.assertEqual(c.get("/home").status_code, 302)
         # Déconnecté : l'alias renvoie vers la connexion
         self.assertEqual(c.get("/deconnexion/").status_code, 302)
+
+    def test_adresse_logout_tapee_ou_onglet_reste_ouvert(self):
+        """GET /logout (favori, adresse tapée) et « Se déconnecter » d'un onglet resté ouvert après une
+        déconnexion ne tombent jamais sur une page d'erreur technique en anglais."""
+        c = self.login("moi")
+        r = c.get("/logout", follow_redirects=True)
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("Se déconnecter ?", html)  # page de confirmation, sans effet
+        self.assertEqual(c.get("/home").status_code, 200)
+        self.assertEqual(c.post("/logout", data={"_csrf": c.token}).status_code, 302)
+        # Second onglet : déjà déconnecté. Retour à la connexion, sans « ?next=/logout »
+        r = c.post("/logout", data={"_csrf": c.token})
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r.headers["Location"].endswith("/login"), r.headers["Location"])
+        self.assertIn("Tu es déjà déconnecté.", c.get("/login").get_data(as_text=True))
+        r = c.get("/logout")
+        self.assertTrue(r.headers["Location"].endswith("/login"), r.headers["Location"])
+        # Ancienne adresse « /login?next=/logout » : une fois reconnecté, la confirmation, pas une erreur
+        page = c.get("/login?next=/logout").get_data(as_text=True)
+        token = re.search(r'name="_csrf" value="([^"]+)"', page).group(1)
+        r = c.post("/login?next=/logout", data={"login": "moi", "password": "secret1", "_csrf": token},
+                   follow_redirects=True)
+        self.assertEqual(r.status_code, 200)
+        html = r.get_data(as_text=True)
+        self.assertIn("Se déconnecter ?", html)
+        self.assertNotIn("Method Not Allowed", html)
+        self.assertEqual(c.get("/home").status_code, 200)
+
+    def test_pages_d_erreur_405_et_404_en_francais(self):
+        c = self.login("moi")
+        r = c.get("/notifications/read-all")  # adresse d'un bouton (POST seulement)
+        self.assertEqual(r.status_code, 405)
+        self.assertIn("POST", r.headers["Allow"])
+        html = r.get_data(as_text=True)
+        self.assertIn("Action impossible ici", html)
+        self.assertIn("ne s’ouvre pas directement", html)
+        self.assertNotIn("Method Not Allowed", html)
+        self.assertNotIn("not allowed", html)
+        r = c.get("/api/issues/quick")
+        self.assertEqual(r.status_code, 405)
+        self.assertIn("ne s’ouvre pas directement", r.get_json()["error"])
+        r = c.get("/cette-page-n-existe-pas")
+        self.assertEqual(r.status_code, 404)
+        html = r.get_data(as_text=True)
+        self.assertIn("Cette page n’existe pas", html)
+        self.assertNotIn("requested URL", html)
+        # Message donné par la vue : gardé tel quel
+        self.assertIn("Jeton de sécurité expiré", c.post("/notifications/read-all").get_data(as_text=True))
 
     def test_bouton_du_menu_reste_un_formulaire(self):
         html = self.login("moi").get("/home").get_data(as_text=True)
@@ -391,6 +442,32 @@ class ImagesExternesTests(Base):
         html = str(render_markdown("[clic](data:text/html;base64,PHNjcmlwdD4=) ![i](data:image/png;base64,AAAA)",
                                    link_refs=False))
         self.assertNotIn("data:", html)
+
+    def test_image_externe_dans_un_lien(self):
+        """Badge ou miniature cliquable : le lien garde sa cible et prend le texte de l'image (pas de second
+        lien imbriqué, que nh3 viderait)."""
+        from hangar.ai.rendering import render
+        from hangar.utils import render_markdown
+        for rendu in (lambda t: str(render_markdown(t, link_refs=False)), lambda t: str(render(t))):
+            html = rendu("[![Plan du cours](https://exemple.org/plan.png)](https://exemple.org/cours)")
+            self.assertRegex(html, r'<a href="https://exemple\.org/cours"[^>]*>Plan du cours</a>')
+            self.assertNotIn("plan.png", html)  # ni chargée, ni lien vers l'image
+            self.assertNotRegex(html, r"<a [^>]*></a>")  # aucun lien vide
+            self.assertNotIn("<img", html)
+            # Sans texte : le lien reste cliquable
+            html = rendu("[![](https://x.org/logo.png)](https://x.org/)")
+            self.assertRegex(html, r'<a href="https://x\.org/"[^>]*>image externe</a>')
+            # Plus loin dans le lien, à côté d'autre texte, ou deux images
+            html = rendu("[**Cours ![schéma](https://x.org/s.png)**](https://x.org/c) "
+                         "[![a](https://x.org/a.png)![b](https://x.org/b.png)](https://x.org/ab)")
+            self.assertRegex(html, r'<a href="https://x\.org/c"[^>]*><strong>Cours schéma</strong></a>')
+            self.assertRegex(html, r'<a href="https://x\.org/ab"[^>]*>a b</a>')
+            self.assertNotIn(".png", html)
+            # Image de Hangar dans un lien : inchangée
+            html = rendu("[![capture](/fichiers/c.png)](/wiki/)")
+            self.assertRegex(html, r'<a href="/wiki/"[^>]*><img alt="capture" src="/fichiers/c\.png"></a>')
+            # Hors d'un lien : toujours un simple lien vers l'image
+            self.assertIn('href="https://x.org/seule.png"', rendu("![seule](https://x.org/seule.png)"))
 
     def test_rendu_des_reponses_de_l_ia(self):
         from hangar.ai.rendering import render

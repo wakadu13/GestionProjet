@@ -398,7 +398,9 @@ class AppliAndroidTests(PariteTestCase):
         jeton_csrf = re.search(r'csrf: "([^"]+)"', page.get_data(as_text=True)).group(1)
         r = web.post("/logout", data={"_csrf": jeton_csrf}, headers={"User-Agent": APPLI})
         self.assertEqual(r.headers["Location"], "https://appassets.androidplatform.net/connexion.html")
-        self.assertEqual(web.get("/logout", headers={"User-Agent": APPLI}).status_code, 405)  # jamais en GET
+        r = web.get("/logout", headers={"User-Agent": APPLI})  # jamais en GET : page de confirmation
+        self.assertEqual((r.status_code, r.headers["Location"]), (302, "/deconnexion/"))
+        self.assertEqual(web.get("/qcm/", headers={"User-Agent": APPLI}).status_code, 200)
 
         # Déconnexion de l'appli : jeton révoqué, session de la WebView fermée
         self.assertEqual(app.post("/api/appareil/deconnexion/", headers=bearer).get_json(), {"ok": True})
