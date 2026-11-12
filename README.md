@@ -42,8 +42,10 @@ Le **tableau de bord** (page d'accueil) montre la séance en cours ou la prochai
 ## Wiki : les cours (coffre Obsidian)
 
 Port complet du wiki de [Revision](https://github.com/wakadu13/Revision) : chaque fichier `.md` du coffre est une page.
-- **Récupérer tes cours** : `uv run hangar wiki-import https://github.com/wakadu13/Revision` (ou le chemin d'un dossier Obsidian ; `--remplacer` pour écraser). Ou travaille directement dans un coffre existant : `HANGAR_VAULT=/chemin/du/coffre uv run hangar`.
+- **Récupérer tes cours** : `uv run hangar wiki-import https://github.com/wakadu13/Revision` (ou le chemin d'un dossier Obsidian ; `--remplacer` pour écraser, `--images` pour enregistrer aussi les images hébergées sur d'autres sites). Ou travaille directement dans un coffre existant : `HANGAR_VAULT=/chemin/du/coffre uv run hangar`.
 - Syntaxe Obsidian : liens `[[…]]` et alias, intégrations `![[…]]` (images, PDF, notes, sections), encadrés `> [!note]`, propriétés YAML, tags, formules `$…$` / `$$…$$`, diagrammes Mermaid, surlignage, notes de bas de page…
+- **Images hébergées ailleurs** : le wiki ne charge jamais rien d'un autre site. Il affiche un lien « Image externe : légende ↗ » à la place de l'image. Le bouton « Enregistrer ces images dans le wiki » de la page Importer (ou `hangar wiki-import --images`) les télécharge une fois dans `image/` et met les pages à jour (`![[image.png]]`) : elles s'affichent alors aussi hors ligne.
+- **Fichiers récalcitrants** : une note que Windows refuse d'ouvrir (antivirus, OneDrive « en ligne uniquement » sans réseau) ne bloque plus le wiki. Elle est signalée dans le sommaire et relue dès que possible. Une note écrite avec un vieux Bloc-notes (ANSI) s'ouvre normalement et passe au format habituel quand tu l'enregistres (l'original reste dans l'historique).
 - Menu façon Plane : collections (les dossiers), favoris, pages récentes, sommaire, tags, graphe, recherche (pages **et texte des PDF**).
 - Éditeur CodeMirror (aperçu en direct, côte à côte, Ctrl+S, collage d'images, liens suggérés, brouillon de secours), historique des versions avec différences et restauration, import de fichiers (.md, PDF, images, LaTeX), lecteur PDF avec annotations, conversion LaTeX → page.
 - **Lecture** comme dans Revision : le menu se cache pendant la lecture (languette ›, bord de l'écran, ou bouton ▯ pour le garder), plein écran, impression propre (Ctrl+P), palette de commandes intégrée à Ctrl+K (pages, PDF, sets de QCM, sessions de langue, commandes).
@@ -70,6 +72,12 @@ Bouton **Assistant IA** en haut à droite (ou Ctrl+J) : un panneau comme « Plan
 - Réponses en direct, « @ » pour ajouter du contexte, « / » pour les commandes ; l'assistant consulte tickets, tâches, agenda et wiki, et **propose des actions** que tu valides d'un clic : créer la tâche, créer le ticket, ajouter à la page, ajouter au cycle, changer une échéance.
 - Fonctions d'IA de Revision : expliquer une réponse de QCM, corriger une réponse rédigée, générer un QCM ou des fiches de vocabulaire depuis un cours, « Demander au wiki » (réponses avec sources), tuteur d'une page, améliorer la rédaction dans l'éditeur, transformer un PDF ou du LaTeX en page, corriger une copie photographiée.
 - En ligne de commande : `hangar ia-ajouter ollama`, `ia-tester`, `ia-demander "…"`, `ia-usage`.
+- **Plafond mensuel** (*Réglages › Plafond et consignes*) : il compte aussi les **travaux en lot** dès leur dépôt (chaque lot réserve son coût au plus, remplacé par le coût réel à son retour) et les **réponses arrêtées en cours de route** (bouton Arrêter, coupure). Un nouveau travail est refusé quand le plafond est atteint. Un modèle Claude absent de la table des prix est compté au tarif le plus cher de sa famille, et les réglages affichent « Tarif inconnu » (y compris pour un service payant compatible OpenAI dont tu n'as pas saisi les prix).
+- **Travaux** (*IA › Travaux*) : « Annuler » arrête un travail en attente, en cours ou dans un lot (le lot est aussi annulé chez Anthropic ; ce qui est déjà traité reste facturé). Un lot impossible à récupérer (clé changée, lot expiré, plus de 29 jours) passe en échec et se relance d'un clic. `hangar run` reprend les travaux interrompus dès le démarrage.
+- **Pages longues** : l'IA reçoit les passages de la page qui parlent de ta question (ou un aperçu de toute la page pour « Interroge-moi » et « Résumer »), et sait qu'elle n'a que des extraits. La pastille du panneau affiche « page coupée ». Claude lit jusqu'à 80 000 caractères de la page ouverte, un modèle local 12 000.
+- **Réponses coupées** : une réponse arrêtée par la limite de longueur porte la mention « Réponse coupée ». Une explication de QCM coupée n'est pas gardée, et un administrateur peut refaire une explication gardée (« ↻ Refaire l'explication »).
+- **Ollama et mémoire** : par défaut, Ollama ne garde que 4 096 jetons et oublie le début d'une demande plus longue, sans prévenir. Hangar t'avertit quand c'est le cas. Pour lui donner plus de mémoire sous Windows : dans l'application Ollama, *Settings › Context length* ; ou crée la variable d'environnement utilisateur `OLLAMA_CONTEXT_LENGTH` = `16384` (menu Démarrer › « Modifier les variables d'environnement pour votre compte »), puis quitte Ollama (icône près de l'horloge › *Quit Ollama*) et relance-le.
+- **Clé d'API liée à l'adresse** : si tu changes l'adresse d'un fournisseur sans retaper sa clé, la clé enregistrée est effacée et n'est jamais envoyée au nouveau serveur. Une redirection vers un autre serveur est refusée.
 
 ## Travail : initiatives et Workgraph
 
@@ -165,7 +173,7 @@ uv run hangar demo --force          # efface puis recrée la démonstration
 uv run hangar rebuild-docs          # recrée les tickets du projet EAE d'après les documents (sauvegarde avant)
 uv run hangar agenda-import planning.ics  # importe l'emploi du temps (.ics) ; --user identifiant, --mode weeks|future|merge
 uv run hangar mail-send             # envoie la file d'e-mails, les rappels de l'agenda et les envois programmés maintenant
-uv run hangar wiki-import <dossier|url git> [--remplacer]   # importe un coffre Obsidian (cours) dans le wiki
+uv run hangar wiki-import [<dossier|url git>] [--remplacer] [--images]   # importe un coffre Obsidian (cours) dans le wiki ; --images enregistre aussi les images hébergées ailleurs
 uv run hangar wiki-indexer-pdf      # lit le texte de tous les PDF du wiki (recherche)
 uv run hangar qcm-verifier          # vérifie les fichiers de QCM et de langue
 uv run hangar qcm-rappels           # envoie maintenant les rappels de révision dus (notifications)
