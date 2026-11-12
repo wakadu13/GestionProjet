@@ -36,6 +36,16 @@
 <div class="wiki wiki-narrow wiki-sommaire-page">
   <h1 class="wiki-doc-title">{% if dossier %}{{ icon('folder', 26) }} {{ dossier }}{% else %}Sommaire{% endif %}</h1>
   <p class="muted">{% if dossier %}{{ root.count }} élément{{ 's' if root.count > 1 }} dans ce dossier · <a href="{{ url_for('wiki.sommaire') }}">tout le wiki</a>{% else %}{{ total }} page{{ 's' if total > 1 }} dans le wiki{% endif %}</p>
+  {% if illisibles %}
+  <div class="callout" data-callout="warning" data-illisibles>
+    <div class="callout-title">{{ illisibles|length }} fichier{{ 's' if illisibles|length > 1 }} du wiki ne {{ 'peuvent' if illisibles|length > 1 else 'peut' }} pas être lu{{ 's' if illisibles|length > 1 }} pour l'instant</div>
+    <div class="callout-content"><p>L'ordinateur refuse de les ouvrir : fichier verrouillé par un autre programme (antivirus…),
+      ou « disponible en ligne uniquement » avec OneDrive sans connexion. Une page déjà lue garde sa dernière version ;
+      tout se remet à jour dès que le fichier redevient lisible.</p>
+      <ul>{% for rel in illisibles[:20] %}<li><code>{{ rel }}</code></li>{% endfor %}{% if illisibles|length > 20 %}<li>… et {{ illisibles|length - 20 }} autre{{ 's' if illisibles|length - 20 > 1 }}</li>{% endif %}</ul>
+    </div>
+  </div>
+  {% endif %}
   <form class="wiki-search-big" action="{{ url_for('wiki.search') }}" method="get" role="search">
     {{ icon('search', 16) }}<input class="input" type="search" name="q" placeholder="Rechercher dans toutes les pages et les PDF…" aria-label="Rechercher">
     <button type="submit" class="btn btn-primary">Rechercher</button>

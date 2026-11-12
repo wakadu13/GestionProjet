@@ -21,6 +21,9 @@
   {% if error %}
   <div class="callout" data-callout="danger"><div class="callout-title">{{ error }}</div></div>
   {% endif %}
+  {% if autre_encodage %}
+  <div class="callout" data-callout="info" data-autre-encodage><div class="callout-title">Cette page a été écrite dans un ancien format de texte (Bloc-notes de Windows, par exemple) : elle passera au format habituel du wiki quand tu l'enregistreras. Sa version d'origine restera dans l'historique.</div></div>
+  {% endif %}
   <form method="post" id="editor-form" data-preview-url="{{ preview_url }}" data-import-url="{{ import_url }}" data-latex-url="{{ latex_url }}"{% if ameliorer_url %} data-ameliorer-url="{{ ameliorer_url }}"{% endif %} data-note-key="{{ key }}" data-note-name="{{ name }}">
     {{ ui.csrf() }}
     <input type="hidden" name="version" value="{{ version }}">
